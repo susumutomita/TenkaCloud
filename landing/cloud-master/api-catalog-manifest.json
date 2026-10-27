@@ -1,0 +1,2660 @@
+{
+  "source": "https://github.com/boto/botocore",
+  "package": "botocore",
+  "version": "1.43.118",
+  "wheelUrl": "https://files.pythonhosted.org/packages/9c/ce/61b39a8e7a69af5ea43c1c3e1b0065a4866b42ccddf107e16686a3143614/botocore-1.43.118-py3-none-any.whl",
+  "wheelSha256": "a45d7ae570674161e4a3542d8c68633bf7503f92d1de781ef7361b79488eda6f",
+  "plainSha256": "5f2b45d5ad475ba010dad440d942a2a6dcbd4b93b19ee4c3029b438f515fafa3",
+  "serviceModels": 435,
+  "operations": 19437,
+  "excludedOperations": [],
+  "excludedOlderApiVersions": [
+    "botocore/data/appmesh/2018-10-01/service-2.json.gz",
+    "botocore/data/clouddirectory/2016-05-10/service-2.json.gz",
+    "botocore/data/cloudfront/2014-05-31/service-2.json.gz",
+    "botocore/data/cloudfront/2014-10-21/service-2.json.gz",
+    "botocore/data/cloudfront/2014-11-06/service-2.json.gz",
+    "botocore/data/cloudfront/2015-04-17/service-2.json.gz",
+    "botocore/data/cloudfront/2015-07-27/service-2.json.gz",
+    "botocore/data/cloudfront/2015-09-17/service-2.json.gz",
+    "botocore/data/cloudfront/2016-01-13/service-2.json.gz",
+    "botocore/data/cloudfront/2016-01-28/service-2.json.gz",
+    "botocore/data/cloudfront/2016-08-01/service-2.json.gz",
+    "botocore/data/cloudfront/2016-08-20/service-2.json.gz",
+    "botocore/data/cloudfront/2016-09-07/service-2.json.gz",
+    "botocore/data/cloudfront/2016-09-29/service-2.json.gz",
+    "botocore/data/cloudfront/2016-11-25/service-2.json.gz",
+    "botocore/data/cloudfront/2017-03-25/service-2.json.gz",
+    "botocore/data/cloudfront/2017-10-30/service-2.json.gz",
+    "botocore/data/cloudfront/2018-06-18/service-2.json.gz",
+    "botocore/data/cloudfront/2018-11-05/service-2.json.gz",
+    "botocore/data/cloudfront/2019-03-26/service-2.json.gz",
+    "botocore/data/cloudsearch/2011-02-01/service-2.json.gz",
+    "botocore/data/ec2/2014-09-01/service-2.json.gz",
+    "botocore/data/ec2/2014-10-01/service-2.json.gz",
+    "botocore/data/ec2/2015-03-01/service-2.json.gz",
+    "botocore/data/ec2/2015-04-15/service-2.json.gz",
+    "botocore/data/ec2/2015-10-01/service-2.json.gz",
+    "botocore/data/ec2/2016-04-01/service-2.json.gz",
+    "botocore/data/ec2/2016-09-15/service-2.json.gz",
+    "botocore/data/elasticache/2014-09-30/service-2.json.gz",
+    "botocore/data/events/2014-02-03/service-2.json.gz",
+    "botocore/data/inspector/2015-08-18/service-2.json.gz",
+    "botocore/data/lambda/2014-11-11/service-2.json.gz",
+    "botocore/data/rds/2014-09-01/service-2.json.gz"
+  ],
+  "services": [
+    {
+      "id": "accessanalyzer",
+      "name": "AccessAnalyzer",
+      "apiVersion": "2019-11-01",
+      "operations": 39
+    },
+    {
+      "id": "account",
+      "name": "Account",
+      "apiVersion": "2021-02-01",
+      "operations": 18
+    },
+    {
+      "id": "account-access",
+      "name": "Account Access",
+      "apiVersion": "2018-05-10",
+      "operations": 11
+    },
+    {
+      "id": "acm",
+      "name": "ACM",
+      "apiVersion": "2015-12-08",
+      "operations": 40
+    },
+    {
+      "id": "acm-pca",
+      "name": "ACM PCA",
+      "apiVersion": "2017-08-22",
+      "operations": 23
+    },
+    {
+      "id": "agent-registry",
+      "name": "Agent Registry",
+      "apiVersion": "2025-12-01",
+      "operations": 3
+    },
+    {
+      "id": "agent-registry-control",
+      "name": "Agent Registry Control",
+      "apiVersion": "2025-12-01",
+      "operations": 15
+    },
+    {
+      "id": "aiops",
+      "name": "AIOps",
+      "apiVersion": "2018-05-10",
+      "operations": 11
+    },
+    {
+      "id": "amp",
+      "name": "amp",
+      "apiVersion": "2020-08-01",
+      "operations": 44
+    },
+    {
+      "id": "amplify",
+      "name": "Amplify",
+      "apiVersion": "2017-07-25",
+      "operations": 37
+    },
+    {
+      "id": "amplifybackend",
+      "name": "AmplifyBackend",
+      "apiVersion": "2020-08-11",
+      "operations": 31
+    },
+    {
+      "id": "amplifyuibuilder",
+      "name": "AmplifyUIBuilder",
+      "apiVersion": "2021-08-11",
+      "operations": 28
+    },
+    {
+      "id": "apigateway",
+      "name": "API Gateway",
+      "apiVersion": "2015-07-09",
+      "operations": 124
+    },
+    {
+      "id": "apigatewaymanagementapi",
+      "name": "ApiGatewayManagementApi",
+      "apiVersion": "2018-11-29",
+      "operations": 3
+    },
+    {
+      "id": "apigatewayv2",
+      "name": "ApiGatewayV2",
+      "apiVersion": "2018-11-29",
+      "operations": 103
+    },
+    {
+      "id": "appconfig",
+      "name": "AppConfig",
+      "apiVersion": "2019-10-09",
+      "operations": 56
+    },
+    {
+      "id": "appconfigdata",
+      "name": "AppConfigData",
+      "apiVersion": "2021-11-11",
+      "operations": 2
+    },
+    {
+      "id": "appfabric",
+      "name": "AppFabric",
+      "apiVersion": "2023-05-19",
+      "operations": 26
+    },
+    {
+      "id": "appflow",
+      "name": "Appflow",
+      "apiVersion": "2020-08-23",
+      "operations": 25
+    },
+    {
+      "id": "appintegrations",
+      "name": "AppIntegrations",
+      "apiVersion": "2020-07-29",
+      "operations": 23
+    },
+    {
+      "id": "application-autoscaling",
+      "name": "Application Auto Scaling",
+      "apiVersion": "2016-02-06",
+      "operations": 14
+    },
+    {
+      "id": "application-insights",
+      "name": "Application Insights",
+      "apiVersion": "2018-11-25",
+      "operations": 33
+    },
+    {
+      "id": "application-signals",
+      "name": "Application Signals",
+      "apiVersion": "2024-04-15",
+      "operations": 30
+    },
+    {
+      "id": "applicationcostprofiler",
+      "name": "ApplicationCostProfiler",
+      "apiVersion": "2020-09-10",
+      "operations": 6
+    },
+    {
+      "id": "appmesh",
+      "name": "App Mesh",
+      "apiVersion": "2019-01-25",
+      "operations": 38
+    },
+    {
+      "id": "apprunner",
+      "name": "AppRunner",
+      "apiVersion": "2020-05-15",
+      "operations": 37
+    },
+    {
+      "id": "appstream",
+      "name": "AppStream",
+      "apiVersion": "2016-12-01",
+      "operations": 89
+    },
+    {
+      "id": "appsync",
+      "name": "AppSync",
+      "apiVersion": "2017-07-25",
+      "operations": 74
+    },
+    {
+      "id": "arc-region-switch",
+      "name": "ARC Region switch",
+      "apiVersion": "2022-07-26",
+      "operations": 22
+    },
+    {
+      "id": "arc-zonal-shift",
+      "name": "ARC Zonal Shift",
+      "apiVersion": "2022-10-30",
+      "operations": 15
+    },
+    {
+      "id": "artifact",
+      "name": "Artifact",
+      "apiVersion": "2018-05-10",
+      "operations": 17
+    },
+    {
+      "id": "athena",
+      "name": "Athena",
+      "apiVersion": "2017-05-18",
+      "operations": 70
+    },
+    {
+      "id": "auditmanager",
+      "name": "AuditManager",
+      "apiVersion": "2017-07-25",
+      "operations": 62
+    },
+    {
+      "id": "autoscaling",
+      "name": "Auto Scaling",
+      "apiVersion": "2011-01-01",
+      "operations": 68
+    },
+    {
+      "id": "autoscaling-plans",
+      "name": "Auto Scaling Plans",
+      "apiVersion": "2018-01-06",
+      "operations": 6
+    },
+    {
+      "id": "b2bi",
+      "name": "b2bi",
+      "apiVersion": "2022-06-23",
+      "operations": 30
+    },
+    {
+      "id": "backup",
+      "name": "Backup",
+      "apiVersion": "2018-11-15",
+      "operations": 115
+    },
+    {
+      "id": "backup-gateway",
+      "name": "Backup Gateway",
+      "apiVersion": "2021-01-01",
+      "operations": 25
+    },
+    {
+      "id": "backupsearch",
+      "name": "BackupSearch",
+      "apiVersion": "2018-05-10",
+      "operations": 12
+    },
+    {
+      "id": "batch",
+      "name": "Batch",
+      "apiVersion": "2016-08-10",
+      "operations": 48
+    },
+    {
+      "id": "bcm-dashboards",
+      "name": "BCM Dashboards",
+      "apiVersion": "2025-08-18",
+      "operations": 15
+    },
+    {
+      "id": "bcm-data-exports",
+      "name": "BCM Data Exports",
+      "apiVersion": "2023-11-26",
+      "operations": 12
+    },
+    {
+      "id": "bcm-pricing-calculator",
+      "name": "BCM Pricing Calculator",
+      "apiVersion": "2024-06-19",
+      "operations": 36
+    },
+    {
+      "id": "bcm-recommended-actions",
+      "name": "BCM Recommended Actions",
+      "apiVersion": "2024-11-14",
+      "operations": 1
+    },
+    {
+      "id": "bedrock",
+      "name": "Bedrock",
+      "apiVersion": "2023-04-20",
+      "operations": 108
+    },
+    {
+      "id": "bedrock-agent",
+      "name": "Bedrock Agent",
+      "apiVersion": "2023-06-05",
+      "operations": 86
+    },
+    {
+      "id": "bedrock-agent-runtime",
+      "name": "Bedrock Agent Runtime",
+      "apiVersion": "2023-07-26",
+      "operations": 35
+    },
+    {
+      "id": "bedrock-agentcore",
+      "name": "Bedrock AgentCore",
+      "apiVersion": "2024-02-28",
+      "operations": 67
+    },
+    {
+      "id": "bedrock-agentcore-control",
+      "name": "Bedrock AgentCore Control",
+      "apiVersion": "2023-06-05",
+      "operations": 171
+    },
+    {
+      "id": "bedrock-data-automation",
+      "name": "Bedrock Data Automation",
+      "apiVersion": "2023-07-26",
+      "operations": 27
+    },
+    {
+      "id": "bedrock-data-automation-runtime",
+      "name": "Bedrock Data Automation Runtime",
+      "apiVersion": "2024-06-13",
+      "operations": 6
+    },
+    {
+      "id": "bedrock-runtime",
+      "name": "Bedrock Runtime",
+      "apiVersion": "2023-09-30",
+      "operations": 11
+    },
+    {
+      "id": "billing",
+      "name": "Billing",
+      "apiVersion": "2023-09-07",
+      "operations": 23
+    },
+    {
+      "id": "billingconductor",
+      "name": "billingconductor",
+      "apiVersion": "2021-07-30",
+      "operations": 34
+    },
+    {
+      "id": "braket",
+      "name": "Braket",
+      "apiVersion": "2019-09-01",
+      "operations": 17
+    },
+    {
+      "id": "budgets",
+      "name": "Budgets",
+      "apiVersion": "2016-10-20",
+      "operations": 26
+    },
+    {
+      "id": "ce",
+      "name": "Cost Explorer",
+      "apiVersion": "2017-10-25",
+      "operations": 47
+    },
+    {
+      "id": "chatbot",
+      "name": "chatbot",
+      "apiVersion": "2017-10-11",
+      "operations": 34
+    },
+    {
+      "id": "chime",
+      "name": "Chime",
+      "apiVersion": "2018-05-01",
+      "operations": 62
+    },
+    {
+      "id": "chime-sdk-identity",
+      "name": "Chime SDK Identity",
+      "apiVersion": "2021-04-20",
+      "operations": 30
+    },
+    {
+      "id": "chime-sdk-media-pipelines",
+      "name": "Chime SDK Media Pipelines",
+      "apiVersion": "2021-07-15",
+      "operations": 31
+    },
+    {
+      "id": "chime-sdk-meetings",
+      "name": "Chime SDK Meetings",
+      "apiVersion": "2021-07-15",
+      "operations": 16
+    },
+    {
+      "id": "chime-sdk-messaging",
+      "name": "Chime SDK Messaging",
+      "apiVersion": "2021-05-15",
+      "operations": 51
+    },
+    {
+      "id": "chime-sdk-voice",
+      "name": "Chime SDK Voice",
+      "apiVersion": "2022-08-03",
+      "operations": 96
+    },
+    {
+      "id": "cleanrooms",
+      "name": "CleanRooms",
+      "apiVersion": "2022-02-17",
+      "operations": 103
+    },
+    {
+      "id": "cleanroomsml",
+      "name": "CleanRoomsML",
+      "apiVersion": "2023-09-06",
+      "operations": 59
+    },
+    {
+      "id": "cloud9",
+      "name": "Cloud9",
+      "apiVersion": "2017-09-23",
+      "operations": 13
+    },
+    {
+      "id": "cloudcontrol",
+      "name": "CloudControl",
+      "apiVersion": "2021-09-30",
+      "operations": 8
+    },
+    {
+      "id": "clouddirectory",
+      "name": "CloudDirectory",
+      "apiVersion": "2017-01-11",
+      "operations": 66
+    },
+    {
+      "id": "cloudformation",
+      "name": "CloudFormation",
+      "apiVersion": "2010-05-15",
+      "operations": 90
+    },
+    {
+      "id": "cloudfront",
+      "name": "CloudFront",
+      "apiVersion": "2020-05-31",
+      "operations": 167
+    },
+    {
+      "id": "cloudfront-keyvaluestore",
+      "name": "CloudFront KeyValueStore",
+      "apiVersion": "2022-07-26",
+      "operations": 6
+    },
+    {
+      "id": "cloudhsm",
+      "name": "CloudHSM",
+      "apiVersion": "2014-05-30",
+      "operations": 20
+    },
+    {
+      "id": "cloudhsmv2",
+      "name": "CloudHSM V2",
+      "apiVersion": "2017-04-28",
+      "operations": 18
+    },
+    {
+      "id": "cloudsearch",
+      "name": "CloudSearch",
+      "apiVersion": "2013-01-01",
+      "operations": 26
+    },
+    {
+      "id": "cloudsearchdomain",
+      "name": "CloudSearch Domain",
+      "apiVersion": "2013-01-01",
+      "operations": 3
+    },
+    {
+      "id": "cloudtrail",
+      "name": "CloudTrail",
+      "apiVersion": "2013-11-01",
+      "operations": 60
+    },
+    {
+      "id": "cloudtrail-data",
+      "name": "CloudTrail Data",
+      "apiVersion": "2021-08-11",
+      "operations": 1
+    },
+    {
+      "id": "cloudwatch",
+      "name": "CloudWatch",
+      "apiVersion": "2010-08-01",
+      "operations": 55
+    },
+    {
+      "id": "cloudwatchomni",
+      "name": "CloudWatchOmni",
+      "apiVersion": "2025-01-01",
+      "operations": 61
+    },
+    {
+      "id": "codeartifact",
+      "name": "codeartifact",
+      "apiVersion": "2018-09-22",
+      "operations": 48
+    },
+    {
+      "id": "codebuild",
+      "name": "CodeBuild",
+      "apiVersion": "2016-10-06",
+      "operations": 59
+    },
+    {
+      "id": "codecatalyst",
+      "name": "CodeCatalyst",
+      "apiVersion": "2022-09-28",
+      "operations": 38
+    },
+    {
+      "id": "codecommit",
+      "name": "CodeCommit",
+      "apiVersion": "2015-04-13",
+      "operations": 80
+    },
+    {
+      "id": "codeconnections",
+      "name": "CodeConnections",
+      "apiVersion": "2023-12-01",
+      "operations": 27
+    },
+    {
+      "id": "codedeploy",
+      "name": "CodeDeploy",
+      "apiVersion": "2014-10-06",
+      "operations": 47
+    },
+    {
+      "id": "codeguru-reviewer",
+      "name": "CodeGuru Reviewer",
+      "apiVersion": "2019-09-19",
+      "operations": 14
+    },
+    {
+      "id": "codeguru-security",
+      "name": "CodeGuru Security",
+      "apiVersion": "2018-05-10",
+      "operations": 13
+    },
+    {
+      "id": "codeguruprofiler",
+      "name": "CodeGuruProfiler",
+      "apiVersion": "2019-07-18",
+      "operations": 23
+    },
+    {
+      "id": "codepipeline",
+      "name": "CodePipeline",
+      "apiVersion": "2015-07-09",
+      "operations": 44
+    },
+    {
+      "id": "codestar-connections",
+      "name": "CodeStar connections",
+      "apiVersion": "2019-12-01",
+      "operations": 27
+    },
+    {
+      "id": "codestar-notifications",
+      "name": "codestar notifications",
+      "apiVersion": "2019-10-15",
+      "operations": 13
+    },
+    {
+      "id": "cognito-identity",
+      "name": "Cognito Identity",
+      "apiVersion": "2014-06-30",
+      "operations": 23
+    },
+    {
+      "id": "cognito-idp",
+      "name": "Cognito Identity Provider",
+      "apiVersion": "2016-04-18",
+      "operations": 132
+    },
+    {
+      "id": "cognito-sync",
+      "name": "Cognito Sync",
+      "apiVersion": "2014-06-30",
+      "operations": 17
+    },
+    {
+      "id": "comprehend",
+      "name": "Comprehend",
+      "apiVersion": "2017-11-27",
+      "operations": 85
+    },
+    {
+      "id": "comprehendmedical",
+      "name": "ComprehendMedical",
+      "apiVersion": "2018-10-30",
+      "operations": 26
+    },
+    {
+      "id": "compute-optimizer",
+      "name": "Compute Optimizer",
+      "apiVersion": "2019-11-01",
+      "operations": 28
+    },
+    {
+      "id": "compute-optimizer-automation",
+      "name": "Compute Optimizer Automation",
+      "apiVersion": "2025-09-22",
+      "operations": 23
+    },
+    {
+      "id": "config",
+      "name": "Config Service",
+      "apiVersion": "2014-11-12",
+      "operations": 102
+    },
+    {
+      "id": "connect",
+      "name": "Connect",
+      "apiVersion": "2017-08-08",
+      "operations": 403
+    },
+    {
+      "id": "connect-contact-lens",
+      "name": "Connect Contact Lens",
+      "apiVersion": "2020-08-21",
+      "operations": 1
+    },
+    {
+      "id": "connectcampaigns",
+      "name": "ConnectCampaigns",
+      "apiVersion": "2021-01-30",
+      "operations": 22
+    },
+    {
+      "id": "connectcampaignsv2",
+      "name": "ConnectCampaignsV2",
+      "apiVersion": "2024-04-23",
+      "operations": 37
+    },
+    {
+      "id": "connectcases",
+      "name": "ConnectCases",
+      "apiVersion": "2022-10-03",
+      "operations": 43
+    },
+    {
+      "id": "connecthealth",
+      "name": "ConnectHealth",
+      "apiVersion": "2025-01-29",
+      "operations": 16
+    },
+    {
+      "id": "connectparticipant",
+      "name": "ConnectParticipant",
+      "apiVersion": "2018-09-07",
+      "operations": 11
+    },
+    {
+      "id": "continuum",
+      "name": "Continuum",
+      "apiVersion": "2022-07-26",
+      "operations": 33
+    },
+    {
+      "id": "controlcatalog",
+      "name": "ControlCatalog",
+      "apiVersion": "2018-05-10",
+      "operations": 6
+    },
+    {
+      "id": "controltower",
+      "name": "ControlTower",
+      "apiVersion": "2018-05-10",
+      "operations": 28
+    },
+    {
+      "id": "cost-optimization-hub",
+      "name": "Cost Optimization Hub",
+      "apiVersion": "2022-07-26",
+      "operations": 8
+    },
+    {
+      "id": "cur",
+      "name": "Cost and Usage Report Service",
+      "apiVersion": "2017-01-06",
+      "operations": 7
+    },
+    {
+      "id": "customer-profiles",
+      "name": "Customer Profiles",
+      "apiVersion": "2020-08-15",
+      "operations": 115
+    },
+    {
+      "id": "databrew",
+      "name": "DataBrew",
+      "apiVersion": "2017-07-25",
+      "operations": 44
+    },
+    {
+      "id": "dataexchange",
+      "name": "DataExchange",
+      "apiVersion": "2017-07-25",
+      "operations": 37
+    },
+    {
+      "id": "datapipeline",
+      "name": "Data Pipeline",
+      "apiVersion": "2012-10-29",
+      "operations": 19
+    },
+    {
+      "id": "datasync",
+      "name": "DataSync",
+      "apiVersion": "2018-11-09",
+      "operations": 53
+    },
+    {
+      "id": "datazone",
+      "name": "DataZone",
+      "apiVersion": "2018-05-10",
+      "operations": 195
+    },
+    {
+      "id": "dax",
+      "name": "DAX",
+      "apiVersion": "2017-04-19",
+      "operations": 21
+    },
+    {
+      "id": "deadline",
+      "name": "deadline",
+      "apiVersion": "2023-10-12",
+      "operations": 127
+    },
+    {
+      "id": "detective",
+      "name": "Detective",
+      "apiVersion": "2018-10-26",
+      "operations": 29
+    },
+    {
+      "id": "devicefarm",
+      "name": "Device Farm",
+      "apiVersion": "2015-06-23",
+      "operations": 77
+    },
+    {
+      "id": "devops-agent",
+      "name": "DevOps Agent",
+      "apiVersion": "2026-01-01",
+      "operations": 63
+    },
+    {
+      "id": "devops-guru",
+      "name": "DevOps Guru",
+      "apiVersion": "2020-12-01",
+      "operations": 31
+    },
+    {
+      "id": "directconnect",
+      "name": "Direct Connect",
+      "apiVersion": "2012-10-25",
+      "operations": 73
+    },
+    {
+      "id": "discovery",
+      "name": "Application Discovery Service",
+      "apiVersion": "2015-11-01",
+      "operations": 28
+    },
+    {
+      "id": "dlm",
+      "name": "DLM",
+      "apiVersion": "2018-01-12",
+      "operations": 8
+    },
+    {
+      "id": "dms",
+      "name": "Database Migration Service",
+      "apiVersion": "2016-01-01",
+      "operations": 119
+    },
+    {
+      "id": "docdb",
+      "name": "DocDB",
+      "apiVersion": "2014-10-31",
+      "operations": 55
+    },
+    {
+      "id": "docdb-elastic",
+      "name": "DocDB Elastic",
+      "apiVersion": "2022-11-28",
+      "operations": 19
+    },
+    {
+      "id": "drs",
+      "name": "drs",
+      "apiVersion": "2020-02-26",
+      "operations": 70
+    },
+    {
+      "id": "ds",
+      "name": "Directory Service",
+      "apiVersion": "2015-04-16",
+      "operations": 80
+    },
+    {
+      "id": "ds-data",
+      "name": "Directory Service Data",
+      "apiVersion": "2023-05-31",
+      "operations": 17
+    },
+    {
+      "id": "dsql",
+      "name": "DSQL",
+      "apiVersion": "2018-05-10",
+      "operations": 16
+    },
+    {
+      "id": "dynamodb",
+      "name": "DynamoDB",
+      "apiVersion": "2012-08-10",
+      "operations": 58
+    },
+    {
+      "id": "dynamodbstreams",
+      "name": "DynamoDB Streams",
+      "apiVersion": "2012-08-10",
+      "operations": 4
+    },
+    {
+      "id": "ebs",
+      "name": "EBS",
+      "apiVersion": "2019-11-02",
+      "operations": 6
+    },
+    {
+      "id": "ec2",
+      "name": "EC2",
+      "apiVersion": "2016-11-15",
+      "operations": 809
+    },
+    {
+      "id": "ec2-instance-connect",
+      "name": "EC2 Instance Connect",
+      "apiVersion": "2018-04-02",
+      "operations": 2
+    },
+    {
+      "id": "ecr",
+      "name": "ECR",
+      "apiVersion": "2015-09-21",
+      "operations": 58
+    },
+    {
+      "id": "ecr-public",
+      "name": "ECR PUBLIC",
+      "apiVersion": "2020-10-30",
+      "operations": 23
+    },
+    {
+      "id": "ecs",
+      "name": "ECS",
+      "apiVersion": "2014-11-13",
+      "operations": 88
+    },
+    {
+      "id": "efs",
+      "name": "EFS",
+      "apiVersion": "2015-02-01",
+      "operations": 31
+    },
+    {
+      "id": "eks",
+      "name": "EKS",
+      "apiVersion": "2017-11-01",
+      "operations": 70
+    },
+    {
+      "id": "eks-auth",
+      "name": "EKS Auth",
+      "apiVersion": "2023-11-26",
+      "operations": 1
+    },
+    {
+      "id": "elasticache",
+      "name": "ElastiCache",
+      "apiVersion": "2015-02-02",
+      "operations": 77
+    },
+    {
+      "id": "elasticbeanstalk",
+      "name": "Elastic Beanstalk",
+      "apiVersion": "2010-12-01",
+      "operations": 47
+    },
+    {
+      "id": "elb",
+      "name": "Elastic Load Balancing",
+      "apiVersion": "2012-06-01",
+      "operations": 29
+    },
+    {
+      "id": "elbv2",
+      "name": "Elastic Load Balancing v2",
+      "apiVersion": "2015-12-01",
+      "operations": 51
+    },
+    {
+      "id": "elementalinference",
+      "name": "ElementalInference",
+      "apiVersion": "2018-11-14",
+      "operations": 24
+    },
+    {
+      "id": "emr",
+      "name": "EMR",
+      "apiVersion": "2009-03-31",
+      "operations": 65
+    },
+    {
+      "id": "emr-containers",
+      "name": "EMR containers",
+      "apiVersion": "2020-10-01",
+      "operations": 25
+    },
+    {
+      "id": "emr-serverless",
+      "name": "EMR Serverless",
+      "apiVersion": "2021-07-13",
+      "operations": 22
+    },
+    {
+      "id": "endusermessaging",
+      "name": "EndUserMessaging",
+      "apiVersion": "2026-09-21",
+      "operations": 27
+    },
+    {
+      "id": "entityresolution",
+      "name": "EntityResolution",
+      "apiVersion": "2018-05-10",
+      "operations": 38
+    },
+    {
+      "id": "es",
+      "name": "Elasticsearch Service",
+      "apiVersion": "2015-01-01",
+      "operations": 51
+    },
+    {
+      "id": "eventbridgev2",
+      "name": "EventBridgeV2",
+      "apiVersion": "2025-05-15",
+      "operations": 25
+    },
+    {
+      "id": "events",
+      "name": "EventBridge",
+      "apiVersion": "2015-10-07",
+      "operations": 57
+    },
+    {
+      "id": "evs",
+      "name": "evs",
+      "apiVersion": "2023-07-27",
+      "operations": 24
+    },
+    {
+      "id": "firehose",
+      "name": "Firehose",
+      "apiVersion": "2015-08-04",
+      "operations": 12
+    },
+    {
+      "id": "fis",
+      "name": "fis",
+      "apiVersion": "2020-12-01",
+      "operations": 26
+    },
+    {
+      "id": "fms",
+      "name": "FMS",
+      "apiVersion": "2018-01-01",
+      "operations": 42
+    },
+    {
+      "id": "forecast",
+      "name": "forecast",
+      "apiVersion": "2018-06-26",
+      "operations": 63
+    },
+    {
+      "id": "forecastquery",
+      "name": "forecastquery",
+      "apiVersion": "2018-06-26",
+      "operations": 2
+    },
+    {
+      "id": "frauddetector",
+      "name": "FraudDetector",
+      "apiVersion": "2019-11-15",
+      "operations": 73
+    },
+    {
+      "id": "freetier",
+      "name": "FreeTier",
+      "apiVersion": "2023-09-07",
+      "operations": 5
+    },
+    {
+      "id": "fsx",
+      "name": "FSx",
+      "apiVersion": "2018-03-01",
+      "operations": 48
+    },
+    {
+      "id": "gamelift",
+      "name": "GameLift",
+      "apiVersion": "2015-10-01",
+      "operations": 120
+    },
+    {
+      "id": "gameliftstreams",
+      "name": "GameLiftStreams",
+      "apiVersion": "2018-05-10",
+      "operations": 30
+    },
+    {
+      "id": "geo-maps",
+      "name": "Geo Maps",
+      "apiVersion": "2020-11-19",
+      "operations": 5
+    },
+    {
+      "id": "geo-places",
+      "name": "Geo Places",
+      "apiVersion": "2020-11-19",
+      "operations": 7
+    },
+    {
+      "id": "geo-routes",
+      "name": "Geo Routes",
+      "apiVersion": "2020-11-19",
+      "operations": 5
+    },
+    {
+      "id": "glacier",
+      "name": "Glacier",
+      "apiVersion": "2012-06-01",
+      "operations": 33
+    },
+    {
+      "id": "globalaccelerator",
+      "name": "Global Accelerator",
+      "apiVersion": "2018-08-08",
+      "operations": 56
+    },
+    {
+      "id": "glue",
+      "name": "Glue",
+      "apiVersion": "2017-03-31",
+      "operations": 306
+    },
+    {
+      "id": "grafana",
+      "name": "grafana",
+      "apiVersion": "2020-08-18",
+      "operations": 25
+    },
+    {
+      "id": "greengrass",
+      "name": "Greengrass",
+      "apiVersion": "2017-06-07",
+      "operations": 92
+    },
+    {
+      "id": "greengrassv2",
+      "name": "GreengrassV2",
+      "apiVersion": "2020-11-30",
+      "operations": 29
+    },
+    {
+      "id": "groundstation",
+      "name": "GroundStation",
+      "apiVersion": "2019-05-23",
+      "operations": 40
+    },
+    {
+      "id": "guardduty",
+      "name": "GuardDuty",
+      "apiVersion": "2017-11-28",
+      "operations": 102
+    },
+    {
+      "id": "health",
+      "name": "Health",
+      "apiVersion": "2016-08-04",
+      "operations": 15
+    },
+    {
+      "id": "healthlake",
+      "name": "HealthLake",
+      "apiVersion": "2017-07-01",
+      "operations": 26
+    },
+    {
+      "id": "iam",
+      "name": "IAM",
+      "apiVersion": "2010-05-08",
+      "operations": 180
+    },
+    {
+      "id": "iam-toolbox",
+      "name": "IAM Toolbox",
+      "apiVersion": "2018-05-10",
+      "operations": 1
+    },
+    {
+      "id": "identitystore",
+      "name": "identitystore",
+      "apiVersion": "2020-06-15",
+      "operations": 22
+    },
+    {
+      "id": "imagebuilder",
+      "name": "imagebuilder",
+      "apiVersion": "2019-12-02",
+      "operations": 77
+    },
+    {
+      "id": "importexport",
+      "name": "ImportExport",
+      "apiVersion": "2010-06-01",
+      "operations": 6
+    },
+    {
+      "id": "inspector",
+      "name": "Inspector",
+      "apiVersion": "2016-02-16",
+      "operations": 37
+    },
+    {
+      "id": "inspector-scan",
+      "name": "Inspector Scan",
+      "apiVersion": "2023-08-08",
+      "operations": 1
+    },
+    {
+      "id": "inspector2",
+      "name": "Inspector2",
+      "apiVersion": "2020-06-08",
+      "operations": 81
+    },
+    {
+      "id": "interconnect",
+      "name": "Interconnect",
+      "apiVersion": "2022-07-26",
+      "operations": 13
+    },
+    {
+      "id": "internetmonitor",
+      "name": "InternetMonitor",
+      "apiVersion": "2021-06-03",
+      "operations": 16
+    },
+    {
+      "id": "invoicing",
+      "name": "Invoicing",
+      "apiVersion": "2024-12-01",
+      "operations": 21
+    },
+    {
+      "id": "iot",
+      "name": "IoT",
+      "apiVersion": "2015-05-28",
+      "operations": 272
+    },
+    {
+      "id": "iot-data",
+      "name": "IoT Data Plane",
+      "apiVersion": "2015-05-28",
+      "operations": 11
+    },
+    {
+      "id": "iot-jobs-data",
+      "name": "IoT Jobs Data Plane",
+      "apiVersion": "2017-09-29",
+      "operations": 5
+    },
+    {
+      "id": "iot-managed-integrations",
+      "name": "IoT Managed Integrations",
+      "apiVersion": "2025-03-03",
+      "operations": 83
+    },
+    {
+      "id": "iotdeviceadvisor",
+      "name": "IotDeviceAdvisor",
+      "apiVersion": "2020-09-18",
+      "operations": 14
+    },
+    {
+      "id": "iotfleetwise",
+      "name": "IoTFleetWise",
+      "apiVersion": "2021-06-17",
+      "operations": 57
+    },
+    {
+      "id": "iotsecuretunneling",
+      "name": "IoTSecureTunneling",
+      "apiVersion": "2018-10-05",
+      "operations": 8
+    },
+    {
+      "id": "iotsitewise",
+      "name": "IoTSiteWise",
+      "apiVersion": "2019-12-02",
+      "operations": 149
+    },
+    {
+      "id": "iotthingsgraph",
+      "name": "IoTThingsGraph",
+      "apiVersion": "2018-09-06",
+      "operations": 35
+    },
+    {
+      "id": "iottwinmaker",
+      "name": "IoTTwinMaker",
+      "apiVersion": "2021-11-29",
+      "operations": 40
+    },
+    {
+      "id": "iotwireless",
+      "name": "IoT Wireless",
+      "apiVersion": "2020-11-22",
+      "operations": 112
+    },
+    {
+      "id": "ivs",
+      "name": "ivs",
+      "apiVersion": "2020-07-14",
+      "operations": 41
+    },
+    {
+      "id": "ivs-realtime",
+      "name": "IVS RealTime",
+      "apiVersion": "2020-07-14",
+      "operations": 40
+    },
+    {
+      "id": "ivschat",
+      "name": "ivschat",
+      "apiVersion": "2020-07-14",
+      "operations": 17
+    },
+    {
+      "id": "kafka",
+      "name": "Kafka",
+      "apiVersion": "2018-11-14",
+      "operations": 64
+    },
+    {
+      "id": "kafkaconnect",
+      "name": "KafkaConnect",
+      "apiVersion": "2021-09-14",
+      "operations": 21
+    },
+    {
+      "id": "kendra",
+      "name": "kendra",
+      "apiVersion": "2019-02-03",
+      "operations": 66
+    },
+    {
+      "id": "kendra-ranking",
+      "name": "Kendra Ranking",
+      "apiVersion": "2022-10-19",
+      "operations": 9
+    },
+    {
+      "id": "keyspaces",
+      "name": "Keyspaces",
+      "apiVersion": "2022-02-10",
+      "operations": 19
+    },
+    {
+      "id": "keyspacesstreams",
+      "name": "KeyspacesStreams",
+      "apiVersion": "2024-09-09",
+      "operations": 4
+    },
+    {
+      "id": "kinesis",
+      "name": "Kinesis",
+      "apiVersion": "2013-12-02",
+      "operations": 45
+    },
+    {
+      "id": "kinesis-video-archived-media",
+      "name": "Kinesis Video Archived Media",
+      "apiVersion": "2017-09-30",
+      "operations": 6
+    },
+    {
+      "id": "kinesis-video-media",
+      "name": "Kinesis Video Media",
+      "apiVersion": "2017-09-30",
+      "operations": 1
+    },
+    {
+      "id": "kinesis-video-signaling",
+      "name": "Kinesis Video Signaling",
+      "apiVersion": "2019-12-04",
+      "operations": 2
+    },
+    {
+      "id": "kinesis-video-webrtc-storage",
+      "name": "Kinesis Video WebRTC Storage",
+      "apiVersion": "2018-05-10",
+      "operations": 2
+    },
+    {
+      "id": "kinesisanalytics",
+      "name": "Kinesis Analytics",
+      "apiVersion": "2015-08-14",
+      "operations": 20
+    },
+    {
+      "id": "kinesisanalyticsv2",
+      "name": "Kinesis Analytics V2",
+      "apiVersion": "2018-05-23",
+      "operations": 33
+    },
+    {
+      "id": "kinesisvideo",
+      "name": "Kinesis Video",
+      "apiVersion": "2017-09-30",
+      "operations": 32
+    },
+    {
+      "id": "kms",
+      "name": "KMS",
+      "apiVersion": "2014-11-01",
+      "operations": 54
+    },
+    {
+      "id": "lakeformation",
+      "name": "LakeFormation",
+      "apiVersion": "2017-03-31",
+      "operations": 69
+    },
+    {
+      "id": "lambda",
+      "name": "Lambda",
+      "apiVersion": "2015-03-31",
+      "operations": 88
+    },
+    {
+      "id": "lambda-core",
+      "name": "Lambda Core",
+      "apiVersion": "2026-04-30",
+      "operations": 6
+    },
+    {
+      "id": "lambda-microvms",
+      "name": "Lambda Microvms",
+      "apiVersion": "2025-09-09",
+      "operations": 24
+    },
+    {
+      "id": "lambda-web",
+      "name": "Lambda Web",
+      "apiVersion": "2025-03-07",
+      "operations": 20
+    },
+    {
+      "id": "launch-wizard",
+      "name": "Launch Wizard",
+      "apiVersion": "2018-05-10",
+      "operations": 15
+    },
+    {
+      "id": "lex-models",
+      "name": "Lex Model Building Service",
+      "apiVersion": "2017-04-19",
+      "operations": 42
+    },
+    {
+      "id": "lex-runtime",
+      "name": "Lex Runtime Service",
+      "apiVersion": "2016-11-28",
+      "operations": 5
+    },
+    {
+      "id": "lexv2-models",
+      "name": "Lex Models V2",
+      "apiVersion": "2020-08-07",
+      "operations": 107
+    },
+    {
+      "id": "lexv2-runtime",
+      "name": "Lex Runtime V2",
+      "apiVersion": "2020-08-07",
+      "operations": 6
+    },
+    {
+      "id": "license-manager",
+      "name": "License Manager",
+      "apiVersion": "2018-08-01",
+      "operations": 62
+    },
+    {
+      "id": "license-manager-linux-subscriptions",
+      "name": "License Manager Linux Subscriptions",
+      "apiVersion": "2018-05-10",
+      "operations": 11
+    },
+    {
+      "id": "license-manager-user-subscriptions",
+      "name": "License Manager User Subscriptions",
+      "apiVersion": "2018-05-10",
+      "operations": 17
+    },
+    {
+      "id": "lightsail",
+      "name": "Lightsail",
+      "apiVersion": "2016-11-28",
+      "operations": 162
+    },
+    {
+      "id": "location",
+      "name": "Location",
+      "apiVersion": "2020-11-19",
+      "operations": 64
+    },
+    {
+      "id": "logs",
+      "name": "CloudWatch Logs",
+      "apiVersion": "2014-03-28",
+      "operations": 118
+    },
+    {
+      "id": "lookoutequipment",
+      "name": "LookoutEquipment",
+      "apiVersion": "2020-12-15",
+      "operations": 49
+    },
+    {
+      "id": "m2",
+      "name": "m2",
+      "apiVersion": "2021-04-28",
+      "operations": 37
+    },
+    {
+      "id": "machinelearning",
+      "name": "Machine Learning",
+      "apiVersion": "2014-12-12",
+      "operations": 28
+    },
+    {
+      "id": "macie2",
+      "name": "Macie2",
+      "apiVersion": "2020-01-01",
+      "operations": 81
+    },
+    {
+      "id": "mailmanager",
+      "name": "MailManager",
+      "apiVersion": "2023-10-17",
+      "operations": 60
+    },
+    {
+      "id": "managedblockchain",
+      "name": "ManagedBlockchain",
+      "apiVersion": "2018-09-24",
+      "operations": 27
+    },
+    {
+      "id": "managedblockchain-query",
+      "name": "ManagedBlockchain Query",
+      "apiVersion": "2023-05-04",
+      "operations": 9
+    },
+    {
+      "id": "marketplace-agreement",
+      "name": "Marketplace Agreement",
+      "apiVersion": "2020-03-01",
+      "operations": 25
+    },
+    {
+      "id": "marketplace-catalog",
+      "name": "Marketplace Catalog",
+      "apiVersion": "2018-09-17",
+      "operations": 15
+    },
+    {
+      "id": "marketplace-deployment",
+      "name": "Marketplace Deployment",
+      "apiVersion": "2023-01-25",
+      "operations": 4
+    },
+    {
+      "id": "marketplace-discovery",
+      "name": "Marketplace Discovery",
+      "apiVersion": "2026-02-05",
+      "operations": 9
+    },
+    {
+      "id": "marketplace-entitlement",
+      "name": "Marketplace Entitlement Service",
+      "apiVersion": "2017-01-11",
+      "operations": 1
+    },
+    {
+      "id": "marketplace-reporting",
+      "name": "Marketplace Reporting",
+      "apiVersion": "2018-05-10",
+      "operations": 1
+    },
+    {
+      "id": "marketplacecommerceanalytics",
+      "name": "Marketplace Commerce Analytics",
+      "apiVersion": "2015-07-01",
+      "operations": 2
+    },
+    {
+      "id": "mediaconnect",
+      "name": "MediaConnect",
+      "apiVersion": "2018-11-14",
+      "operations": 82
+    },
+    {
+      "id": "mediaconvert",
+      "name": "MediaConvert",
+      "apiVersion": "2017-08-29",
+      "operations": 34
+    },
+    {
+      "id": "medialive",
+      "name": "MediaLive",
+      "apiVersion": "2017-10-14",
+      "operations": 123
+    },
+    {
+      "id": "mediapackage",
+      "name": "MediaPackage",
+      "apiVersion": "2017-10-12",
+      "operations": 19
+    },
+    {
+      "id": "mediapackage-vod",
+      "name": "MediaPackage Vod",
+      "apiVersion": "2018-11-07",
+      "operations": 17
+    },
+    {
+      "id": "mediapackagev2",
+      "name": "MediaPackageV2",
+      "apiVersion": "2022-12-25",
+      "operations": 30
+    },
+    {
+      "id": "mediastore",
+      "name": "MediaStore",
+      "apiVersion": "2017-09-01",
+      "operations": 21
+    },
+    {
+      "id": "mediastore-data",
+      "name": "MediaStore Data",
+      "apiVersion": "2017-09-01",
+      "operations": 5
+    },
+    {
+      "id": "mediatailor",
+      "name": "MediaTailor",
+      "apiVersion": "2018-04-23",
+      "operations": 48
+    },
+    {
+      "id": "medical-imaging",
+      "name": "Medical Imaging",
+      "apiVersion": "2023-07-19",
+      "operations": 18
+    },
+    {
+      "id": "memorydb",
+      "name": "MemoryDB",
+      "apiVersion": "2021-01-01",
+      "operations": 45
+    },
+    {
+      "id": "meteringmarketplace",
+      "name": "Marketplace Metering",
+      "apiVersion": "2016-01-14",
+      "operations": 4
+    },
+    {
+      "id": "mgh",
+      "name": "Migration Hub",
+      "apiVersion": "2017-05-31",
+      "operations": 21
+    },
+    {
+      "id": "mgn",
+      "name": "mgn",
+      "apiVersion": "2020-02-26",
+      "operations": 95
+    },
+    {
+      "id": "migration-hub-refactor-spaces",
+      "name": "Migration Hub Refactor Spaces",
+      "apiVersion": "2021-10-26",
+      "operations": 24
+    },
+    {
+      "id": "migrationhub-config",
+      "name": "MigrationHub Config",
+      "apiVersion": "2019-06-30",
+      "operations": 4
+    },
+    {
+      "id": "migrationhuborchestrator",
+      "name": "MigrationHubOrchestrator",
+      "apiVersion": "2021-08-28",
+      "operations": 31
+    },
+    {
+      "id": "migrationhubstrategy",
+      "name": "MigrationHubStrategy",
+      "apiVersion": "2020-02-19",
+      "operations": 22
+    },
+    {
+      "id": "mpa",
+      "name": "MPA",
+      "apiVersion": "2022-07-26",
+      "operations": 22
+    },
+    {
+      "id": "mq",
+      "name": "mq",
+      "apiVersion": "2017-11-27",
+      "operations": 25
+    },
+    {
+      "id": "mturk",
+      "name": "MTurk",
+      "apiVersion": "2017-01-17",
+      "operations": 39
+    },
+    {
+      "id": "mwaa",
+      "name": "MWAA",
+      "apiVersion": "2020-07-01",
+      "operations": 12
+    },
+    {
+      "id": "mwaa-serverless",
+      "name": "MWAA Serverless",
+      "apiVersion": "2024-07-26",
+      "operations": 15
+    },
+    {
+      "id": "neptune",
+      "name": "Neptune",
+      "apiVersion": "2014-10-31",
+      "operations": 70
+    },
+    {
+      "id": "neptune-graph",
+      "name": "Neptune Graph",
+      "apiVersion": "2023-11-29",
+      "operations": 34
+    },
+    {
+      "id": "neptunedata",
+      "name": "neptunedata",
+      "apiVersion": "2023-08-01",
+      "operations": 43
+    },
+    {
+      "id": "network-firewall",
+      "name": "Network Firewall",
+      "apiVersion": "2020-11-12",
+      "operations": 85
+    },
+    {
+      "id": "network-security-manager",
+      "name": "Network Security Manager",
+      "apiVersion": "2025-10-30",
+      "operations": 46
+    },
+    {
+      "id": "networkflowmonitor",
+      "name": "NetworkFlowMonitor",
+      "apiVersion": "2023-04-19",
+      "operations": 25
+    },
+    {
+      "id": "networkmanager",
+      "name": "NetworkManager",
+      "apiVersion": "2019-07-05",
+      "operations": 97
+    },
+    {
+      "id": "networkmonitor",
+      "name": "NetworkMonitor",
+      "apiVersion": "2023-08-01",
+      "operations": 12
+    },
+    {
+      "id": "notifications",
+      "name": "Notifications",
+      "apiVersion": "2018-05-10",
+      "operations": 40
+    },
+    {
+      "id": "notificationscontacts",
+      "name": "NotificationsContacts",
+      "apiVersion": "2018-05-10",
+      "operations": 9
+    },
+    {
+      "id": "nova-act",
+      "name": "Nova Act",
+      "apiVersion": "2025-08-22",
+      "operations": 16
+    },
+    {
+      "id": "oam",
+      "name": "OAM",
+      "apiVersion": "2022-06-10",
+      "operations": 15
+    },
+    {
+      "id": "observabilityadmin",
+      "name": "ObservabilityAdmin",
+      "apiVersion": "2018-05-10",
+      "operations": 45
+    },
+    {
+      "id": "odb",
+      "name": "odb",
+      "apiVersion": "2024-08-20",
+      "operations": 80
+    },
+    {
+      "id": "omics",
+      "name": "Omics",
+      "apiVersion": "2022-11-28",
+      "operations": 107
+    },
+    {
+      "id": "opensearch",
+      "name": "OpenSearch",
+      "apiVersion": "2021-01-01",
+      "operations": 96
+    },
+    {
+      "id": "opensearchserverless",
+      "name": "OpenSearchServerless",
+      "apiVersion": "2021-11-01",
+      "operations": 54
+    },
+    {
+      "id": "organizations",
+      "name": "Organizations",
+      "apiVersion": "2016-11-28",
+      "operations": 63
+    },
+    {
+      "id": "osis",
+      "name": "OSIS",
+      "apiVersion": "2022-01-01",
+      "operations": 22
+    },
+    {
+      "id": "outposts",
+      "name": "Outposts",
+      "apiVersion": "2019-12-03",
+      "operations": 45
+    },
+    {
+      "id": "partnercentral-account",
+      "name": "PartnerCentral Account",
+      "apiVersion": "2025-04-04",
+      "operations": 34
+    },
+    {
+      "id": "partnercentral-benefits",
+      "name": "PartnerCentral Benefits",
+      "apiVersion": "2018-05-10",
+      "operations": 17
+    },
+    {
+      "id": "partnercentral-channel",
+      "name": "PartnerCentral Channel",
+      "apiVersion": "2024-03-18",
+      "operations": 17
+    },
+    {
+      "id": "partnercentral-revenue-measurement",
+      "name": "PartnerCentral Revenue Measurement",
+      "apiVersion": "2022-07-26",
+      "operations": 18
+    },
+    {
+      "id": "partnercentral-selling",
+      "name": "PartnerCentral Selling",
+      "apiVersion": "2022-07-26",
+      "operations": 45
+    },
+    {
+      "id": "payment-cryptography",
+      "name": "Payment Cryptography",
+      "apiVersion": "2021-09-14",
+      "operations": 32
+    },
+    {
+      "id": "payment-cryptography-data",
+      "name": "Payment Cryptography Data",
+      "apiVersion": "2022-02-03",
+      "operations": 15
+    },
+    {
+      "id": "pca-connector-ad",
+      "name": "Pca Connector Ad",
+      "apiVersion": "2018-05-10",
+      "operations": 25
+    },
+    {
+      "id": "pca-connector-scep",
+      "name": "Pca Connector Scep",
+      "apiVersion": "2018-05-10",
+      "operations": 12
+    },
+    {
+      "id": "pcs",
+      "name": "PCS",
+      "apiVersion": "2023-02-10",
+      "operations": 19
+    },
+    {
+      "id": "personalize",
+      "name": "Personalize",
+      "apiVersion": "2018-05-22",
+      "operations": 71
+    },
+    {
+      "id": "personalize-events",
+      "name": "Personalize Events",
+      "apiVersion": "2018-03-22",
+      "operations": 5
+    },
+    {
+      "id": "personalize-runtime",
+      "name": "Personalize Runtime",
+      "apiVersion": "2018-05-22",
+      "operations": 3
+    },
+    {
+      "id": "pi",
+      "name": "PI",
+      "apiVersion": "2018-02-27",
+      "operations": 14
+    },
+    {
+      "id": "pinpoint",
+      "name": "Pinpoint",
+      "apiVersion": "2016-12-01",
+      "operations": 122
+    },
+    {
+      "id": "pinpoint-email",
+      "name": "Pinpoint Email",
+      "apiVersion": "2018-07-26",
+      "operations": 42
+    },
+    {
+      "id": "pinpoint-sms-voice",
+      "name": "Pinpoint SMS Voice",
+      "apiVersion": "2018-09-05",
+      "operations": 8
+    },
+    {
+      "id": "pinpoint-sms-voice-v2",
+      "name": "Pinpoint SMS Voice V2",
+      "apiVersion": "2022-03-31",
+      "operations": 110
+    },
+    {
+      "id": "pipes",
+      "name": "Pipes",
+      "apiVersion": "2015-10-07",
+      "operations": 10
+    },
+    {
+      "id": "polly",
+      "name": "Polly",
+      "apiVersion": "2016-06-10",
+      "operations": 10
+    },
+    {
+      "id": "pricing",
+      "name": "Pricing",
+      "apiVersion": "2017-10-15",
+      "operations": 5
+    },
+    {
+      "id": "pricing-plan-manager",
+      "name": "Pricing Plan Manager",
+      "apiVersion": "2025-08-05",
+      "operations": 9
+    },
+    {
+      "id": "proton",
+      "name": "Proton",
+      "apiVersion": "2020-07-20",
+      "operations": 87
+    },
+    {
+      "id": "qapps",
+      "name": "QApps",
+      "apiVersion": "2023-11-27",
+      "operations": 35
+    },
+    {
+      "id": "qbusiness",
+      "name": "QBusiness",
+      "apiVersion": "2023-11-27",
+      "operations": 83
+    },
+    {
+      "id": "qconnect",
+      "name": "QConnect",
+      "apiVersion": "2020-10-19",
+      "operations": 94
+    },
+    {
+      "id": "quicksight",
+      "name": "QuickSight",
+      "apiVersion": "2018-04-01",
+      "operations": 299
+    },
+    {
+      "id": "ram",
+      "name": "RAM",
+      "apiVersion": "2018-01-04",
+      "operations": 35
+    },
+    {
+      "id": "rbin",
+      "name": "rbin",
+      "apiVersion": "2021-06-15",
+      "operations": 10
+    },
+    {
+      "id": "rds",
+      "name": "RDS",
+      "apiVersion": "2014-10-31",
+      "operations": 168
+    },
+    {
+      "id": "rds-data",
+      "name": "RDS Data",
+      "apiVersion": "2018-08-01",
+      "operations": 6
+    },
+    {
+      "id": "redshift",
+      "name": "Redshift",
+      "apiVersion": "2012-12-01",
+      "operations": 145
+    },
+    {
+      "id": "redshift-data",
+      "name": "Redshift Data",
+      "apiVersion": "2019-12-20",
+      "operations": 12
+    },
+    {
+      "id": "redshift-serverless",
+      "name": "Redshift Serverless",
+      "apiVersion": "2021-04-21",
+      "operations": 65
+    },
+    {
+      "id": "rekognition",
+      "name": "Rekognition",
+      "apiVersion": "2016-06-27",
+      "operations": 75
+    },
+    {
+      "id": "repostspace",
+      "name": "repostspace",
+      "apiVersion": "2022-05-13",
+      "operations": 19
+    },
+    {
+      "id": "resiliencehub",
+      "name": "resiliencehub",
+      "apiVersion": "2020-04-30",
+      "operations": 63
+    },
+    {
+      "id": "resiliencehubv2",
+      "name": "resiliencehubv2",
+      "apiVersion": "2026-02-17",
+      "operations": 73
+    },
+    {
+      "id": "resource-explorer-2",
+      "name": "Resource Explorer 2",
+      "apiVersion": "2022-07-28",
+      "operations": 32
+    },
+    {
+      "id": "resource-groups",
+      "name": "Resource Groups",
+      "apiVersion": "2017-11-27",
+      "operations": 23
+    },
+    {
+      "id": "resourcegroupstaggingapi",
+      "name": "Resource Groups Tagging API",
+      "apiVersion": "2017-01-26",
+      "operations": 9
+    },
+    {
+      "id": "rolesanywhere",
+      "name": "RolesAnywhere",
+      "apiVersion": "2018-05-10",
+      "operations": 30
+    },
+    {
+      "id": "route53",
+      "name": "Route 53",
+      "apiVersion": "2013-04-01",
+      "operations": 71
+    },
+    {
+      "id": "route53-recovery-cluster",
+      "name": "Route53 Recovery Cluster",
+      "apiVersion": "2019-12-02",
+      "operations": 4
+    },
+    {
+      "id": "route53-recovery-control-config",
+      "name": "Route53 Recovery Control Config",
+      "apiVersion": "2020-11-02",
+      "operations": 25
+    },
+    {
+      "id": "route53-recovery-readiness",
+      "name": "Route53 Recovery Readiness",
+      "apiVersion": "2019-12-02",
+      "operations": 32
+    },
+    {
+      "id": "route53domains",
+      "name": "Route 53 Domains",
+      "apiVersion": "2014-05-15",
+      "operations": 35
+    },
+    {
+      "id": "route53globalresolver",
+      "name": "Route53GlobalResolver",
+      "apiVersion": "2022-09-27",
+      "operations": 48
+    },
+    {
+      "id": "route53profiles",
+      "name": "Route53Profiles",
+      "apiVersion": "2018-05-10",
+      "operations": 16
+    },
+    {
+      "id": "route53resolver",
+      "name": "Route53Resolver",
+      "apiVersion": "2018-04-01",
+      "operations": 72
+    },
+    {
+      "id": "rtbfabric",
+      "name": "RTBFabric",
+      "apiVersion": "2023-05-15",
+      "operations": 36
+    },
+    {
+      "id": "rum",
+      "name": "RUM",
+      "apiVersion": "2018-05-10",
+      "operations": 20
+    },
+    {
+      "id": "s3",
+      "name": "S3",
+      "apiVersion": "2006-03-01",
+      "operations": 116
+    },
+    {
+      "id": "s3control",
+      "name": "S3 Control",
+      "apiVersion": "2018-08-20",
+      "operations": 97
+    },
+    {
+      "id": "s3files",
+      "name": "S3Files",
+      "apiVersion": "2025-05-05",
+      "operations": 21
+    },
+    {
+      "id": "s3outposts",
+      "name": "S3Outposts",
+      "apiVersion": "2017-07-25",
+      "operations": 5
+    },
+    {
+      "id": "s3tables",
+      "name": "S3Tables",
+      "apiVersion": "2018-05-10",
+      "operations": 49
+    },
+    {
+      "id": "s3vectors",
+      "name": "S3Vectors",
+      "apiVersion": "2025-07-15",
+      "operations": 21
+    },
+    {
+      "id": "sagemaker",
+      "name": "SageMaker",
+      "apiVersion": "2017-07-24",
+      "operations": 409
+    },
+    {
+      "id": "sagemaker-a2i-runtime",
+      "name": "SageMaker A2I Runtime",
+      "apiVersion": "2019-11-07",
+      "operations": 5
+    },
+    {
+      "id": "sagemaker-edge",
+      "name": "Sagemaker Edge",
+      "apiVersion": "2020-09-23",
+      "operations": 3
+    },
+    {
+      "id": "sagemaker-featurestore-runtime",
+      "name": "SageMaker FeatureStore Runtime",
+      "apiVersion": "2020-07-01",
+      "operations": 7
+    },
+    {
+      "id": "sagemaker-geospatial",
+      "name": "SageMaker Geospatial",
+      "apiVersion": "2020-05-27",
+      "operations": 19
+    },
+    {
+      "id": "sagemaker-metrics",
+      "name": "SageMaker Metrics",
+      "apiVersion": "2022-09-30",
+      "operations": 2
+    },
+    {
+      "id": "sagemaker-runtime",
+      "name": "SageMaker Runtime",
+      "apiVersion": "2017-05-13",
+      "operations": 3
+    },
+    {
+      "id": "sagemakerjobruntime",
+      "name": "SagemakerJobRuntime",
+      "apiVersion": "2026-02-01",
+      "operations": 4
+    },
+    {
+      "id": "sagemakertrainingsessionruntime",
+      "name": "SageMakerTrainingSessionRuntime",
+      "apiVersion": "2025-02-10",
+      "operations": 6
+    },
+    {
+      "id": "savingsplans",
+      "name": "savingsplans",
+      "apiVersion": "2019-06-28",
+      "operations": 10
+    },
+    {
+      "id": "scheduler",
+      "name": "Scheduler",
+      "apiVersion": "2021-06-30",
+      "operations": 12
+    },
+    {
+      "id": "schemas",
+      "name": "schemas",
+      "apiVersion": "2019-12-02",
+      "operations": 31
+    },
+    {
+      "id": "sdb",
+      "name": "SimpleDB",
+      "apiVersion": "2009-04-15",
+      "operations": 10
+    },
+    {
+      "id": "secretsmanager",
+      "name": "Secrets Manager",
+      "apiVersion": "2017-10-17",
+      "operations": 23
+    },
+    {
+      "id": "security-ir",
+      "name": "Security IR",
+      "apiVersion": "2018-05-10",
+      "operations": 25
+    },
+    {
+      "id": "securityagent",
+      "name": "SecurityAgent",
+      "apiVersion": "2025-09-06",
+      "operations": 96
+    },
+    {
+      "id": "securityhub",
+      "name": "SecurityHub",
+      "apiVersion": "2018-10-26",
+      "operations": 123
+    },
+    {
+      "id": "securitylake",
+      "name": "SecurityLake",
+      "apiVersion": "2018-05-10",
+      "operations": 31
+    },
+    {
+      "id": "serverlessrepo",
+      "name": "ServerlessApplicationRepository",
+      "apiVersion": "2017-09-08",
+      "operations": 14
+    },
+    {
+      "id": "service-quotas",
+      "name": "Service Quotas",
+      "apiVersion": "2019-06-24",
+      "operations": 26
+    },
+    {
+      "id": "servicecatalog",
+      "name": "Service Catalog",
+      "apiVersion": "2015-12-10",
+      "operations": 90
+    },
+    {
+      "id": "servicecatalog-appregistry",
+      "name": "Service Catalog AppRegistry",
+      "apiVersion": "2020-06-24",
+      "operations": 24
+    },
+    {
+      "id": "servicediscovery",
+      "name": "ServiceDiscovery",
+      "apiVersion": "2017-03-14",
+      "operations": 30
+    },
+    {
+      "id": "ses",
+      "name": "SES",
+      "apiVersion": "2010-12-01",
+      "operations": 71
+    },
+    {
+      "id": "sesv2",
+      "name": "SESv2",
+      "apiVersion": "2019-09-27",
+      "operations": 116
+    },
+    {
+      "id": "shield",
+      "name": "Shield",
+      "apiVersion": "2016-06-02",
+      "operations": 36
+    },
+    {
+      "id": "signer",
+      "name": "signer",
+      "apiVersion": "2017-08-25",
+      "operations": 19
+    },
+    {
+      "id": "signer-data",
+      "name": "Signer Data",
+      "apiVersion": "2017-08-25",
+      "operations": 1
+    },
+    {
+      "id": "signin",
+      "name": "Signin",
+      "apiVersion": "2023-01-01",
+      "operations": 11
+    },
+    {
+      "id": "simpledbv2",
+      "name": "SimpleDBv2",
+      "apiVersion": "2025-09-26",
+      "operations": 3
+    },
+    {
+      "id": "sms-voice",
+      "name": "Pinpoint SMS Voice",
+      "apiVersion": "2018-09-05",
+      "operations": 8
+    },
+    {
+      "id": "snow-device-management",
+      "name": "Snow Device Management",
+      "apiVersion": "2021-08-04",
+      "operations": 13
+    },
+    {
+      "id": "snowball",
+      "name": "Snowball",
+      "apiVersion": "2016-06-30",
+      "operations": 27
+    },
+    {
+      "id": "sns",
+      "name": "SNS",
+      "apiVersion": "2010-03-31",
+      "operations": 42
+    },
+    {
+      "id": "socialmessaging",
+      "name": "SocialMessaging",
+      "apiVersion": "2024-01-01",
+      "operations": 38
+    },
+    {
+      "id": "sqs",
+      "name": "SQS",
+      "apiVersion": "2012-11-05",
+      "operations": 23
+    },
+    {
+      "id": "ssm",
+      "name": "SSM",
+      "apiVersion": "2014-11-06",
+      "operations": 152
+    },
+    {
+      "id": "ssm-contacts",
+      "name": "SSM Contacts",
+      "apiVersion": "2021-05-03",
+      "operations": 39
+    },
+    {
+      "id": "ssm-guiconnect",
+      "name": "SSM GuiConnect",
+      "apiVersion": "2021-05-01",
+      "operations": 3
+    },
+    {
+      "id": "ssm-incidents",
+      "name": "SSM Incidents",
+      "apiVersion": "2018-05-10",
+      "operations": 31
+    },
+    {
+      "id": "ssm-quicksetup",
+      "name": "SSM QuickSetup",
+      "apiVersion": "2018-05-10",
+      "operations": 14
+    },
+    {
+      "id": "ssm-sap",
+      "name": "Ssm Sap",
+      "apiVersion": "2018-05-10",
+      "operations": 27
+    },
+    {
+      "id": "sso",
+      "name": "SSO",
+      "apiVersion": "2019-06-10",
+      "operations": 4
+    },
+    {
+      "id": "sso-admin",
+      "name": "SSO Admin",
+      "apiVersion": "2020-07-20",
+      "operations": 79
+    },
+    {
+      "id": "sso-oidc",
+      "name": "SSO OIDC",
+      "apiVersion": "2019-06-10",
+      "operations": 4
+    },
+    {
+      "id": "stepfunctions",
+      "name": "SFN",
+      "apiVersion": "2016-11-23",
+      "operations": 37
+    },
+    {
+      "id": "storagegateway",
+      "name": "Storage Gateway",
+      "apiVersion": "2013-06-30",
+      "operations": 96
+    },
+    {
+      "id": "sts",
+      "name": "STS",
+      "apiVersion": "2011-06-15",
+      "operations": 11
+    },
+    {
+      "id": "supplychain",
+      "name": "SupplyChain",
+      "apiVersion": "2024-01-01",
+      "operations": 30
+    },
+    {
+      "id": "support",
+      "name": "Support",
+      "apiVersion": "2013-04-15",
+      "operations": 20
+    },
+    {
+      "id": "support-app",
+      "name": "Support App",
+      "apiVersion": "2021-08-20",
+      "operations": 10
+    },
+    {
+      "id": "supportauthz",
+      "name": "SupportAuthZ",
+      "apiVersion": "2026-06-30",
+      "operations": 11
+    },
+    {
+      "id": "sustainability",
+      "name": "Sustainability",
+      "apiVersion": "2018-05-10",
+      "operations": 4
+    },
+    {
+      "id": "swf",
+      "name": "SWF",
+      "apiVersion": "2012-01-25",
+      "operations": 39
+    },
+    {
+      "id": "synthetics",
+      "name": "synthetics",
+      "apiVersion": "2017-10-11",
+      "operations": 22
+    },
+    {
+      "id": "taxsettings",
+      "name": "TaxSettings",
+      "apiVersion": "2018-05-10",
+      "operations": 16
+    },
+    {
+      "id": "textract",
+      "name": "Textract",
+      "apiVersion": "2018-06-27",
+      "operations": 25
+    },
+    {
+      "id": "timestream-influxdb",
+      "name": "Timestream InfluxDB",
+      "apiVersion": "2023-01-27",
+      "operations": 24
+    },
+    {
+      "id": "timestream-query",
+      "name": "Timestream Query",
+      "apiVersion": "2018-11-01",
+      "operations": 15
+    },
+    {
+      "id": "timestream-write",
+      "name": "Timestream Write",
+      "apiVersion": "2018-11-01",
+      "operations": 19
+    },
+    {
+      "id": "transcribe",
+      "name": "Transcribe",
+      "apiVersion": "2017-10-26",
+      "operations": 44
+    },
+    {
+      "id": "transfer",
+      "name": "Transfer",
+      "apiVersion": "2018-11-05",
+      "operations": 71
+    },
+    {
+      "id": "translate",
+      "name": "Translate",
+      "apiVersion": "2017-07-01",
+      "operations": 19
+    },
+    {
+      "id": "trustedadvisor",
+      "name": "TrustedAdvisor",
+      "apiVersion": "2022-09-15",
+      "operations": 12
+    },
+    {
+      "id": "uxc",
+      "name": "uxc",
+      "apiVersion": "2024-07-01",
+      "operations": 3
+    },
+    {
+      "id": "verifiedpermissions",
+      "name": "VerifiedPermissions",
+      "apiVersion": "2021-12-01",
+      "operations": 34
+    },
+    {
+      "id": "voice-id",
+      "name": "Voice ID",
+      "apiVersion": "2021-09-27",
+      "operations": 29
+    },
+    {
+      "id": "vpc-lattice",
+      "name": "VPC Lattice",
+      "apiVersion": "2022-11-30",
+      "operations": 73
+    },
+    {
+      "id": "waf",
+      "name": "WAF",
+      "apiVersion": "2015-08-24",
+      "operations": 77
+    },
+    {
+      "id": "waf-regional",
+      "name": "WAF Regional",
+      "apiVersion": "2016-11-28",
+      "operations": 81
+    },
+    {
+      "id": "wafv2",
+      "name": "WAFV2",
+      "apiVersion": "2019-07-29",
+      "operations": 59
+    },
+    {
+      "id": "wellarchitected",
+      "name": "WellArchitected",
+      "apiVersion": "2020-03-31",
+      "operations": 95
+    },
+    {
+      "id": "wickr",
+      "name": "Wickr",
+      "apiVersion": "2024-02-01",
+      "operations": 44
+    },
+    {
+      "id": "wisdom",
+      "name": "Wisdom",
+      "apiVersion": "2020-10-19",
+      "operations": 41
+    },
+    {
+      "id": "workdocs",
+      "name": "WorkDocs",
+      "apiVersion": "2016-05-01",
+      "operations": 44
+    },
+    {
+      "id": "workmail",
+      "name": "WorkMail",
+      "apiVersion": "2017-10-01",
+      "operations": 92
+    },
+    {
+      "id": "workmailmessageflow",
+      "name": "WorkMailMessageFlow",
+      "apiVersion": "2019-05-01",
+      "operations": 2
+    },
+    {
+      "id": "workspaces",
+      "name": "WorkSpaces",
+      "apiVersion": "2015-04-08",
+      "operations": 91
+    },
+    {
+      "id": "workspaces-instances",
+      "name": "Workspaces Instances",
+      "apiVersion": "2022-07-26",
+      "operations": 14
+    },
+    {
+      "id": "workspaces-thin-client",
+      "name": "WorkSpaces Thin Client",
+      "apiVersion": "2023-08-22",
+      "operations": 16
+    },
+    {
+      "id": "workspaces-web",
+      "name": "WorkSpaces Web",
+      "apiVersion": "2020-07-08",
+      "operations": 75
+    },
+    {
+      "id": "xray",
+      "name": "XRay",
+      "apiVersion": "2016-04-12",
+      "operations": 38
+    }
+  ],
+  "scope": "Latest API version per SDK service model in this pinned package; not all AWS marketing services or GuardDuty coverage.",
+  "requestFormat": "HTTP method/path and protocol metadata are model templates. Authentication and required arguments are omitted. No request is sent."
+}
