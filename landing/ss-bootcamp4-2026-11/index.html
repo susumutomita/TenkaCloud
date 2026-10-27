@@ -4,89 +4,62 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>クラウド演習を、主催者のPCから開けるようにした｜BootCamp #4 発表会</title>
-<meta name="description" content="Singularity Society BootCamp #4 発表会（2026年11月15日）の発表資料。コミュニティでの開催見送りを受けて、TenkaCloudを主催者のPC 1台で開ける形に作り直した経緯と、次に作る毎週1問の勉強会の構想。" />
+<meta name="description" content="Singularity Society BootCamp #4 発表会（2026年11月15日）の発表資料。コミュニティでの開催見送りを受けて、TenkaCloudを主催者のPC 1台で開ける形に作り直した経緯。発表はデモが中心です。" />
 <link rel="canonical" href="https://tenkacloud.com/ss-bootcamp4-2026-11/" />
 <meta property="og:title" content="クラウド演習を、主催者のPCから開けるようにした｜BootCamp #4 発表会" />
 <meta property="og:type" content="article" />
 <meta property="og:url" content="https://tenkacloud.com/ss-bootcamp4-2026-11/" />
 <link rel="icon" href="../assets/favicon.svg" />
 <link rel="stylesheet" href="../tenkacloud-ug-1/talk.css" />
+<style>
+.closing-slide .resource-links { grid-template-columns:repeat(4,minmax(0,1fr)); }
+.closing-slide .resource-links a { flex-direction:column; align-items:flex-start; }
+.closing-slide .resource-links img { width:200px; height:200px; }
+@media screen and (max-width:900px) {
+  .closing-slide .resource-links { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .closing-slide .resource-links img { width:140px; height:140px; }
+}
+</style>
 <script defer src="../tenkacloud-ug-1/talk.js"></script>
 </head>
 <body>
 <header class="topbar"><a href="../presentations/">← 発表資料一覧</a><span>BootCamp #4 発表会 · 2026年11月15日</span><a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer">GitHub ↗</a></header>
-<nav class="controls" aria-label="スライドの操作"><button id="previous" type="button" aria-label="前のスライド">← 前へ</button><output id="position" aria-live="polite">1 / 9</output><button id="next" type="button" aria-label="次のスライド">次へ →</button></nav>
+<nav class="controls" aria-label="スライドの操作"><button id="previous" type="button" aria-label="前のスライド">← 前へ</button><output id="position" aria-live="polite">1 / 4</output><button id="next" type="button" aria-label="次のスライド">次へ →</button></nav>
 <noscript><p class="noscript">すべてのスライドを順に表示しています。</p></noscript>
 <main id="deck">
 <section class="slide cover" id="slide-1" aria-labelledby="title-1">
 <p class="kicker">Singularity Society BootCamp #4 発表会 · 2026年11月15日 · 下書き（当日までに更新します）</p>
-<h1 id="title-1">クラウド演習を、<br>主催者のPCから開けるようにした</h1>
-<p class="lead">BootCampの5か月で、TenkaCloudをどう作り直したか。</p>
-<p class="byline">冨田 進 / susumutomita<br>合同会社BULL / TenkaCloud</p>
-<div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>1 / 9</span></div>
+<h1 id="title-1">TenkaCloud</h1>
+<p class="lead">AWSのGameDayやISUCONのような、手を動かして学ぶクラウド演習を開くためのOSS。</p>
+<dl class="plain-list"><div><dt>Challenge</dt><dd>問題を解き、回答を提出する。</dd></div><div><dt>Battle</dt><dd>稼働状態や競技中の操作を判定し、チームで得点を競う。</dd></div><div><dt>主催者</dt><dd>大会・採点・問題集を、1つの管理画面で運営する。</dd></div></dl>
+<p class="byline">冨田 進 / susumutomita · 合同会社BULL</p>
+<div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>1 / 4</span></div>
 </section>
 
-<section class="slide" id="slide-2" aria-labelledby="title-2">
-<p class="kicker">TenkaCloud</p><h2 id="title-2">手を動かして学ぶクラウド演習を、開くためのOSS。</h2>
-<p class="lead">AWSのGameDayやISUCONのような演習を、企業研修・採用評価・インシデント対応訓練で使える形にします。</p>
-<dl class="plain-list"><div><dt>Challenge</dt><dd>問題を解き、回答を提出する。</dd></div><div><dt>Battle</dt><dd>稼働状態や競技中の操作を判定し、チームで得点を競う。</dd></div><div><dt>主催者</dt><dd>イベント・採点・問題カタログを、1つの管理画面で運営する。</dd></div></dl>
-<p class="fine">Apache-2.0。ゴールは「クラウドエンジニアの天下一武道会」を開くこと。</p>
-<div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>2 / 9</span></div>
+<section class="slide statement" id="slide-2" aria-labelledby="title-2">
+<p class="kicker">デモ</p><h2 id="title-2">ここからは、実際に動かします。</h2>
+<p class="fine">あとから試すなら：<a href="https://www.tenkacloud.com/portal-demo/?demo=1" target="_blank" rel="noopener noreferrer">ブラウザで触れるデモ（AWS不要）</a> · <a href="https://tenkacloud.com/cloud-master/" target="_blank" rel="noopener noreferrer">目指せクラウドマスター</a></p>
+<div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>2 / 4</span></div>
 </section>
 
 <section class="slide" id="slide-3" aria-labelledby="title-3">
-<p class="kicker">BootCampの間にやったこと</p><h2 id="title-3">作って、外に出して、反応をもらった。</h2>
-<ol class="cost-history"><li><strong>8/27 TenkaCloud #0 を開催</strong><span>5人が、手元でローカルモードを起動するところまで確認した。</span></li><li><strong>9/16 暗号Battleを、東京大学の講座の最終成果物として提出</strong><span>中学生レベルの前提知識から、現代暗号の考え方まで登れるようにした。</span></li><li><strong>9/17 TenkaCloud #1 を開催</strong><span>AWSにデプロイして、イベントを開くところまで通すハンズオン。</span></li><li><strong>9/18 JAWS-UG横浜でLT</strong><span>「GameDayみたいなクラウド演習を自分で作ってみた」</span></li></ol>
-<div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>3 / 9</span></div>
+<p class="kicker">BootCampでの変化</p><h2 id="title-3">反応をもらって、開き方を作り直した。</h2>
+<ol class="cost-history"><li><strong>6/14 キックオフで発表</strong><span>隔離したAWS環境で問題を解く、演習基盤として始めた。</span></li><li><strong>8〜9月 外に出して、反応をもらった</strong><span>TenkaCloud #0（8/27）と#1（9/17）を開催し、JAWS-UG横浜でLT（9/18）。CCoEのコミュニティでは、数百円でも開催が見送りになった。</span></li><li><strong>10/7 主催者のPC 1台で開けるようにした</strong><span><code>make local</code> で、AWSアカウントなしで大会を開ける（v2.0.0）。</span></li><li><strong>10/27 ブラウザで遊べるゲームを公開</strong><span>目指せクラウドマスター。登録もAWSアカウントも要らない。</span></li></ol>
+<div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>3 / 4</span></div>
 </section>
 
-<section class="slide" id="slide-4" aria-labelledby="title-4">
-<p class="kicker">いちばん効いた反応</p><h2 id="title-4">数百円でも、コミュニティでは開けなかった。</h2>
-<p class="lead">CCoEのコミュニティでGameDayの開催を相談したら、10月の開催は見送りになった。</p>
-<ul class="speaking-points"><li>運営に予算枠がなく、費用が出ること自体が難しい</li><li>競技用のAWSアカウントを用意する手間も負えない</li></ul>
-<p class="fine">試算は、6チーム・4時間の暗号Battleで、全体で数百円でした。</p>
-<p class="emphasis">目指すのは、安くすることではなく、AWSアカウントなしで開けること。</p>
-<div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>4 / 9</span></div>
-</section>
-
-<section class="slide" id="slide-5" aria-labelledby="title-5">
-<p class="kicker">作り直した</p><h2 id="title-5">主催者のPC 1台で、大会を開けるようにした。</h2>
-<dl class="plain-list"><div><dt><code>make local</code></dt><dd>主催者用の管理画面と、参加者用の画面が立ち上がる。データはSQLiteに保存する。</dd></div><div><dt>AWSアカウント</dt><dd>要らない。Dockerを使う問題だけ、必要なときに起動する。</dd></div><div><dt>参加者</dt><dd>同じLANの別のPCからも、ブラウザで参加できる。<br><small>主催者が明示的に有効にする設定で、通信は暗号化されない</small></dd></div></dl>
-<p class="fine">4つに増えていたモード（ローカル・ホスト・Lite・SaaS）を、ローカル開催とクラウド開催の2つに整理した（v2.0.0、10/7）。</p>
-<div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>5 / 9</span></div>
-</section>
-
-<section class="slide" id="slide-6" aria-labelledby="title-6">
-<p class="kicker">ローカル開催で使える問題</p><h2 id="title-6">手元で開ける問題を、増やしている。</h2>
-<dl class="feature-list"><div><dt>暗号Battle</dt><dd>秘密を見せるか、隠して証明するか、相手が公開した情報を突くかを判断して競う。<br><small>v1.11.0から、手元のPCだけで開ける</small></dd></div><div><dt>2チーム対戦のBattle</dt><dd>π包囲戦・セッション防衛戦・テナント境界防衛戦。<br><small>v2.1.0</small></dd></div><div><dt>フォレンジック調査室</dt><dd>侵入後に残った記録から、何が起きたかを証拠で示す。<br><small>v2.1.0 / v2.1.1</small></dd></div><div><dt>CTFd連携</dt><dd>判定が1つのDocker問題は、採点をCTFdに任せられる。<br><small>v2.2.0</small></dd></div></dl>
-<p class="fine">π包囲戦・セッション防衛戦・テナント境界防衛戦・フォレンジック調査室は、まだ開発中（draft）です。</p>
-<div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>6 / 9</span></div>
-</section>
-
-<section class="slide" id="slide-7" aria-labelledby="title-7">
-<p class="kicker">遊んでみて分かったこと</p><h2 id="title-7">テストが通っても、遊べるとは限らなかった。</h2>
-<ul class="speaking-points"><li>参加リンクから申し込む流れが、作った自分でも分からなかった。<br>→ チームごとのキーを配る形に戻した</li><li>暗号Battleで、19桁どうしの足し算を求めていた。<br>→ 手で計算できる大きさ（いちばん大きい割り算でも5桁）にした</li><li>配って当然のファイルに、採点で使う答えが入っていた。<br>→ 機械で検査したら、疑っていた5問のほかに4問見つかった</li></ul>
-<div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>7 / 9</span></div>
-</section>
-
-<section class="slide" id="slide-8" aria-labelledby="title-8">
-<p class="kicker">次にやること（構想・未実装）</p><h2 id="title-8">毎週1問、競技で学んで、問題も育てる勉強会。</h2>
-<ul class="speaking-points"><li>Singularity Societyで毎週1問を出し、制限時間内に取り組む。終わったら解き方と守り方を共有する</li><li>主催者のPCで大会管理と順位表を、参加者のPCで競技環境を動かし、Tailscaleでつなぐ</li><li>問題の分かりやすさと採点の妥当性もレビューしてもらい、1問ずつ育てる</li></ul>
-<p class="fine warning">いちばん難しいのは、参加者のPCの中での隔離です。競技用のシェルから、Mac本体・家庭のLAN・他チーム・運営側へ到達できないことを確かめる必要があります。</p>
-<div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>8 / 9</span></div>
-</section>
-
-<section class="slide closing-slide" id="slide-9" aria-labelledby="title-9">
-<p class="kicker">TenkaCloud</p><h2 id="title-9">一緒に遊んで、問題を育ててください。</h2>
+<section class="slide closing-slide" id="slide-4" aria-labelledby="title-4">
+<p class="kicker">TenkaCloud</p><h2 id="title-4">一緒に遊んで、問題を育ててください。</h2>
 <div class="resource-links" aria-label="TenkaCloudを見に行く">
+<a href="https://tenkacloud.com/cloud-master/" target="_blank" rel="noopener noreferrer"><img src="cloud-master-qr.png" width="370" height="370" alt="目指せクラウドマスターへ移動するQRコード" /><span><strong>遊ぶ</strong><small>目指せクラウドマスター</small></span></a>
 <a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer"><img src="../jaws-yokohama-2026/assets/repository-qr.png" width="300" height="300" alt="リポジトリへ移動するQRコード" /><span><strong>リポジトリ</strong><small>TenkaCloud</small></span></a>
 <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer"><img src="../jaws-yokohama-2026/assets/problems-qr.png" width="300" height="300" alt="問題集へ移動するQRコード" /><span><strong>問題集</strong><small>TenkaCloudChallenge</small></span></a>
 <a href="https://tenkacloud.com/" target="_blank" rel="noopener noreferrer"><img src="../jaws-yokohama-2026/assets/landing-qr.png" width="300" height="300" alt="LPへ移動するQRコード" /><span><strong>LP</strong><small>tenkacloud.com</small></span></a>
 </div>
 <p class="fine">技術書：<a href="https://zenn.dev/bull/books/cloud-competition" target="_blank" rel="noopener noreferrer">自分で作るクラウド競技</a></p>
-<div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>9 / 9</span></div>
+<div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>4 / 4</span></div>
 </section>
 </main>
-<footer class="topbar"><span>← → で移動 · 全9枚 · 8分（発表6分＋質疑2分）</span><a href="../">TenkaCloudへ戻る</a></footer>
+<footer class="topbar"><span>← → で移動 · 全4枚 · 10分（デモを含む発表7分＋質疑3分）</span><a href="../">TenkaCloudへ戻る</a></footer>
 </body>
 </html>
