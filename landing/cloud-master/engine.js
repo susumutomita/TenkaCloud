@@ -1,11 +1,11 @@
-import { LESSON_GRACE_MS, LESSON_NOTICE_MS } from "./curriculum.js?v=175088a16d";
+import { LESSON_GRACE_MS, LESSON_NOTICE_MS } from "./curriculum.js?v=9d632ed0b9";
 import {
   createQuestionStream,
   difficulty,
   levelFor,
   nextQuestion,
   pressureFor,
-} from "./recognition.js?v=175088a16d";
+} from "./recognition.js?v=9d632ed0b9";
 export const INPUT_GUARD_MS = 100;
 export const HITSTOP_MS = 0;
 export const REVIEW_DECISION_MS = 1500;
@@ -94,8 +94,13 @@ function finishLessonNotice(state) {
   const notice = state.lessonNotice;
   if (!notice || notice.shownAt === null || notice.readRemaining > 0 || notice.graceRemaining > 0)
     return;
+  const previousInterval = arrivalInterval(state);
   state.taughtLevel = notice.level;
   state.pressureIndex = pressureFor(state.taughtLevel);
+  // Adopt the new staggered cadence after the cue, without a simultaneous catch-up burst.
+  const interval = arrivalInterval(state);
+  if (interval < previousInterval)
+    state.nextSpawnAt = Math.min(state.nextSpawnAt, state.elapsed + interval);
   state.lessonStats = { normal: 0, danger: 0 };
   state.practiceTurn = true;
   state.lessonBag = [];

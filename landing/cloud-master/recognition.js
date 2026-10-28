@@ -1,6 +1,6 @@
-import { CORRECT_PER_LEVEL, LESSONS, scenarioLevel } from "./curriculum.js?v=175088a16d";
-import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js?v=175088a16d";
-import { SECURITY_SCENARIOS } from "./security-scenarios.js?v=175088a16d";
+import { CORRECT_PER_LEVEL, LESSONS, scenarioLevel } from "./curriculum.js?v=9d632ed0b9";
+import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js?v=9d632ed0b9";
+import { SECURITY_SCENARIOS } from "./security-scenarios.js?v=9d632ed0b9";
 export const PATTERNS = [...SECURITY_SCENARIOS, ...EVIDENCE_SCENARIOS].map((s) => s.id);
 export function random(state) {
   state.rng = (Math.imul(state.rng, 1664525) + 1013904223) >>> 0;
@@ -19,17 +19,24 @@ export const LEVEL_STAGES = LESSONS.map((_, index) => ({
   correct: index * CORRECT_PER_LEVEL,
 }));
 export const PRESSURE_STAGES = [
-  { level: 1, fallMs: 14000, intervalMs: 1600, limit: 3, tier: 1 },
-  { level: 2, fallMs: 12500, intervalMs: 1400, limit: 3, tier: 1 },
-  { level: 3, fallMs: 11000, intervalMs: 1200, limit: 4, tier: 1 },
-  { level: 4, fallMs: 10000, intervalMs: 1000, limit: 4, tier: 1 },
+  { level: 1, fallMs: 10000, intervalMs: 1600, limit: 1, tier: 1 },
+  { level: 2, fallMs: 10000, intervalMs: 1400, limit: 2, tier: 1 },
+  { level: 3, fallMs: 10000, intervalMs: 1200, limit: 3, tier: 1 },
+  { level: 4, fallMs: 9000, intervalMs: 1000, limit: 3, tier: 1 },
   { level: 5, fallMs: 9000, intervalMs: 900, limit: 4, tier: 1 },
-  { level: 6, fallMs: 8000, intervalMs: 800, limit: 5, tier: 2 },
-  { level: 8, fallMs: 7000, intervalMs: 700, limit: 5, tier: 2 },
-  { level: 10, fallMs: 6200, intervalMs: 600, limit: 6, tier: 2 },
-  { level: 12, fallMs: 5400, intervalMs: 500, limit: 6, tier: 3 },
-  { level: 15, fallMs: 4600, intervalMs: 400, limit: 6, tier: 3 },
-  { level: 18, fallMs: 4200, intervalMs: 280, limit: 6, tier: 3 },
+  { level: 6, fallMs: 9000, intervalMs: 800, limit: 4, tier: 2 },
+  { level: 7, fallMs: 8000, intervalMs: 800, limit: 4, tier: 2 },
+  { level: 8, fallMs: 8000, intervalMs: 700, limit: 5, tier: 2 },
+  { level: 10, fallMs: 7000, intervalMs: 600, limit: 6, tier: 2 },
+  { level: 12, fallMs: 7000, intervalMs: 500, limit: 6, tier: 3 },
+  { level: 13, fallMs: 6000, intervalMs: 500, limit: 6, tier: 3 },
+  { level: 15, fallMs: 6000, intervalMs: 400, limit: 6, tier: 3 },
+  { level: 16, fallMs: 5500, intervalMs: 400, limit: 6, tier: 3 },
+  { level: 18, fallMs: 5500, intervalMs: 280, limit: 6, tier: 3 },
+  { level: 19, fallMs: 5000, intervalMs: 280, limit: 6, tier: 3 },
+  { level: 22, fallMs: 4700, intervalMs: 280, limit: 6, tier: 3 },
+  { level: 25, fallMs: 4400, intervalMs: 280, limit: 6, tier: 3 },
+  { level: 28, fallMs: 4200, intervalMs: 280, limit: 6, tier: 3 },
 ];
 export function levelFor(correctDecisions) {
   const count = Math.max(0, Number.isFinite(correctDecisions) ? correctDecisions : 0);
@@ -125,18 +132,32 @@ function blockedDecisions(state) {
 function freshFor(pool, blocked, intended) {
   return pool.filter((s) => !blocked.has(`${s.id}:${intended}`));
 }
-function chooseFromBag(state, key, pool, intended, blocked) {
+function operationKey(scenario, intended = true) {
+  const request = !intended && scenario.normalRequest ? scenario.normalRequest : scenario;
+  return scenario.family
+    ? `${scenario.family}:${scenario.title}`
+    : `${request.serviceId ?? scenario.serviceId}:${request.operation ?? scenario.operation}`;
+}
+function practicePool(state, group, level) {
+  if (level === 1) return group;
+  if (state.lessonStats?.normal > 0 && state.lessonStats?.danger > 0) return [];
+  return group;
+}
+function chooseFromBag(state, key, pool, intended, blocked, variedOnly = false) {
   const fresh = freshFor(pool, blocked, intended);
   if (!fresh.length) return null;
   const ids = new Set(pool.map((s) => s.id));
   state[key] = (state[key] ?? []).filter((s) => ids.has(s.id));
   if (!state[key].length) state[key] = shuffled(pool, state);
-  let index = state[key].findLastIndex(
-    (s) => fresh.some((x) => x.id === s.id) && s.id !== state.lastScenario,
+  const alternatives = fresh.filter((s) => s.id !== state.lastScenario);
+  const varied = alternatives.filter(
+    (s) => currentLevel(state) === 1 || operationKey(s, intended) !== state.lastOperation,
   );
+  if (variedOnly && !varied.length) return null;
+  const choices = varied.length ? varied : alternatives.length ? alternatives : fresh;
+  let index = state[key].findLastIndex((s) => choices.some((x) => x.id === s.id));
   if (index < 0) {
-    const alternatives = fresh.filter((s) => s.id !== state.lastScenario);
-    state[key] = shuffled(alternatives.length ? alternatives : fresh, state);
+    state[key] = shuffled(choices, state);
     index = state[key].length - 1;
   }
   return state[key].splice(index, 1)[0];
@@ -155,7 +176,7 @@ function selection(state) {
   const level = currentLevel(state),
     stage = Math.min(level, LESSONS.length),
     pool = availableAtLevel(state.catalog, level),
-    group = currentGroup(state);
+    group = practicePool(state, currentGroup(state), level);
   let blocked = blockedDecisions(state);
   if (state.scenarioTier !== stage) {
     state.scenarioBag = [];
@@ -172,7 +193,7 @@ function selection(state) {
   const intended = state.outcomes[index];
   let scenario =
     state.practiceTurn && group.length
-      ? chooseFromBag(state, "lessonBag", group, intended, blocked)
+      ? chooseFromBag(state, "lessonBag", group, intended, blocked, level > 1)
       : null;
   const practised = Boolean(scenario);
   scenario ??= chooseFromBag(state, "scenarioBag", pool, intended, blocked);
@@ -180,6 +201,7 @@ function selection(state) {
   state.outcomes.splice(index, 1);
   if (state.practiceTurn === false || practised) state.practiceTurn = !state.practiceTurn;
   state.lastScenario = scenario.id;
+  state.lastOperation = operationKey(scenario, intended);
   return { scenario, intended };
 }
 function valueText(value) {
@@ -502,6 +524,7 @@ export function createQuestionStream(catalog, seed = 726) {
     scenarioTier: 0,
     scenarioBag: [],
     lastScenario: null,
+    lastOperation: null,
     outcomes: [],
     questionSerial: 0,
   };

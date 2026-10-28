@@ -25,8 +25,8 @@ test("pressure notices report actual speed, effective capacity and available com
     expect(wide.detail.includes("More cards")).toBe(after.limit > before.limit);
     expect(wide.detail.includes("Closer comparisons")).toBe(after.tier > before.tier);
     const narrow = pressureNotice(i - 1, i, { capacity: 1, numeric: false }, "en");
-    expect(narrow.detail).toBe("Faster");
+    expect(narrow.detail).toBe(after.fallMs < before.fallMs ? "Faster" : "");
   }
-  expect(pressureNotice(0, 1, {}, "ja").detail).toBe("速度↑");
+  expect(pressureNotice(0, 1, {}, "ja").detail).toBe("枚数↑");
   expect(pressureNotice(1, 1, {}, "en").detail).toBe("");
 });

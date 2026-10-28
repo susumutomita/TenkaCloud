@@ -102,9 +102,10 @@ function checkBucket(v: ReturnType<typeof explanationCard>) {
 describe("visible frame admission and resume ledger", () => {
   test("one delayed rendered frame admits at most one fresh card, with a future next cadence", () => {
     const s = createGame(catalog, 3);
+    Object.assign(s, { level: 3, taughtLevel: 3, pressureIndex: 2, correct: 10 });
     s.outcomes = Array(100).fill(false);
     start(s);
-    tickFrame(s, 1601);
+    tickFrame(s, 1201);
     expect(s.active).toHaveLength(2);
     const untouched = identity(s),
       serial = s.serial;
