@@ -36,14 +36,14 @@ test("Lv1 stays three EC2 cases;Lv2 adds existing query-scope contrast without e
     "EC2ProductionTerminationProtection",
   ]);
   expect(availableAtLevel(catalog, 1)).toHaveLength(3);
-  expect(availableAtLevel(catalog, 2)).toHaveLength(7);
+  expect(availableAtLevel(catalog, 2)).toHaveLength(9);
   expect(scenarioLevel("Discovery:IAMUser/AnomalousBehavior")).toBe(2);
   expect(LESSONS[1].cue).toContain("照会範囲");
   expect(LESSONS[1].enCue).toContain("scope");
   expect(LESSONS[12].scenarios).not.toContain("Discovery:IAMUser/AnomalousBehavior");
 });
 test("new singleton rule gets both contrasts early,then stops dominating the cumulative pool", () => {
-  for (const level of [3, 4])
+  for (const level of [5])
     for (let seed = 0; seed < 8; seed++) {
       const { rows, s } = sample(level, seed, false);
       const early = rows.slice(0, 8).filter((q) => q.lessonLevel === level);

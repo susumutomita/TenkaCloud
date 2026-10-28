@@ -1,6 +1,6 @@
-import { CORRECT_PER_LEVEL, LESSONS, scenarioLevel } from "./curriculum.js?v=9d632ed0b9";
-import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js?v=9d632ed0b9";
-import { SECURITY_SCENARIOS } from "./security-scenarios.js?v=9d632ed0b9";
+import { CORRECT_PER_LEVEL, LESSONS, scenarioLevel } from "./curriculum.js?v=54e1132fcb";
+import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js?v=54e1132fcb";
+import { SECURITY_SCENARIOS } from "./security-scenarios.js?v=54e1132fcb";
 export const PATTERNS = [...SECURITY_SCENARIOS, ...EVIDENCE_SCENARIOS].map((s) => s.id);
 export function random(state) {
   state.rng = (Math.imul(state.rng, 1664525) + 1013904223) >>> 0;

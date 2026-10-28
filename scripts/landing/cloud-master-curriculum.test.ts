@@ -112,7 +112,14 @@ test("opening has EC2 lifecycle variety and early actor threats without network 
         );
       }
     }
-  expect(LESSONS[1].scenarios.every((id) => id.includes("IAMUser/AnomalousBehavior"))).toBe(true);
+  expect(LESSONS[1].scenarios).toEqual([
+    "CredentialAccess:IAMUser/AnomalousBehavior",
+    "DefenseEvasion:IAMUser/AnomalousBehavior",
+    "InitialAccess:IAMUser/AnomalousBehavior",
+    "Discovery:IAMUser/AnomalousBehavior",
+    "CredentialAccess:IAMUser/CompromisedCredentials",
+    "Persistence:IAMUser/AnomalousBehavior",
+  ]);
 });
 test("sampler has no future rules, reserves current practice, stays balanced and seeded", () => {
   for (let level = 1; level <= LESSONS.length; level++) {
