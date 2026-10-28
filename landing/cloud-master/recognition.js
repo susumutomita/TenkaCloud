@@ -1,6 +1,6 @@
-import { CORRECT_PER_LEVEL, LESSONS, scenarioLevel } from "./curriculum.js?v=54e1132fcb";
-import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js?v=54e1132fcb";
-import { SECURITY_SCENARIOS } from "./security-scenarios.js?v=54e1132fcb";
+import { CORRECT_PER_LEVEL, LESSONS, scenarioLevel } from "./curriculum.js?v=ab7d2594f9";
+import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js?v=ab7d2594f9";
+import { SECURITY_SCENARIOS } from "./security-scenarios.js?v=ab7d2594f9";
 export const PATTERNS = [...SECURITY_SCENARIOS, ...EVIDENCE_SCENARIOS].map((s) => s.id);
 export function random(state) {
   state.rng = (Math.imul(state.rng, 1664525) + 1013904223) >>> 0;
@@ -138,6 +138,28 @@ function operationKey(scenario, intended = true) {
     ? `${scenario.family}:${scenario.title}`
     : `${request.serviceId ?? scenario.serviceId}:${request.operation ?? scenario.operation}`;
 }
+// Structural judgment keys group similar comparisons, not AWS detector rules.
+export function scenarioType(s) {
+  return JSON.stringify(
+    s.family
+      ? [s.family, s.focusLabel, s.operator, typeof s.normal, typeof s.flag]
+      : [
+          s.serviceId,
+          s.operation,
+          s.field,
+          s.normalRequest?.serviceId ?? s.serviceId,
+          s.normalRequest?.operation ?? s.operation,
+          typeof s.risk,
+        ],
+  );
+}
+function unseenFirst(state, choices) {
+  if (currentLevel(state) === 1) return choices;
+  const unseenTypes = choices.filter((s) => !state.seenTypes?.has(scenarioType(s)));
+  if (unseenTypes.length) return unseenTypes;
+  const unseenCases = choices.filter((s) => !state.seenScenarios?.has(s.id));
+  return unseenCases.length ? unseenCases : choices;
+}
 function practicePool(state, group, level) {
   if (level === 1) return group;
   if (state.lessonStats?.normal > 0 && state.lessonStats?.danger > 0) return [];
@@ -154,7 +176,10 @@ function chooseFromBag(state, key, pool, intended, blocked, variedOnly = false) 
     (s) => currentLevel(state) === 1 || operationKey(s, intended) !== state.lastOperation,
   );
   if (variedOnly && !varied.length) return null;
-  const choices = varied.length ? varied : alternatives.length ? alternatives : fresh;
+  const choices = unseenFirst(
+    state,
+    varied.length ? varied : alternatives.length ? alternatives : fresh,
+  );
   let index = state[key].findLastIndex((s) => choices.some((x) => x.id === s.id));
   if (index < 0) {
     state[key] = shuffled(choices, state);
@@ -200,6 +225,10 @@ function selection(state) {
   if (!scenario) return null;
   state.outcomes.splice(index, 1);
   if (state.practiceTurn === false || practised) state.practiceTurn = !state.practiceTurn;
+  state.seenTypes ??= new Set();
+  state.seenScenarios ??= new Set();
+  state.seenTypes.add(scenarioType(scenario));
+  state.seenScenarios.add(scenario.id);
   state.lastScenario = scenario.id;
   state.lastOperation = operationKey(scenario, intended);
   return { scenario, intended };

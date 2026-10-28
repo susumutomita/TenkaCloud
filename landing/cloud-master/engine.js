@@ -1,11 +1,11 @@
-import { LESSON_GRACE_MS, LESSON_NOTICE_MS } from "./curriculum.js?v=54e1132fcb";
+import { LESSON_GRACE_MS, LESSON_NOTICE_MS } from "./curriculum.js?v=ab7d2594f9";
 import {
   createQuestionStream,
   difficulty,
   levelFor,
   nextQuestion,
   pressureFor,
-} from "./recognition.js?v=54e1132fcb";
+} from "./recognition.js?v=ab7d2594f9";
 export const INPUT_GUARD_MS = 100;
 export const HITSTOP_MS = 0;
 export const REVIEW_DECISION_MS = 1500;

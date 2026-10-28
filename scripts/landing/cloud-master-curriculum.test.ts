@@ -98,8 +98,8 @@ test("opening has EC2 lifecycle variety and early actor threats without network 
     "rds",
     "alb",
     "app-path",
-    "delivery",
     "waf",
+    "runtime",
   ]);
   expect(LESSONS[0].scenarios).toHaveLength(3);
   for (const source of availableAtLevel(catalog, 2))

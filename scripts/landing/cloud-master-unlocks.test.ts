@@ -39,9 +39,9 @@ test("existing GuardDuty topics expand early pools without adding rules or remov
   expect(availableScenarios(catalog)).toHaveLength(260);
   expect(availableScenarios(catalog).filter((s) => guardIds.has(s.id))).toHaveLength(253);
   expect(new Set(structures.values()).size).toBe(143);
-  const general = [2, 2, 3, 4, 5, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7];
-  const guard = [1, 7, 13, 18, 18, 21, 117, 137, 148, 154, 168, 174, 195, 228, 246, 253];
-  expect(LESSONS).toHaveLength(16);
+  const general = [2, 2, 3, 4, 6, 7, 7];
+  const guard = [1, 7, 24, 56, 82, 195, 253];
+  expect(LESSONS).toHaveLength(7);
   for (let level = 1; level <= LESSONS.length; level++) {
     const pool = availableAtLevel(catalog, level);
     expect(pool.filter((s) => guardIds.has(s.id))).toHaveLength(guard[level - 1]);
@@ -54,8 +54,8 @@ test("existing GuardDuty topics expand early pools without adding rules or remov
   ]);
   expect(LESSONS[2].scenarios).toContain("CredentialAccess:RDS/AnomalousBehavior.FailedLogin");
   expect(LESSONS[3].scenarios).toContain("Execution:Runtime/NewBinaryExecuted");
-  expect(LESSONS[5].scenarios).toContain("CurlWgetExfiltrateData");
-  expect(LESSONS[6].cue).toContain("IP・ドメイン・指紋");
+  expect(LESSONS[4].scenarios).toContain("CurlWgetExfiltrateData");
+  expect(LESSONS[5].cue).toContain("注意指標");
 });
 
 // Visibility and correct taps are a deterministic exposure model, not human-play telemetry.

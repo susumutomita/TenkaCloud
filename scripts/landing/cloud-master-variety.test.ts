@@ -40,22 +40,36 @@ test("Lv1 stays three EC2 cases;Lv2 adds existing query-scope contrast without e
   expect(scenarioLevel("Discovery:IAMUser/AnomalousBehavior")).toBe(2);
   expect(LESSONS[1].cue).toContain("照会範囲");
   expect(LESSONS[1].enCue).toContain("scope");
-  expect(LESSONS[12].scenarios).not.toContain("Discovery:IAMUser/AnomalousBehavior");
+  expect(LESSONS.slice(2).flatMap((l) => l.scenarios)).not.toContain(
+    "Discovery:IAMUser/AnomalousBehavior",
+  );
 });
-test("new singleton rule gets both contrasts early,then stops dominating the cumulative pool", () => {
-  for (const level of [5])
-    for (let seed = 0; seed < 8; seed++) {
-      const { rows, s } = sample(level, seed, false);
-      const early = rows.slice(0, 8).filter((q) => q.lessonLevel === level);
-      expect(early.some((q) => q.danger)).toBe(true);
-      expect(early.some((q) => !q.danger)).toBe(true);
-      expect(s.lessonStats.normal).toBeGreaterThan(0);
-      expect(s.lessonStats.danger).toBeGreaterThan(0);
-      expect(rows.filter((q) => q.lessonLevel === level).length / rows.length).toBeLessThan(0.25);
-      expect(new Set(rows.map((q) => q.operation)).size).toBeGreaterThanOrEqual(
-        level === 3 ? 8 : 9,
-      );
-    }
+function verifyPracticeRelease(level, seed) {
+  const s = stream(level, seed, false),
+    early = [];
+  for (let i = 0; i < 8; i++) {
+    const q = nextQuestion(s);
+    expect(q).toBeTruthy();
+    early.push(q);
+    if (q.lessonLevel === level) s.lessonStats[q.danger ? "danger" : "normal"]++;
+    s.history.push({ at: s.elapsed, question: q });
+    s.elapsed += 1000;
+  }
+  expect(early.some((q) => q.lessonLevel === level && q.danger)).toBe(true);
+  expect(early.some((q) => q.lessonLevel === level && !q.danger)).toBe(true);
+  const practiceBag = s.lessonBag.map((x) => x.id);
+  for (let i = 0; i < 240; i++) {
+    const q = nextQuestion(s);
+    expect(q).toBeTruthy();
+    expect(q.lessonLevel).toBeLessThanOrEqual(level);
+    s.history.push({ at: s.elapsed, question: q });
+    s.elapsed += 1000;
+  }
+  expect(s.lessonBag.map((x) => x.id)).toEqual(practiceBag);
+}
+test("each introduced group gets both contrasts early, then its dedicated practice bag stops being used", () => {
+  for (const level of [2, 3, 4, 5, 6, 7])
+    for (let seed = 0; seed < 8; seed++) verifyPracticeRelease(level, seed);
 });
 test("learned pools stay seeded,balanced and prefer varied actual operations including normal alternatives", () => {
   for (const level of [2, 3, 4, 11, 13, 18]) {
