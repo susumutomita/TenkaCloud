@@ -1452,3 +1452,19 @@ body.active-game .message-bar #hit-reason:not([hidden]) {position:static;display
 /* The card travel endpoint and the permanent message separator share one edge. */
 body.active-game .message-bar {border-top:2px solid #49647f;}
 body.active-game #level-progress {margin-left:4px;white-space:nowrap;font-weight:500;}
+
+/* Correct-hit paper fragments are decorative; gameplay never waits on animation. */
+.slice-effects {position:absolute;inset:0;z-index:4;pointer-events:none;overflow:hidden;}
+.paper-cut {position:absolute;pointer-events:none;}
+.paper-fragment {position:absolute;inset:0;margin:0;pointer-events:none;transform-origin:center;filter:drop-shadow(0 4px 5px #16394a20);will-change:transform,opacity;}
+.paper-fragment.part-0 {animation:paper-upper 340ms ease-out both;}
+.paper-fragment.part-1 {animation:paper-lower 380ms ease-out both;}
+.paper-stroke {position:absolute;left:-8%;top:50%;width:116%;height:2px;border-radius:2px;background:#0969da;box-shadow:0 0 3px #fff;transform-origin:center;animation:paper-stroke 150ms ease-out both;}
+.paper-cut.tier-2 .paper-stroke,.paper-cut.tier-3 .paper-stroke {height:3px;}
+.paper-cut.tier-3 .paper-fragment {filter:drop-shadow(0 5px 7px #0969da30);}
+@keyframes paper-upper {0%{transform:translate(0,0) rotate(0);opacity:1}100%{transform:translate(calc(-1 * var(--cut-spread)),24px) rotate(-11deg);opacity:0}}
+@keyframes paper-lower {0%{transform:translate(0,0) rotate(0);opacity:1}100%{transform:translate(var(--cut-spread),44px) rotate(13deg);opacity:0}}
+@keyframes paper-stroke {0%{transform:rotate(var(--cut-angle)) scaleX(.2);opacity:.8}45%{transform:rotate(var(--cut-angle)) scaleX(1);opacity:1}100%{transform:rotate(var(--cut-angle)) scaleX(1.06);opacity:0}}
+.impact.pass {font-size:20px;color:#276047;animation:pass-points 650ms ease-out both;}
+@keyframes pass-points {from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-14px)}}
+@media(prefers-reduced-motion:reduce){.paper-fragment,.paper-stroke,.impact.pass{animation:none;}}

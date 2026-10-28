@@ -231,25 +231,21 @@ describe("levels, finite incoming stream and exact scoring", () => {
     expect(s.history.filter((entry) => entry.uid === item.uid)).toHaveLength(1);
     expect(s.history.find((entry) => entry.uid === item.uid).points).toBe(0);
   });
-  test("danger score is severity times10, hitstop applies only to the10point hit", () => {
+  test("danger score stays severity times10 and correct hits never stop play", () => {
     const s = findOpening(true, 10),
       item = afterDelay(s);
     expect(item.question.points).toBe(10);
     expect(collect(s, item.uid)).toBe(true);
     expect(s.score).toBe(10);
-    expect(s.phase).toBe("hitstop");
-    const elapsed = s.elapsed;
-    tick(s, HITSTOP_MS - 1);
-    expect(s.elapsed).toBe(elapsed);
-    expect(s.phase).toBe("hitstop");
-    expect(collect(s, item.uid)).toBe(false);
-    tick(s, 1);
+    expect(HITSTOP_MS).toBe(0);
     expect(s.phase).toBe("playing");
-    expect(s.elapsed).toBe(elapsed);
+    const elapsed = s.elapsed;
     tick(s, 20);
     expect(s.elapsed).toBe(elapsed + 20);
+    expect(collect(s, item.uid)).toBe(false);
+    expect(s.score).toBe(10);
   });
-  test("hitstop consumes frame time without moving the game clock, including pause/resume", () => {
+  test("correct-hit effects do not consume play time; explicit pause still stops the clock", () => {
     const s = findOpening(true, 10),
       item = afterDelay(s);
     collect(s, item.uid);
@@ -260,10 +256,10 @@ describe("levels, finite incoming stream and exact scoring", () => {
     resume(s);
     const elapsed = s.elapsed;
     tick(s, 150);
-    expect(s.elapsed).toBe(elapsed + 30);
+    expect(s.elapsed).toBe(elapsed + 150);
     expect(s.score).toBe(10);
   });
-  test("higher severity is worth more and never gets the10-point hitstop", () => {
+  test("higher severity remains worth more while play keeps flowing", () => {
     let state = playing(0);
     for (let seed = 0; seed < 100; seed++) {
       const candidate = createGame(catalog, seed);
@@ -291,7 +287,7 @@ describe("levels, finite incoming stream and exact scoring", () => {
     s.correct = 20;
     tick(s, 10000);
     expect(s.active.length).toBeLessThanOrEqual(2);
-    expect(difficulty(300000 + 30000).intervalMs).toBeLessThan(difficulty(0).intervalMs);
+    expect(difficulty(18).intervalMs).toBeLessThan(difficulty(0).intervalMs);
   });
 });
 

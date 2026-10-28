@@ -1,13 +1,13 @@
-import { LESSON_GRACE_MS, LESSON_NOTICE_MS } from "./curriculum.js?v=021d9ea7a9";
+import { LESSON_GRACE_MS, LESSON_NOTICE_MS } from "./curriculum.js?v=c6615bff99";
 import {
   createQuestionStream,
   difficulty,
   levelFor,
   nextQuestion,
   pressureFor,
-} from "./recognition.js?v=021d9ea7a9";
+} from "./recognition.js?v=c6615bff99";
 export const INPUT_GUARD_MS = 100;
-export const HITSTOP_MS = 120;
+export const HITSTOP_MS = 0;
 export const REVIEW_DECISION_MS = 1500;
 export const EMPTY_REFILL_MS = 100;
 const deadlineOf = (item) => item.decisionDeadline ?? item.deadline;
@@ -168,10 +168,6 @@ export function collect(state, uid) {
   state.best = Math.max(state.best, state.combo);
   record(state, item, "flag", true, item.question.points);
   refillEmptyField(state);
-  if (item.question.points === 10) {
-    state.hitstop = HITSTOP_MS;
-    state.phase = "hitstop";
-  }
   return true;
 }
 export function next(state) {

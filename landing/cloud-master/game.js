@@ -1,5 +1,5 @@
-import { loadCatalog } from "./api-catalog.js?v=021d9ea7a9";
-import { CORRECT_PER_LEVEL, lessonForLevel } from "./curriculum.js?v=021d9ea7a9";
+import { loadCatalog } from "./api-catalog.js?v=c6615bff99";
+import { CORRECT_PER_LEVEL, lessonForLevel } from "./curriculum.js?v=c6615bff99";
 import {
   collect,
   createGame,
@@ -11,16 +11,17 @@ import {
   showLesson,
   start,
   tickFrame as tick,
-} from "./engine.js?v=021d9ea7a9";
-import { explanationCard } from "./explanation.js?v=021d9ea7a9";
-import { decisionFact, reasonDuration } from "./feedback.js?v=021d9ea7a9";
-import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=021d9ea7a9";
-import { CARD_GAP, fieldCapacity } from "./layout.js?v=021d9ea7a9";
-import { flowPositions } from "./motion.js?v=021d9ea7a9";
-import { lessonNotice } from "./notices.js?v=021d9ea7a9";
-import { loadQuestionLocale, questionView } from "./question-locales.js?v=021d9ea7a9";
-import { buildShare } from "./share.js?v=021d9ea7a9";
-import { formatSurvival } from "./time.js?v=021d9ea7a9";
+} from "./engine.js?v=c6615bff99";
+import { explanationCard } from "./explanation.js?v=c6615bff99";
+import { decisionFact, reasonDuration } from "./feedback.js?v=c6615bff99";
+import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=c6615bff99";
+import { CARD_GAP, fieldCapacity } from "./layout.js?v=c6615bff99";
+import { flowPositions } from "./motion.js?v=c6615bff99";
+import { lessonNotice } from "./notices.js?v=c6615bff99";
+import { clearSlices, pulseCombo, sliceCard } from "./paper-cut.js?v=c6615bff99";
+import { loadQuestionLocale, questionView } from "./question-locales.js?v=c6615bff99";
+import { buildShare } from "./share.js?v=c6615bff99";
+import { formatSurvival } from "./time.js?v=c6615bff99";
 
 const $ = (id) => document.getElementById(id);
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
@@ -97,6 +98,7 @@ function prepare(seed = newSeed(), begin = false) {
   lessonPaintToken = null;
   $("cards").replaceChildren();
   $("effects").replaceChildren();
+  clearSlices($("slice-effects"));
   $("review").hidden = true;
   $("about").open = false;
   if (begin) beginRound();
@@ -243,33 +245,16 @@ function pick(uid, thisEpoch) {
   const node = nodes.get(String(uid));
   if (!node || node.disabled) return;
   const accepted = collect(state, uid);
-  if (accepted && state.feedback?.kind === "flag" && node && !reduced.matches) {
-    const effect = node.cloneNode(true);
-    effect.classList.add("tap-hit");
-    effect.setAttribute("aria-hidden", "true");
-    effect.tabIndex = -1;
-    effect.disabled = true;
-    effect.dataset.resolvedUid = String(uid);
-    const transform = node.style.transform;
-    $("cards").append(effect);
-    effect
-      .animate(
-        [
-          { transform, opacity: 0.8 },
-          { transform: `${transform} translateX(18px) scale(0.97)`, opacity: 0 },
-        ],
-        { duration: 140, easing: "ease-out" },
-      )
-      .finished.then(
-        () => effect.remove(),
-        () => effect.remove(),
-      );
-  }
+  const success = accepted && state.feedback?.kind === "flag" && state.feedback.correct;
+  if (success)
+    sliceCard(node, $("slice-effects"), { uid, combo: state.combo, reduced: reduced.matches });
+
   render();
+  if (success) pulseCombo($("combo"), state.combo, reduced.matches);
 }
 function feedbackEffect(entry) {
   const n = document.createElement("div");
-  n.className = `impact${entry.correct ? "" : " wrong"}`;
+  n.className = `impact${entry.correct ? "" : " wrong"}${entry.kind === "pass" ? " pass" : ""}`;
   n.dataset.resolvedUid = String(entry.uid);
   n.dataset.operation = entry.question.operation;
 
@@ -743,12 +728,7 @@ function positionLevelCue() {
 
 function cancelInactiveInput() {
   if (state.phase !== "playing") activeGestureCancel?.();
-  if (!["playing", "hitstop"].includes(state.phase))
-    $("cards")
-      .querySelectorAll(".tap-hit")
-      .forEach((n) => {
-        n.remove();
-      });
+  if (!["playing", "hitstop"].includes(state.phase)) clearSlices($("slice-effects"));
 }
 function render() {
   attribute(document.body, "data-phase", state.phase);
@@ -893,6 +873,7 @@ window.addEventListener("resize", () => {
   render();
 });
 reduced.addEventListener("change", () => {
+  if (reduced.matches) clearSlices($("slice-effects"));
   geometry = null;
   motion.clear();
   if (state) render();
