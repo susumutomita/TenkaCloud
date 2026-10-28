@@ -44,7 +44,7 @@ function flow(at: number, capacity: number) {
   start(s);
   const births = [s.active[0].born],
     seen = new Set([s.active[0].uid]);
-  for (let i = 0; i < (at ? 1180 : 600); i++) {
+  for (let i = 0; i < (at ? 1180 : 720); i++) {
     tickFrame(s, 16);
     for (const item of [...s.active]) {
       if (!seen.has(item.uid)) {
@@ -73,6 +73,7 @@ test("learned pools preserve finite arrivals at real viewport capacities", () =>
 test("pause, first mistake and resume cannot dump arrivals or resurrect a resolved identity", () => {
   const s = createGame(catalog, 28);
   s.maxCards = 5;
+  Object.assign(s, { level: 2, taughtLevel: 2, pressureIndex: 1, correct: 5 });
   start(s);
   tickFrame(s, arrivalInterval(s) + 100);
   pause(s);
@@ -119,13 +120,13 @@ test("every dangerous fact retains its value; shortened account and AWS-managed 
 });
 
 test("opening limits simultaneous volume while later pressure remains readable", () => {
-  expect(difficulty(0)).toMatchObject({ fallMs: 14000, intervalMs: 1600, limit: 3 });
+  expect(difficulty(0)).toMatchObject({ fallMs: 10000, intervalMs: 1600, limit: 1 });
   expect(difficulty(300000)).toMatchObject({ fallMs: 4200, intervalMs: 280, limit: 6 });
   for (const capacity of [2, 3, 4, 6]) {
     const { s, births } = flow(0, capacity);
     expect(births.length).toBeGreaterThan(1);
-    expect(s.active.length).toBeLessThanOrEqual(3);
-    expect(arrivalInterval(s)).toBe(Math.max(1600, Math.ceil(14000 / Math.min(3, capacity))));
+    expect(s.active.length).toBeLessThanOrEqual(1);
+    expect(arrivalInterval(s)).toBe(Math.max(1600, Math.ceil(10000 / Math.min(1, capacity))));
   }
 });
 

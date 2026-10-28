@@ -27,6 +27,6 @@ test("pressure notices report actual speed, effective capacity and available com
     const narrow = pressureNotice(i - 1, i, { capacity: 1, numeric: false }, "en");
     expect(narrow.detail).toBe("Faster");
   }
-  expect(pressureNotice(0, 1, {}, "ja").detail).toBe("速度↑");
+  expect(pressureNotice(0, 1, {}, "ja").detail).toBe("速度↑ · 枚数↑");
   expect(pressureNotice(1, 1, {}, "en").detail).toBe("");
 });

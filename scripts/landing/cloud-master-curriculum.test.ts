@@ -190,13 +190,14 @@ test("clock alone does not introduce a rule and earned notices cannot skip unsee
 });
 test("paint acknowledgment and finite reading precede new-rule admission without blocking old cards", () => {
   const s = pending();
-  const old = s.active[0];
+  const old = s.active[0],
+    deadline = old.deadline;
   expect(showLesson(s)).toBe(true);
   expect(s.taughtLevel).toBe(1);
   const at = s.elapsed;
   tickFrame(s, 100000);
   expect(s.elapsed - at).toBe(100);
-  expect(old.deadline).toBe(14000);
+  expect(old.deadline).toBe(deadline);
   tick(s, LESSON_NOTICE_MS + LESSON_GRACE_MS - 101);
   expect(s.taughtLevel).toBe(1);
   tick(s, 1);

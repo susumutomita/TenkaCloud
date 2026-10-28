@@ -1,6 +1,6 @@
-import { CORRECT_PER_LEVEL, LESSONS, scenarioLevel } from "./curriculum.js?v=175088a16d";
-import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js?v=175088a16d";
-import { SECURITY_SCENARIOS } from "./security-scenarios.js?v=175088a16d";
+import { CORRECT_PER_LEVEL, LESSONS, scenarioLevel } from "./curriculum.js?v=8e85960e43";
+import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js?v=8e85960e43";
+import { SECURITY_SCENARIOS } from "./security-scenarios.js?v=8e85960e43";
 export const PATTERNS = [...SECURITY_SCENARIOS, ...EVIDENCE_SCENARIOS].map((s) => s.id);
 export function random(state) {
   state.rng = (Math.imul(state.rng, 1664525) + 1013904223) >>> 0;
@@ -19,15 +19,15 @@ export const LEVEL_STAGES = LESSONS.map((_, index) => ({
   correct: index * CORRECT_PER_LEVEL,
 }));
 export const PRESSURE_STAGES = [
-  { level: 1, fallMs: 14000, intervalMs: 1600, limit: 3, tier: 1 },
-  { level: 2, fallMs: 12500, intervalMs: 1400, limit: 3, tier: 1 },
-  { level: 3, fallMs: 11000, intervalMs: 1200, limit: 4, tier: 1 },
-  { level: 4, fallMs: 10000, intervalMs: 1000, limit: 4, tier: 1 },
-  { level: 5, fallMs: 9000, intervalMs: 900, limit: 4, tier: 1 },
-  { level: 6, fallMs: 8000, intervalMs: 800, limit: 5, tier: 2 },
-  { level: 8, fallMs: 7000, intervalMs: 700, limit: 5, tier: 2 },
-  { level: 10, fallMs: 6200, intervalMs: 600, limit: 6, tier: 2 },
-  { level: 12, fallMs: 5400, intervalMs: 500, limit: 6, tier: 3 },
+  { level: 1, fallMs: 10000, intervalMs: 1600, limit: 1, tier: 1 },
+  { level: 2, fallMs: 9000, intervalMs: 1400, limit: 2, tier: 1 },
+  { level: 3, fallMs: 8000, intervalMs: 1200, limit: 3, tier: 1 },
+  { level: 4, fallMs: 7600, intervalMs: 1000, limit: 3, tier: 1 },
+  { level: 5, fallMs: 7200, intervalMs: 900, limit: 4, tier: 1 },
+  { level: 6, fallMs: 6800, intervalMs: 800, limit: 4, tier: 2 },
+  { level: 8, fallMs: 6200, intervalMs: 700, limit: 5, tier: 2 },
+  { level: 10, fallMs: 5600, intervalMs: 600, limit: 6, tier: 2 },
+  { level: 12, fallMs: 5000, intervalMs: 500, limit: 6, tier: 3 },
   { level: 15, fallMs: 4600, intervalMs: 400, limit: 6, tier: 3 },
   { level: 18, fallMs: 4200, intervalMs: 280, limit: 6, tier: 3 },
 ];

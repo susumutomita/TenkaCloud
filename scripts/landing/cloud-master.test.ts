@@ -194,11 +194,13 @@ describe("levels, finite incoming stream and exact scoring", () => {
       expect(flags).toBe(60);
     }
   });
-  test("round starts sparse, later objects arrive and any recognized upper item can be flagged", () => {
+  test("after level2 later objects arrive and any recognized upper item can be flagged", () => {
     let state = playing(0);
     for (let seed = 0; seed < 50; seed++) {
-      const candidate = playing(seed);
-      tick(candidate, 1701);
+      const candidate = createGame(catalog, seed);
+      Object.assign(candidate, { level: 2, taughtLevel: 2, pressureIndex: 1, correct: 5 });
+      start(candidate);
+      tick(candidate, 1501);
       if (candidate.active[1]?.question.danger) {
         state = candidate;
         break;
@@ -312,8 +314,8 @@ describe("active survival clock", () => {
   });
   test("restart resets active survival time", () => {
     const a = playing(8);
-    tick(a, 11000);
-    expect(a.elapsed).toBeGreaterThan(10000);
+    tick(a, 9000);
+    expect(a.elapsed).toBeGreaterThan(8000);
     const b = playing(8);
     expect(b.elapsed).toBe(0);
   });
