@@ -224,13 +224,6 @@
       "preview.quests.in_progress": "挑戦中",
       "preview.quests.unsolved_status": "未解答",
       "preview.quests.cleared": "⌄ 解決済み (0)",
-      "preview.sso.desc":
-        "下は AWS Console 接続の画面サンプルです。現行版で利用できる Console / CLI は、問題ごとの access 定義と開催条件で決まります。",
-      "preview.sso.howto": "使い方",
-      "preview.sso.body":
-        "資格情報の期限は参加者画面に表示します。AWS 開催の設定と問題ごとの接続条件は運営ガイドで確認してください。実 AWS での大会性能は未検証です。",
-      "preview.sso.button": "表示例: AWS Console",
-
       "aud.eyebrow": "誰のための",
       "aud.h2": "クラウド実戦力を、組織で育てる。",
       "aud.lead":
@@ -239,7 +232,7 @@
       "aud.a.h": "研修イベントを、 年に複数回。",
       "aud.a.p":
         "新卒オンボーディング / 内製化推進 / 部門横断の AWS 演習を、 同じプラットフォームで 年に複数回 開催できる。 単発ハンズオンから 計画的な 年間プログラム へ。",
-      "aud.a.more": "導入のご相談",
+      "aud.a.more": "お問い合わせフォーム（要Googleログイン）",
       "aud.b.role": "Platform / SRE",
       "aud.b.h": "演習設計を、 1 画面で。",
       "aud.b.p":
@@ -285,42 +278,6 @@
       "uc.f.h": "繰り返して、定着を確かめる。",
       "uc.f.p":
         "同じ問題や類題を時期を空けて再び出題し、チームの得点や解答状況を前回と比べます。一回の受講で終わらせず、身についたかを確かめられます。",
-
-      "onboard.eyebrow": "オンボーディング",
-      "onboard.h2": "ローカル競技を、順番に試す。",
-      "onboard.lead":
-        "まず同じ PC で起動と得点を確認します。AWS 開催は、対応範囲・費用・権限を運営ガイドで確認してから別途設定します。",
-      "onboard.s1.h": "取得して、起動する。",
-      "onboard.s1.p":
-        "起動ガイドに沿って clone → make install → make local。問題は URL/ref またはローカル path から取得します。初回は build を省略しません。",
-      "onboard.s2.h": "大会とチームを用意する。",
-      "onboard.s2.p":
-        "同じ PC の 127.0.0.1:5174 で、表示された主催者キーを使います。大会・チーム・対応問題を選び、開始します。主催者キーは参加者へ渡しません。",
-      "onboard.s3.h": "参加して、得点を確認する。",
-      "onboard.s3.p":
-        "同じ PC の 127.0.0.1:5175 へチームキーで参加します。まず Crypto Battle などの native 問題を試し、操作と得点を確認します。別端末の Tailscale 接続と Docker の利用条件は起動ガイドで確認してください。",
-      "onboard.s3.line2": "問題が割り当てられました",
-
-      "trust.eyebrow": "セキュリティ",
-      "trust.h2": "あなたの AWS は、ずっとあなたのもの。",
-      "trust.bullets": [
-        [
-          "クロスアカウント AssumeRole + ExternalId。",
-          "登録した Role と ExternalId を検証し、競技者アカウントへの操作を行います。",
-        ],
-        [
-          "所有を確認して撤収。",
-          "撤収結果を確認してください。大会データ、保持ストレージ、競技者側 bootstrap などは残るため、AWS の請求確認も必要です。",
-        ],
-        [
-          "コードは全部、GitHub にある。",
-          "Lambda、Step Functions、IaC。何が動くかを確認できます。Apache License 2.0。",
-        ],
-        [
-          "利用量と保持資源を確認。",
-          "常駐サーバーを必要としない構成ですが、API・DB の利用や保持ストレージの料金がゼロになる保証はありません。",
-        ],
-      ],
 
       stats: [
         {
@@ -401,7 +358,7 @@
       "pricing.starter.f2": "deploy / 当日進行サポート",
       "pricing.starter.f3": "公開問題セットから選定",
       "pricing.starter.fineprint": "※ AWS account はお客様側でご用意ください。",
-      "pricing.starter.cta": "GitHub で公開相談",
+      "pricing.starter.cta": "お問い合わせフォーム（要Googleログイン）",
       "pricing.hosted.tier": "Hosted",
       "pricing.hosted.price": "150万円",
       "pricing.hosted.unit": "/ 回",
@@ -413,7 +370,7 @@
       "pricing.hosted.f4": "問題セットの選定",
       "pricing.hosted.fineprint":
         "※ AWS account はお客様側でご用意ください。 こちらでご用意する場合は別途お見積もり。",
-      "pricing.hosted.cta": "GitHub で公開相談",
+      "pricing.hosted.cta": "お問い合わせフォーム（要Googleログイン）",
       "pricing.enterprise.tier": "Annual Arena",
       "pricing.enterprise.price": "600万円",
       "pricing.enterprise.unit": "/ 年",
@@ -427,7 +384,7 @@
         "事後レポート PDF (= portal の採点履歴 / チーム別進捗 / 攻撃可視化 を整理、 1 イベント 1 部)",
       "pricing.enterprise.fineprint":
         "※ 規模 / 内容に応じて見積もり。 AWS account はお客様側でご用意ください。",
-      "pricing.enterprise.cta": "GitHub で公開相談",
+      "pricing.enterprise.cta": "お問い合わせフォーム（要Googleログイン）",
       "pricing.tail":
         '<strong>カスタム問題の追加開発</strong>は要件定義から実装まで通常の受託開発と同じスコープになるため、 別途お見積もりします。 それ以上の規模 / 特別要件も含めて、 <a href="#contact">お問い合わせ</a> ください。',
 
@@ -439,7 +396,7 @@
         "企業内での研修・演習・評価・独自教材の提供などで利用を検討される場合は、ぜひ一度お声がけください。TenkaCloud はオープンソースとして公開していますが、実際の現場で求められる題材、運用方法、閉じた環境での利用要件を伺いながら、プロダクトと教材の両方を改善していきたいと考えています。",
       "ent.cta1": "お問い合わせ",
       "ent.cta2": "GitHub を見る",
-      "contact.discussions": "GitHub Discussions (公開)",
+      "contact.form": "お問い合わせフォーム（要Googleログイン）",
 
       "footer.tag": "AWS を題材にしたクラウド実戦演習を開催するための OSS ツール。 Apache 2.0。",
       "footer.disclaimer":
@@ -558,13 +515,6 @@
       "preview.quests.in_progress": "In progress",
       "preview.quests.unsolved_status": "Unanswered",
       "preview.quests.cleared": "⌄ Cleared (0)",
-      "preview.sso.desc":
-        "The AWS Console screen below is an illustrative sample. Available Console / CLI access in the current version depends on each problem’s access definition and hosting conditions.",
-      "preview.sso.howto": "How to use",
-      "preview.sso.body":
-        "Credential expiry is shown in the participant portal. Check the organizer guide for AWS setup and per-problem access conditions. Live AWS event performance remains unverified.",
-      "preview.sso.button": "Example: AWS Console",
-
       "aud.eyebrow": "Who it's for",
       "aud.h2": "Build cloud capability across the org.",
       "aud.lead":
@@ -573,7 +523,7 @@
       "aud.a.h": "Run training events multiple times a year.",
       "aud.a.p":
         "New-grad onboarding, internalization programs, cross-team AWS drills — run them multiple times a year on the same platform. Move from one-off workshops to a planned annual program.",
-      "aud.a.more": "Talk to us",
+      "aud.a.more": "Contact form (Google sign-in required)",
       "aud.b.role": "Platform / SRE",
       "aud.b.h": "Design drills from one screen.",
       "aud.b.p":
@@ -619,42 +569,6 @@
       "uc.f.h": "Repeat rounds to check retention.",
       "uc.f.p":
         "Run the same or similar problems again after some time, and compare team scores and solve status with the previous round. Training does not end after one session.",
-
-      "onboard.eyebrow": "Onboarding",
-      "onboard.h2": "Try a local competition, step by step.",
-      "onboard.lead":
-        "First check startup and scoring on one PC. For AWS hosting, review supported capabilities, costs and permissions in the organizer guide before configuring it separately.",
-      "onboard.s1.h": "Clone and start the host.",
-      "onboard.s1.p":
-        "Follow the startup guide: clone, make install, then make local. Problems are acquired from selected URL/ref or local path sources. Keep the build enabled on the first start.",
-      "onboard.s2.h": "Create an event and a team.",
-      "onboard.s2.p":
-        "Open 127.0.0.1:5174 on the host and sign in with the displayed organizer key. Create the event and team, select supported problems and start. Keep the organizer key private.",
-      "onboard.s3.h": "Join and check the score.",
-      "onboard.s3.p":
-        "Join 127.0.0.1:5175 on the same PC with the team key. Try a native problem such as Crypto Battle and check actions and scores. See the startup guide for remote Tailscale access and Docker requirements.",
-      "onboard.s3.line2": "Problem assigned",
-
-      "trust.eyebrow": "Security",
-      "trust.h2": "Your AWS account, still yours.",
-      "trust.bullets": [
-        [
-          "Cross-account AssumeRole + ExternalId.",
-          "Operations use a registered role and verified ExternalId in the competitor account.",
-        ],
-        [
-          "Verify ownership and cleanup.",
-          "Check teardown results. Event data, retained storage and competitor bootstrap resources remain; review AWS billing as well.",
-        ],
-        [
-          "The code is on GitHub.",
-          "Inspect the Lambda functions, Step Functions and infrastructure code. Apache License 2.0.",
-        ],
-        [
-          "Review usage and retained resources.",
-          "The platform needs no always-running server, but API/database usage and retained storage are not guaranteed to cost zero.",
-        ],
-      ],
 
       stats: [
         {
@@ -737,7 +651,7 @@
       "pricing.starter.f2": "Deploy / day-of support",
       "pricing.starter.f3": "Selected from the public problem set",
       "pricing.starter.fineprint": "* You bring your own AWS account.",
-      "pricing.starter.cta": "Discuss publicly on GitHub",
+      "pricing.starter.cta": "Contact form (Google sign-in required)",
       "pricing.hosted.tier": "Hosted Event",
       "pricing.hosted.price": "¥1.5M",
       "pricing.hosted.unit": "/ event",
@@ -750,7 +664,7 @@
       "pricing.hosted.f4": "Problem selection",
       "pricing.hosted.fineprint":
         "* You bring your own AWS account. If we need to provide one, we'll quote separately.",
-      "pricing.hosted.cta": "Discuss publicly on GitHub",
+      "pricing.hosted.cta": "Contact form (Google sign-in required)",
       "pricing.enterprise.tier": "Annual Arena",
       "pricing.enterprise.price": "¥6M",
       "pricing.enterprise.unit": "/ year",
@@ -764,7 +678,7 @@
         "Post-event PDF report (= scoring history, team progress, and attack timeline pulled from the portal — one PDF per event)",
       "pricing.enterprise.fineprint":
         "* Quoted by scope and scale. You bring your own AWS account.",
-      "pricing.enterprise.cta": "Discuss publicly on GitHub",
+      "pricing.enterprise.cta": "Contact form (Google sign-in required)",
       "pricing.tail":
         '<strong>Custom problem authoring</strong> follows the same scope as regular software development (requirements → implementation), so we quote it separately. <a href="#contact">Get in touch</a> for that and for anything beyond these tiers.',
 
@@ -776,7 +690,7 @@
         "If you are considering TenkaCloud for enterprise or internal training use, please feel free to contact us. TenkaCloud is open source, but we would love to learn more about real-world training needs, custom exercise requirements, and how organizations want to run hands-on operations/security drills.",
       "ent.cta1": "Get in touch",
       "ent.cta2": "View on GitHub",
-      "contact.discussions": "GitHub Discussions (public)",
+      "contact.form": "Contact form (Google sign-in required)",
 
       "footer.tag":
         "An open-source tool for hosting hands-on cloud drills on real AWS. Apache 2.0.",
@@ -795,14 +709,6 @@
       "footer.tokushoho": "Business identification (Japan TokushoHo)",
     },
   };
-
-  function renderTrustBullets(lang) {
-    var bullets = I18N[lang]["trust.bullets"];
-    var html = bullets
-      .map((entry) => `<li><span><b>${entry[0]}</b> ${entry[1]}</span></li>`)
-      .join("");
-    document.getElementById("trust-bullets").innerHTML = html;
-  }
 
   function renderStats(lang) {
     var stats = I18N[lang].stats;
@@ -860,7 +766,6 @@
         btn.removeAttribute("aria-current");
       }
     });
-    renderTrustBullets(lang);
     renderStats(lang);
     // Legal page link 群を locale に合わせて swap (= en visitor が ./privacy.html (ja)
     // に飛ばないように、 en の場合は ./privacy.en.html / terms.en.html / legal.en.html
