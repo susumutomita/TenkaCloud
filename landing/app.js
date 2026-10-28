@@ -126,6 +126,7 @@
   var I18N = {
     ja: {
       "nav.product": "プロダクト",
+      "nav.useCases": "活用例",
       "nav.problems": "問題",
       "nav.extend": "問題を作る",
       "nav.docs": "ドキュメント",
@@ -251,6 +252,39 @@
         "問題を解いて学ぶ OSS の競技基盤です。勉強会・学校・コミュニティでローカル開催でき、AWS 問題はクラウド開催で扱います。OSS ライセンスは無料ですが、クラウド資源の利用料は別です。",
       "aud.c.more": "問題を作る",
       "aud.c.moreHref": "./docs/manual/problem-author/",
+
+      "uc.eyebrow": "企業での活用",
+      "uc.h2": "セキュリティ研修を、ゲームにする。",
+      "uc.lead":
+        "これまでのセキュリティ研修はスライド中心の e-ラーニングが多く、手を動かすインタラクティブな研修は作るのも運営するのも大変でした。AI の進化で、セキュリティは専門家だけの関心ごとではなくなっています。それでも、見て読むだけの研修にはゲーム性がなく、定着しにくいままです。<strong>TenkaCloud は、チームで問題を解き、得点と順位で競う形にして、この課題に応えます。</strong>",
+      "uc.a.role": "全社員 / 非エンジニア",
+      "uc.a.h": "だまされる場面を、体験で学ぶ。",
+      "uc.a.p":
+        "フィッシングやソーシャルエンジニアリングなど、自社で起きそうな場面を問題にして、チームで解きながら気づきを共有します。参加者はブラウザで参加でき、TenkaCloud のインストールは不要です。",
+      "uc.b.role": "新任エンジニア",
+      "uc.b.h": "オンボーディングを、実戦形式で。",
+      "uc.b.p":
+        "Web 脆弱性やクラウド設定のハンズオン問題を、入社後の演習として出題します。ヒントを見ながら回答を提出し、自分のペースで解き進められます。",
+      "uc.c.role": "SRE / SOC",
+      "uc.c.h": "障害・インシデント対応を、訓練する。",
+      "uc.c.p":
+        "障害対応や攻防の Battle 問題で、チームで状況を判断して手を動かす訓練ができます。スコアの推移から、どこで詰まったかを振り返れます。",
+      "uc.d.role": "社内イベント",
+      "uc.d.h": "部門横断の CTF を、社内で。",
+      "uc.d.p":
+        "大会・チーム・問題・得点を主催者画面で管理し、参加者にはチームごとのキーや招待リンクを渡します。スコアボードで順位を全員で共有します。",
+      "uc.d.more": "運営ガイド",
+      "uc.d.moreHref": "./docs/manual/organizer/",
+      "uc.e.role": "社内ネットワーク",
+      "uc.e.h": "PC 1 台から、社内で開催。",
+      "uc.e.p":
+        "ローカル開催は SQLite で動き、AWS アカウントは不要です。LAN や Tailscale 越しに別の端末から参加できます。接続条件と Docker 問題の利用条件は起動ガイドで確認してください。",
+      "uc.e.more": "起動ガイド",
+      "uc.e.moreHref": "/docs/getting-started/#local-start",
+      "uc.f.role": "定着の確認",
+      "uc.f.h": "繰り返して、定着を確かめる。",
+      "uc.f.p":
+        "同じ問題や類題を時期を空けて再び出題し、チームの得点や解答状況を前回と比べます。一回の受講で終わらせず、身についたかを確かめられます。",
 
       "onboard.eyebrow": "オンボーディング",
       "onboard.h2": "ローカル競技を、順番に試す。",
@@ -426,6 +460,7 @@
     },
     en: {
       "nav.product": "Product",
+      "nav.useCases": "Use cases",
       "nav.problems": "Problems",
       "nav.extend": "Author problems",
       "nav.docs": "Docs",
@@ -551,6 +586,39 @@
         "An open-source platform for learning through competitions. Communities and schools can host locally; AWS exercises use cloud hosting. The OSS license is free; cloud resources are billed separately.",
       "aud.c.more": "Author a problem",
       "aud.c.moreHref": "./docs/manual/problem-author/index.en.html",
+
+      "uc.eyebrow": "Enterprise use cases",
+      "uc.h2": "Turn security training into a game.",
+      "uc.lead":
+        "Security training has mostly meant slide-based e-learning, and interactive, hands-on training has been hard to build and run. With AI, security is no longer a concern for specialists only. Yet training you only watch and read has no game mechanics, so it rarely sticks. <strong>TenkaCloud answers this by turning training into team competitions with problems, scores and rankings.</strong>",
+      "uc.a.role": "All employees / non-engineers",
+      "uc.a.h": "Learn to spot deception by doing.",
+      "uc.a.p":
+        "Turn phishing, social engineering and other situations your company could face into problems, and share what teams notice as they solve them. Participants join from a browser; they do not install TenkaCloud.",
+      "uc.b.role": "New engineers",
+      "uc.b.h": "Onboarding as hands-on practice.",
+      "uc.b.p":
+        "Assign hands-on web vulnerability and cloud configuration problems as onboarding exercises. Participants use hints, submit answers and progress at their own pace.",
+      "uc.c.role": "SRE / SOC",
+      "uc.c.h": "Drill incident response.",
+      "uc.c.p":
+        "Use outage-response and attack/defense Battle problems to practice judging a situation and acting as a team. The score timeline shows where teams got stuck.",
+      "uc.d.role": "Internal events",
+      "uc.d.h": "A cross-team CTF, in-house.",
+      "uc.d.p":
+        "Manage events, teams, problems and scores from the organizer console, and give each team its own key or invitation link. The scoreboard shares rankings with everyone.",
+      "uc.d.more": "Operator guide",
+      "uc.d.moreHref": "./docs/manual/organizer/index.en.html",
+      "uc.e.role": "Internal network",
+      "uc.e.h": "Host from a single PC.",
+      "uc.e.p":
+        "Local hosting runs on SQLite and needs no AWS account. Participants can join from other devices over the LAN or Tailscale. Check the startup guide for connection and Docker problem requirements.",
+      "uc.e.more": "Startup guide",
+      "uc.e.moreHref": "/docs/getting-started/index.en.html#local-start",
+      "uc.f.role": "Checking retention",
+      "uc.f.h": "Repeat rounds to check retention.",
+      "uc.f.p":
+        "Run the same or similar problems again after some time, and compare team scores and solve status with the previous round. Training does not end after one session.",
 
       "onboard.eyebrow": "Onboarding",
       "onboard.h2": "Try a local competition, step by step.",
