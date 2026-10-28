@@ -203,13 +203,6 @@ export function generateEnglishLanding(): string {
     }
   }
 
-  const bullets = translations["trust.bullets"] as [string, string][];
-  html = html.replace(
-    '<ul id="trust-bullets"></ul>',
-    `<ul id="trust-bullets">${bullets
-      .map(([title, body]) => `<li><span><b>${title}</b> ${body}</span></li>`)
-      .join("")}</ul>`,
-  );
   const stats = translations.stats as { n: string; u: string; l: string }[];
   html = html.replace(
     '<div class="stats" id="stats-grid"></div>',
