@@ -22,7 +22,7 @@ describe("landing page SEO", () => {
   it("should publish Japanese default metadata on the TenkaCloud domain", () => {
     expect(index).toContain('<html lang="ja">');
     expect(index).toContain(
-      "<title>TenkaCloud | ゲームで学ぶセキュリティ研修・クラウド演習</title>",
+      "<title>TenkaCloud | セキュリティ研修・クラウド実践演習プラットフォーム</title>",
     );
     expect(index).toContain('<link rel="canonical" href="https://tenkacloud.com/?lang=ja" />');
     expect(index).toContain('<meta property="og:url" content="https://tenkacloud.com/?lang=ja" />');
@@ -55,13 +55,13 @@ describe("landing page SEO", () => {
     const english = read("landing/index.en.html");
     expect(english).toContain('<html lang="en" data-static-lang="en">');
     expect(english).toContain(
-      "<title>TenkaCloud | Security training through games and cloud exercises</title>",
+      "<title>TenkaCloud | Hands-on cloud training and competitions</title>",
     );
     expect(english).toContain(
       '<link rel="canonical" href="https://tenkacloud.com/index.en.html" />',
     );
-    expect(english).toContain("Learn by making the call.");
-    expect(english).toContain("Add decision practice to training.");
+    expect(english).toContain("Put it into practice.");
+    expect(english).toContain("Hands-on learning, from setup to review.");
   });
 
   it("should expose organization, website, and software structured data", () => {
@@ -192,13 +192,15 @@ describe("landing interactive onboarding entry", () => {
     expect(hero).not.toContain("cta-row");
   });
 
-  it("routes the primary card to the available game and retains the team walkthrough", () => {
+  it("routes the primary card to the TenkaCloud exercise walkthrough", () => {
     const hero = heroSection(index);
     expect([...hero.matchAll(/class="hero-quest-card"/g)]).toHaveLength(1);
     const card = hero.slice(hero.indexOf('class="hero-quest-card"'));
     const opening = card.slice(0, card.indexOf(">"));
-    expect(opening).toContain('href="./cloud-master/?lang=ja"');
-    expect(opening).toContain('data-cta="play-cloud-master"');
+    expect(opening).toContain('href="/portal-demo/?demo=1&amp;goto=start"');
+    expect(opening).toContain('data-cta="start-drill"');
+    expect(hero).not.toContain("Cloud Master");
+    expect(hero).toContain("TenkaCloud");
     expect(opening).not.toContain("target=");
     expect(hero).toContain('href="/portal-demo/?demo=1&amp;goto=start"');
     expect(hero).toContain('data-cta="start-drill"');
@@ -236,8 +238,9 @@ describe("landing interactive onboarding entry", () => {
     expect(hero).toContain('data-cta="start-drill"');
     expect(hero).toContain('href="/docs/getting-started/index.en.html#local-start"');
     expect(hero).toContain('data-cta="local-start"');
-    expect(hero).toContain('href="./cloud-master/?lang=en"');
-    expect(hero).toContain("Play the game");
+    expect(hero).toContain('href="/portal-demo/?demo=1&amp;goto=start"');
+    expect(hero).toContain("Try TenkaCloud");
+    expect(hero).not.toContain("Cloud Master");
     expect(hero).not.toContain("Earlier introductory demo");
   });
 });
@@ -508,23 +511,18 @@ describe("catalog documentation entry points", () => {
 describe("enterprise security training entry", () => {
   it("separates available exercises from the future employee email concept in both static locales", () => {
     for (const [page, futureCopy, availableCopy, alt] of [
-      [
-        "landing/index.html",
-        "構想しています",
-        "現在利用できるのは",
-        "Cloud Master の実際のプレー画面",
-      ],
+      ["landing/index.html", "構想しています", "まだ提供していません", "TenkaCloud参加者画面"],
       [
         "landing/index.en.html",
         "We are exploring",
-        "available today",
-        "Actual Cloud Master gameplay",
+        "not yet available",
+        "TenkaCloud participant portal",
       ],
     ]) {
       const html = read(page);
       const future = html.slice(
         html.indexOf('<section class="future-learning">'),
-        html.indexOf('<section class="alt" id="modes">'),
+        html.indexOf('<section id="contact">'),
       );
       expect(future).toContain(futureCopy);
       expect(future).toContain(availableCopy);
@@ -532,10 +530,14 @@ describe("enterprise security training entry", () => {
       expect(html).toContain(alt);
       expect(html.indexOf('id="training"')).toBeLessThan(html.indexOf('id="modes"'));
       expect(html).toContain('data-i18n-href="hero.gameHref"');
-      expect(html).toContain('data-i18n-alt="hero.gameAlt"');
+      expect(html).toContain('data-i18n-alt="hero.platformAlt"');
+      const mini = html.slice(html.indexOf('<aside class="side-experience"'));
+      expect(mini).toContain('href="./cloud-master/?lang=');
+      expect(html.indexOf('id="cloud-foundations"')).toBeGreaterThan(html.indexOf('id="contact"'));
+      expect(html.indexOf('class="future-learning"')).toBeGreaterThan(html.indexOf('id="pricing"'));
     }
     for (const locale of ["ja", "en"]) {
-      expect(existsSync(join(root, `landing/assets/cloud-master-${locale}.png`))).toBe(true);
+      expect(existsSync(join(root, `landing/assets/tenkacloud-platform-${locale}.png`))).toBe(true);
     }
   });
 });

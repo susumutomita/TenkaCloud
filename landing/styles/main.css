@@ -963,10 +963,10 @@ footer .footer-legal-links { display: inline-flex; flex-wrap: wrap; gap: 0 6px; 
   .nav-right .lang { padding: 0 8px; font-size: 11px; }
 }
 
-/* Enterprise training: the live game is the first experience, hosting details follow. */
+/* Enterprise training leads with the hands-on exercise platform. */
 .hero { padding:64px 0 56px; }
-.hero-grid {grid-template-columns:minmax(0, 1.2fr) minmax(0, .8fr);gap:80px;}
-.hero h1 {max-width:640px;font-size:clamp(38px,4.1vw,60px);line-height:1.3;letter-spacing:-.04em;}
+.hero-grid {grid-template-columns:minmax(0, .9fr) minmax(0, 1.1fr);gap:52px;}
+.hero h1 {max-width:640px;font-size:clamp(36px,3.7vw,54px);line-height:1.3;letter-spacing:-.04em;}
 .hero h1 span,.hero h1 em {display:block;}
 .hero .sub {max-width:540px;line-height:1.9;}
 .hero .hero-quest-card {max-width:500px;margin-top:28px;}
@@ -974,10 +974,11 @@ footer .footer-legal-links { display: inline-flex; flex-wrap: wrap; gap: 0 6px; 
 .hero .hero-quest-meta {font-size:12px;color:#526276;}
 .training-consult {display:inline-flex;align-items:center;min-height:44px;margin-top:12px;color:#0066cc;font-weight:700;text-underline-offset:4px;}
 .training-visual {margin:0;display:flex;flex-direction:column;align-items:center;gap:14px;}
-.training-visual img {display:block;max-width:100%;width:auto;height:540px;border:1px solid #cbd8e7;border-radius:18px;box-shadow:0 24px 70px #203b5c18;}
+.training-visual img {display:block;max-width:100%;width:100%;height:auto;border:1px solid #cbd8e7;border-radius:18px;box-shadow:0 24px 70px #203b5c18;}
 .training-visual figcaption {font-size:12px;color:#526276;text-align:center;}
 #training {border-top:1px solid var(--line-soft);}
 #training .audience-intro {max-width:860px;margin-bottom:36px;}
+#training .audience-intro h2 {max-width:none;}
 #training .aud .col {border:0;border-top:2px solid #173f67;border-radius:0;padding:24px 20px;background:transparent;}
 #training .aud .col h3 {font-size:26px;line-height:1.4;}
 #training .aud .col p {font-size:15px;line-height:1.8;}
@@ -992,7 +993,7 @@ footer .footer-legal-links { display: inline-flex; flex-wrap: wrap; gap: 0 6px; 
 @media(max-width:980px){
  .hero-grid {grid-template-columns:1fr;gap:36px;}
  .hero h1 {max-width:720px;}
- .training-visual img {height:440px;}
+ .training-visual img {height:auto;}
  .future-grid {grid-template-columns:1fr;gap:12px;}
  .future-grid h2 {max-width:none;}
 }
@@ -1003,8 +1004,16 @@ footer .footer-legal-links { display: inline-flex; flex-wrap: wrap; gap: 0 6px; 
  .hero .hero-quest-card {padding:20px;margin-top:24px;}
  .hero .hero-quest-desc {font-size:14px;}
  .hero .hero-secondary {font-size:12px;line-height:2.2;}
- .training-visual img {height:420px;}
+ .training-visual img {height:auto;}
  #training .aud {gap:16px;}
  #training .aud .col {padding:20px 4px 12px;min-height:0;}
  .future-grid .lead {font-size:16px;}
 }
+
+.side-experience {border-top:1px solid var(--line-soft);padding:28px 0;}
+.side-experience .wrap {display:flex;gap:28px;align-items:center;justify-content:space-between;}
+.side-experience h3 {font-size:18px;line-height:1.5;margin:0 0 6px;}
+.side-experience p {font-size:14px;line-height:1.7;color:var(--ink-2);margin:0;max-width:760px;}
+.side-experience a {flex-shrink:0;display:inline-flex;align-items:center;min-height:44px;font-size:14px;color:#0066cc;text-underline-offset:4px;}
+.side-experience a:focus-visible {outline:3px solid #0969da;outline-offset:4px;}
+@media(max-width:640px){.side-experience .wrap {flex-direction:column;align-items:flex-start;gap:8px;}}
