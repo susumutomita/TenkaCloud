@@ -20,6 +20,7 @@ import {
   difficulty,
   levelChanges,
   nextQuestion,
+  pressureFor,
 } from "../../landing/cloud-master/recognition.js";
 
 const catalog = await loadCatalog();
@@ -39,7 +40,7 @@ function flow(at: number, capacity: number) {
   const s = createGame(catalog, 28);
   s.elapsed = at;
   s.taughtLevel = at ? LESSONS.length : 1;
-  s.pressureIndex = at ? 10 : 0;
+  s.pressureIndex = pressureFor(s.taughtLevel);
   s.maxCards = capacity;
   start(s);
   const births = [s.active[0].born],

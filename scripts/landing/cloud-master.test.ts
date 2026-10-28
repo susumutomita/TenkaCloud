@@ -176,7 +176,7 @@ describe("levels, finite incoming stream and exact scoring", () => {
       interval = d.intervalMs;
       limit = d.limit;
     }
-    expect(difficulty(18)).toMatchObject({ fallMs: 4200, intervalMs: 280, limit: 6, tier: 3 });
+    expect(difficulty(28)).toMatchObject({ fallMs: 4200, intervalMs: 280, limit: 6, tier: 3 });
   });
   test("every semantic tier remains balanced and all deciding evidence stays visible", () => {
     for (const level of [1, 6, 18]) {

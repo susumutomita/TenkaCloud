@@ -18,16 +18,23 @@ import { difficulty, levelFor, pressureFor } from "../../landing/cloud-master/re
 const catalog = await loadCatalog();
 const schedule = [
   [1, 10000, 1],
-  [2, 9000, 2],
-  [3, 8000, 3],
-  [4, 7600, 3],
-  [5, 7200, 4],
-  [6, 6800, 4],
-  [8, 6200, 5],
-  [10, 5600, 6],
-  [12, 5000, 6],
-  [15, 4600, 6],
-  [18, 4200, 6],
+  [2, 10000, 2],
+  [3, 10000, 3],
+  [4, 9000, 3],
+  [5, 9000, 4],
+  [6, 9000, 4],
+  [7, 8000, 4],
+  [8, 8000, 5],
+  [10, 7000, 6],
+  [12, 7000, 6],
+  [13, 6000, 6],
+  [15, 6000, 6],
+  [16, 5500, 6],
+  [18, 5500, 6],
+  [19, 5000, 6],
+  [22, 4700, 6],
+  [25, 4400, 6],
+  [28, 4200, 6],
 ];
 test.each(schedule)("level %i has fall %ims and staggered limit %i", (level, fallMs, limit) => {
   expect(difficulty(level)).toMatchObject({ fallMs, limit });
@@ -103,7 +110,7 @@ test("new cadence waits for reading, retains old deadlines, and never batches ar
   expect(s.serial).toBe(serial + 1);
   expect(s.active).toHaveLength(2);
   const fresh = s.active.at(-1);
-  expect(fresh.deadline - fresh.born).toBe(9000);
+  expect(fresh.deadline - fresh.born).toBe(10000);
   expect(old.deadline).toBe(deadline);
   tick(s, deadline - s.elapsed);
   expect(s.passed).toBe(2);

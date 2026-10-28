@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { loadCatalog } from "../../landing/cloud-master/api-catalog.js";
-import { LESSONS } from "../../landing/cloud-master/curriculum.js";
 import {
   createGame,
   next,
@@ -12,6 +11,7 @@ import {
   tickFrame,
 } from "../../landing/cloud-master/engine.js";
 import { flowPositions } from "../../landing/cloud-master/motion.js";
+import { pressureFor } from "../../landing/cloud-master/recognition.js";
 import { buildShare } from "../../landing/cloud-master/share.js";
 import { formatSurvival } from "../../landing/cloud-master/time.js";
 
@@ -47,8 +47,8 @@ describe("independent falling trajectories", () => {
   test("short-screen high-pressure normal cards reach the bottom and expire once with no stall", () => {
     const s = createGame(catalog, 12);
     s.elapsed = 600000;
-    s.taughtLevel = LESSONS.length;
-    s.pressureIndex = 10;
+    s.taughtLevel = 28;
+    s.pressureIndex = pressureFor(28);
     s.maxCards = 3;
     s.outcomes = Array(10000).fill(false);
     start(s);

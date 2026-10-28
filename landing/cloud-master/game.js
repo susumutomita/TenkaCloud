@@ -1,5 +1,5 @@
-import { loadCatalog } from "./api-catalog.js?v=8e85960e43";
-import { CORRECT_PER_LEVEL, lessonForLevel } from "./curriculum.js?v=8e85960e43";
+import { loadCatalog } from "./api-catalog.js?v=9d632ed0b9";
+import { CORRECT_PER_LEVEL, lessonForLevel } from "./curriculum.js?v=9d632ed0b9";
 import {
   collect,
   createGame,
@@ -11,18 +11,18 @@ import {
   showLesson,
   start,
   tickFrame as tick,
-} from "./engine.js?v=8e85960e43";
-import { explanationCard } from "./explanation.js?v=8e85960e43";
-import { decisionFact, reasonDuration } from "./feedback.js?v=8e85960e43";
-import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=8e85960e43";
-import { CARD_GAP, fieldCapacity } from "./layout.js?v=8e85960e43";
-import { flowPositions } from "./motion.js?v=8e85960e43";
-import { lessonNotice } from "./notices.js?v=8e85960e43";
-import { clearSlices, pulseCombo, sliceCard } from "./paper-cut.js?v=8e85960e43";
-import { createPaperSound } from "./paper-sound.js?v=8e85960e43";
-import { loadQuestionLocale, questionView } from "./question-locales.js?v=8e85960e43";
-import { buildShare } from "./share.js?v=8e85960e43";
-import { formatSurvival } from "./time.js?v=8e85960e43";
+} from "./engine.js?v=9d632ed0b9";
+import { explanationCard } from "./explanation.js?v=9d632ed0b9";
+import { decisionFact, reasonDuration } from "./feedback.js?v=9d632ed0b9";
+import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=9d632ed0b9";
+import { CARD_GAP, fieldCapacity } from "./layout.js?v=9d632ed0b9";
+import { flowPositions } from "./motion.js?v=9d632ed0b9";
+import { lessonNotice } from "./notices.js?v=9d632ed0b9";
+import { clearSlices, pulseCombo, sliceCard } from "./paper-cut.js?v=9d632ed0b9";
+import { createPaperSound } from "./paper-sound.js?v=9d632ed0b9";
+import { loadQuestionLocale, questionView } from "./question-locales.js?v=9d632ed0b9";
+import { buildShare } from "./share.js?v=9d632ed0b9";
+import { formatSurvival } from "./time.js?v=9d632ed0b9";
 
 const $ = (id) => document.getElementById(id);
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
