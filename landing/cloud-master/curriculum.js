@@ -447,7 +447,7 @@ export const LESSONS = [
   },
 ];
 // Progress depends only on accumulated correct decisions, including normal passes.
-export const CORRECT_PER_LEVEL = 10;
+export const CORRECT_PER_LEVEL = 5;
 export const LESSON_NOTICE_MS = 3000;
 export const LESSON_GRACE_MS = 1000;
 const stages = new Map(

@@ -160,10 +160,10 @@ describe("pinned public AWS API catalog and visible policy keys", () => {
 describe("levels, finite incoming stream and exact scoring", () => {
   test("correct decisions add levels and pressure without a time or forced-ending gate", () => {
     expect(levelFor(0)).toBe(1);
-    expect(levelFor(9)).toBe(1);
-    expect(levelFor(10)).toBe(2);
-    expect(levelFor(170)).toBe(18);
-    expect(levelFor(180)).toBe(19);
+    expect(levelFor(4)).toBe(1);
+    expect(levelFor(5)).toBe(2);
+    expect(levelFor(85)).toBe(18);
+    expect(levelFor(90)).toBe(19);
     let fall = Infinity,
       interval = Infinity,
       limit = 0;

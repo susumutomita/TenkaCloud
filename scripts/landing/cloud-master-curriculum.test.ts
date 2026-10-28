@@ -40,7 +40,7 @@ function game(seed = 12, level = 1) {
   return s;
 }
 function pending(s = game()) {
-  s.correct = 10;
+  s.correct = 5;
   s.level = 2;
   s.lessonNotice = {
     level: 2,
@@ -263,6 +263,17 @@ test("new API observations agree with request members and verified target labels
     expect(waf.parameters.Rules[0]).not.toHaveProperty("OverrideAction");
   }
 });
+function rememberIntroducedLesson(visited, level) {
+  if (level <= LESSONS.length) visited.add(level);
+}
+function continuePastFiveMinutes(s) {
+  while (s.elapsed <= 300000) {
+    if (s.lessonNotice?.shownAt === null) showLesson(s);
+    for (const item of [...s.active]) if (item.question.danger) collect(s, item.uid);
+    tickFrame(s, 50);
+    expect(s.phase).toBe("playing");
+  }
+}
 test("enough correct decisions unlock all cases without skips or a forced ending", () => {
   for (const capacity of [1, 2, 3, 6]) {
     const s = game(capacity),
@@ -273,7 +284,7 @@ test("enough correct decisions unlock all cases without skips or a forced ending
       if (s.lessonNotice && s.lessonNotice.shownAt === null) {
         expect(s.lessonNotice.level).toBe(s.taughtLevel + 1);
         showLesson(s);
-        visited.add(s.lessonNotice.level);
+        rememberIntroducedLesson(visited, s.lessonNotice.level);
       }
       for (const item of [...s.active]) {
         expect(item.question.lessonLevel).toBeLessThanOrEqual(s.taughtLevel);
@@ -284,6 +295,7 @@ test("enough correct decisions unlock all cases without skips or a forced ending
     expect(s.lives).toBe(3);
     expect(s.taughtLevel).toBe(LESSONS.length);
     expect(visited.size).toBe(LESSONS.length);
+    continuePastFiveMinutes(s);
     expect(s.elapsed).toBeGreaterThan(300000);
     expect(s.phase).not.toBe("finished");
     expect(new Set(s.history.map((h) => h.uid)).size).toBe(s.history.length);

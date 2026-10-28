@@ -1,6 +1,6 @@
-import { LESSONS, lessonForLevel } from "./curriculum.js?v=c99bccde86";
-import { tr } from "./i18n.js?v=c99bccde86";
-import { PRESSURE_STAGES } from "./recognition.js?v=c99bccde86";
+import { LESSONS, lessonForLevel } from "./curriculum.js?v=175088a16d";
+import { tr } from "./i18n.js?v=175088a16d";
+import { PRESSURE_STAGES } from "./recognition.js?v=175088a16d";
 
 export function lessonNotice(level, locale = "ja") {
   const lesson = lessonForLevel(level);
