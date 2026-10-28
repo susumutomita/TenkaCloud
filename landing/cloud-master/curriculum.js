@@ -446,15 +446,10 @@ export const LESSONS = [
     ],
   },
 ];
-// Active-play deadlines; answers never gate the next lesson.
-export const LESSON_TIMES = [
-  0, 12000, 28000, 42000, 60000, 76000, 92000, 110000, 126000, 142000, 158000, 174000, 190000,
-  206000, 222000, 238000, 254000, 270000,
-];
+// Progress depends only on accumulated correct decisions, including normal passes.
+export const CORRECT_PER_LEVEL = 10;
 export const LESSON_NOTICE_MS = 3000;
 export const LESSON_GRACE_MS = 1000;
-export const FIRST_LESSON_MS = LESSON_TIMES[1];
-export const ALL_RULES_AT = LESSON_TIMES.at(-1) + LESSON_NOTICE_MS + LESSON_GRACE_MS;
 const stages = new Map(
   LESSONS.flatMap((lesson, index) => lesson.scenarios.map((id) => [id, index + 1])),
 );

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { loadCatalog } from "../../landing/cloud-master/api-catalog.js";
-import { ALL_RULES_AT, LESSONS } from "../../landing/cloud-master/curriculum.js";
+import { LESSONS } from "../../landing/cloud-master/curriculum.js";
 import { collect, createGame, start, tickFrame } from "../../landing/cloud-master/engine.js";
 import { explanationCard } from "../../landing/cloud-master/explanation.js";
 import { chooseLocale, tr } from "../../landing/cloud-master/i18n.js";
@@ -28,7 +28,8 @@ const japanese = /[\u3040-\u30ff\u3400-\u9fff]/u;
 function generated(s, danger, seed = 37) {
   const stream = createQuestionStream(catalog, seed);
   Object.assign(stream, {
-    elapsed: ALL_RULES_AT,
+    elapsed: 300000,
+    taughtLevel: LESSONS.length,
     scenarioTier: LESSONS.length,
     scenarioBag: [s],
     outcomes: [danger],

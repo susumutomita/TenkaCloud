@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { loadCatalog } from "../../landing/cloud-master/api-catalog.js";
-import { ALL_RULES_AT, LESSONS } from "../../landing/cloud-master/curriculum.js";
+import { LESSONS } from "../../landing/cloud-master/curriculum.js";
 import { EVIDENCE_SCENARIOS } from "../../landing/cloud-master/evidence-scenarios.js";
 import { explanationCard } from "../../landing/cloud-master/explanation.js";
 import { API_COPY } from "../../landing/cloud-master/explanation-copy.js";
@@ -17,7 +17,8 @@ const officialDocsUrl = /^https:\/\/docs\.aws\.amazon\.com\//;
 function checkCase(s: ReturnType<typeof availableScenarios>[number], danger: boolean) {
   const stream = createQuestionStream(catalog, 37);
   Object.assign(stream, {
-    elapsed: ALL_RULES_AT,
+    elapsed: 300000,
+    taughtLevel: LESSONS.length,
     scenarioTier: LESSONS.length,
     scenarioBag: [s],
     outcomes: [danger],
@@ -52,7 +53,8 @@ test("titles explain the same operation for both outcomes without changing the c
     const results = [false, true].map((danger) => {
       const stream = createQuestionStream(catalog, 37);
       Object.assign(stream, {
-        elapsed: ALL_RULES_AT,
+        elapsed: 300000,
+        taughtLevel: LESSONS.length,
         scenarioTier: LESSONS.length,
         scenarioBag: [s],
         outcomes: [danger],
@@ -102,7 +104,8 @@ test("practice activity log wording matches both outcomes and published examples
     for (const danger of [false, true]) {
       const stream = createQuestionStream(catalog, 37);
       Object.assign(stream, {
-        elapsed: ALL_RULES_AT,
+        elapsed: 300000,
+        taughtLevel: LESSONS.length,
         scenarioTier: LESSONS.length,
         scenarioBag: [source],
         outcomes: [danger],

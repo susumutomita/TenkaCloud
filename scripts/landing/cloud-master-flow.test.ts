@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test";
 import { loadCatalog } from "../../landing/cloud-master/api-catalog.js";
-import { ALL_RULES_AT, LESSONS } from "../../landing/cloud-master/curriculum.js";
+import { LESSONS } from "../../landing/cloud-master/curriculum.js";
 import {
   arrivalInterval,
   collect,
   createGame,
+  EMPTY_REFILL_MS,
   next,
   pause,
   resume,
@@ -37,6 +38,8 @@ test("bounded geometry fits full-height cards and keeps maximum six keyboard tar
 function flow(at: number, capacity: number) {
   const s = createGame(catalog, 28);
   s.elapsed = at;
+  s.taughtLevel = at ? LESSONS.length : 1;
+  s.pressureIndex = at ? 10 : 0;
   s.maxCards = capacity;
   start(s);
   const births = [s.active[0].born],
@@ -56,13 +59,15 @@ function flow(at: number, capacity: number) {
   return { s, births };
 }
 test("learned pools preserve finite arrivals at real viewport capacities", () => {
-  for (const at of [ALL_RULES_AT + 270000])
+  for (const at of [570000])
     for (const capacity of [2, 3, 4, 5, 6]) {
       const { s, births } = flow(at, capacity),
         gaps = births.slice(1).map((t, i) => t - births[i]);
       expect(births.length).toBeGreaterThan(2);
       expect(Math.max(...gaps)).toBeLessThanOrEqual(arrivalInterval(s) + 16);
-      expect(s.active.every((x) => x.deadline - x.born === difficulty(at).fallMs)).toBe(true);
+      expect(
+        s.active.every((x) => x.deadline - x.born === difficulty(at ? LESSONS.length : 1).fallMs),
+      ).toBe(true);
     }
 });
 test("pause, first mistake and resume cannot dump arrivals or resurrect a resolved identity", () => {
@@ -93,7 +98,8 @@ test("every dangerous fact retains its value; shortened account and AWS-managed 
   for (const scenario of availableScenarios(catalog)) {
     const stream = createQuestionStream(catalog, 37);
     Object.assign(stream, {
-      elapsed: ALL_RULES_AT,
+      elapsed: 300000,
+      taughtLevel: LESSONS.length,
       scenarioTier: LESSONS.length,
       scenarioBag: [scenario],
       outcomes: [true],
@@ -131,15 +137,14 @@ test("clearing the opening field schedules one finite arrival without changing l
     s.outcomes = [true];
     start(s);
     tickFrame(s, 2000);
-    const item = s.active[0],
-      due = s.nextSpawnAt;
+    const item = s.active[0];
     expect(item.question.danger).toBe(true);
     expect(collect(s, item.uid)).toBe(true);
     expect(s.active.length).toBe(0);
     const score = s.score;
     expect(collect(s, item.uid)).toBe(false);
     expect(s.score).toBe(score);
-    expect(s.nextSpawnAt).toBe(at ? due : s.elapsed + 1600);
+    expect(s.nextSpawnAt).toBe(s.elapsed + EMPTY_REFILL_MS);
     if (!at) {
       if (s.hitstop) tickFrame(s, s.hitstop);
       pause(s);
@@ -148,7 +153,7 @@ test("clearing the opening field schedules one finite arrival without changing l
       expect(s.elapsed).toBe(elapsed);
       resume(s);
       if (s.grace) tickFrame(s, s.grace);
-      tickFrame(s, 1599);
+      tickFrame(s, EMPTY_REFILL_MS - 1);
       expect(s.active.length).toBe(0);
       tickFrame(s, 1);
       expect(s.active.length).toBe(1);

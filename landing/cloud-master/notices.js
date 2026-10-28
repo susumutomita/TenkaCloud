@@ -1,12 +1,17 @@
-import { lessonForLevel } from "./curriculum.js?v=9cf3d3f974";
-import { tr } from "./i18n.js?v=9cf3d3f974";
-import { PRESSURE_STAGES } from "./recognition.js?v=9cf3d3f974";
+import { LESSONS, lessonForLevel } from "./curriculum.js?v=c99bccde86";
+import { tr } from "./i18n.js?v=c99bccde86";
+import { PRESSURE_STAGES } from "./recognition.js?v=c99bccde86";
 
 export function lessonNotice(level, locale = "ja") {
   const lesson = lessonForLevel(level);
   return {
-    title: tr("難度{level}↑", { level }, locale),
-    detail: locale === "en" ? lesson.enCue : lesson.cue,
+    title: tr("レベルアップ Lv{level}", { level }, locale),
+    detail:
+      level <= LESSONS.length
+        ? locale === "en"
+          ? lesson.enCue
+          : lesson.cue
+        : tr("次も正しく見分けよう。", {}, locale),
   };
 }
 
@@ -23,5 +28,5 @@ export function pressureNotice(
   if (Math.min(after.limit, capacity) > Math.min(before.limit, capacity))
     changes.push(tr("枚数↑", {}, locale));
   if (numeric && after.tier > before.tier) changes.push(tr("比較が細かく", {}, locale));
-  return { title: tr("難度アップ", {}, locale), detail: changes.join(" · ") };
+  return { title: tr("レベルアップ", {}, locale), detail: changes.join(" · ") };
 }

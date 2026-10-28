@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { loadCatalog } from "../../landing/cloud-master/api-catalog.js";
 import manifest from "../../landing/cloud-master/api-catalog-manifest.json";
-import { ALL_RULES_AT, LESSONS } from "../../landing/cloud-master/curriculum.js";
+import { LESSONS } from "../../landing/cloud-master/curriculum.js";
 import {
   collect,
   createGame,
@@ -23,6 +23,7 @@ import {
   levelFor,
   nextQuestion,
   PRESSURE_STAGES,
+  pressureFor,
   violates,
 } from "../../landing/cloud-master/recognition.js";
 import { buildShare } from "../../landing/cloud-master/share.js";
@@ -30,7 +31,10 @@ import { buildShare } from "../../landing/cloud-master/share.js";
 const catalog = await loadCatalog();
 function playing(seed = 726, advanced = false) {
   const state = createGame(catalog, seed);
-  if (advanced) state.elapsed = ALL_RULES_AT + 30000;
+  if (advanced) {
+    state.taughtLevel = LESSONS.length;
+    state.pressureIndex = 10;
+  }
   start(state);
   return state;
 }
@@ -83,7 +87,10 @@ describe("pinned public AWS API catalog and visible policy keys", () => {
   test("all authored cases have model-backed operations, visible payloads and reproducible balanced variants", () => {
     const a = createQuestionStream(catalog, 123),
       b = createQuestionStream(catalog, 123);
-    a.elapsed = b.elapsed = ALL_RULES_AT;
+    a.elapsed = b.elapsed = 300000;
+    a.taughtLevel = b.taughtLevel = LESSONS.length;
+    b.taughtLevel = LESSONS.length;
+    b.pressureIndex = 10;
     const kinds = new Set(),
       cases = new Set();
     let dangerous = 0;
@@ -122,7 +129,9 @@ describe("pinned public AWS API catalog and visible policy keys", () => {
   });
   test("same API has opposite decisions based on actual security parameters", () => {
     const s = createQuestionStream(catalog, 15);
-    s.elapsed = ALL_RULES_AT;
+    s.elapsed = 300000;
+    s.taughtLevel = LESSONS.length;
+    s.pressureIndex = 10;
     const rds = [];
     for (let i = 0; i < 6000; i++) {
       const q = nextQuestion(s);
@@ -149,16 +158,17 @@ describe("pinned public AWS API catalog and visible policy keys", () => {
 });
 
 describe("levels, finite incoming stream and exact scoring", () => {
-  test("time adds content and pressure within five minutes without ending the round", () => {
+  test("correct decisions add levels and pressure without a time or forced-ending gate", () => {
     expect(levelFor(0)).toBe(1);
-    expect(levelFor(11999)).toBe(1);
-    expect(levelFor(12000)).toBe(2);
-    expect(levelFor(ALL_RULES_AT)).toBe(LESSONS.length);
+    expect(levelFor(9)).toBe(1);
+    expect(levelFor(10)).toBe(2);
+    expect(levelFor(170)).toBe(18);
+    expect(levelFor(180)).toBe(19);
     let fall = Infinity,
       interval = Infinity,
       limit = 0;
     for (const p of PRESSURE_STAGES) {
-      const d = difficulty(p.at);
+      const d = difficulty(p.level);
       expect(d.fallMs).toBeLessThanOrEqual(fall);
       expect(d.intervalMs).toBeLessThanOrEqual(interval);
       expect(d.limit).toBeGreaterThanOrEqual(limit);
@@ -166,12 +176,13 @@ describe("levels, finite incoming stream and exact scoring", () => {
       interval = d.intervalMs;
       limit = d.limit;
     }
-    expect(difficulty(300000)).toMatchObject({ fallMs: 4200, intervalMs: 280, limit: 6, tier: 3 });
+    expect(difficulty(18)).toMatchObject({ fallMs: 4200, intervalMs: 280, limit: 6, tier: 3 });
   });
   test("every semantic tier remains balanced and all deciding evidence stays visible", () => {
-    for (const elapsed of [0, 30000, 90000]) {
+    for (const level of [1, 6, 18]) {
       const stream = createQuestionStream(catalog, 42);
-      stream.elapsed = elapsed;
+      stream.taughtLevel = level;
+      stream.pressureIndex = pressureFor(level);
       let flags = 0;
       for (let i = 0; i < 120; i++) {
         const q = nextQuestion(stream);
@@ -220,25 +231,21 @@ describe("levels, finite incoming stream and exact scoring", () => {
     expect(s.history.filter((entry) => entry.uid === item.uid)).toHaveLength(1);
     expect(s.history.find((entry) => entry.uid === item.uid).points).toBe(0);
   });
-  test("danger score is severity times10, hitstop applies only to the10point hit", () => {
+  test("danger score stays severity times10 and correct hits never stop play", () => {
     const s = findOpening(true, 10),
       item = afterDelay(s);
     expect(item.question.points).toBe(10);
     expect(collect(s, item.uid)).toBe(true);
     expect(s.score).toBe(10);
-    expect(s.phase).toBe("hitstop");
-    const elapsed = s.elapsed;
-    tick(s, HITSTOP_MS - 1);
-    expect(s.elapsed).toBe(elapsed);
-    expect(s.phase).toBe("hitstop");
-    expect(collect(s, item.uid)).toBe(false);
-    tick(s, 1);
+    expect(HITSTOP_MS).toBe(0);
     expect(s.phase).toBe("playing");
-    expect(s.elapsed).toBe(elapsed);
+    const elapsed = s.elapsed;
     tick(s, 20);
     expect(s.elapsed).toBe(elapsed + 20);
+    expect(collect(s, item.uid)).toBe(false);
+    expect(s.score).toBe(10);
   });
-  test("hitstop consumes frame time without moving the game clock, including pause/resume", () => {
+  test("correct-hit effects do not consume play time; explicit pause still stops the clock", () => {
     const s = findOpening(true, 10),
       item = afterDelay(s);
     collect(s, item.uid);
@@ -249,10 +256,10 @@ describe("levels, finite incoming stream and exact scoring", () => {
     resume(s);
     const elapsed = s.elapsed;
     tick(s, 150);
-    expect(s.elapsed).toBe(elapsed + 30);
+    expect(s.elapsed).toBe(elapsed + 150);
     expect(s.score).toBe(10);
   });
-  test("higher severity is worth more and never gets the10-point hitstop", () => {
+  test("higher severity remains worth more while play keeps flowing", () => {
     let state = playing(0);
     for (let seed = 0; seed < 100; seed++) {
       const candidate = createGame(catalog, seed);
@@ -280,7 +287,7 @@ describe("levels, finite incoming stream and exact scoring", () => {
     s.correct = 20;
     tick(s, 10000);
     expect(s.active.length).toBeLessThanOrEqual(2);
-    expect(difficulty(ALL_RULES_AT + 30000).intervalMs).toBeLessThan(difficulty(0).intervalMs);
+    expect(difficulty(18).intervalMs).toBeLessThan(difficulty(0).intervalMs);
   });
 });
 

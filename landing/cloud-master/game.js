@@ -1,5 +1,5 @@
-import { loadCatalog } from "./api-catalog.js?v=9cf3d3f974";
-import { lessonForLevel } from "./curriculum.js?v=9cf3d3f974";
+import { loadCatalog } from "./api-catalog.js?v=c99bccde86";
+import { CORRECT_PER_LEVEL, lessonForLevel } from "./curriculum.js?v=c99bccde86";
 import {
   collect,
   createGame,
@@ -11,17 +11,17 @@ import {
   showLesson,
   start,
   tickFrame as tick,
-} from "./engine.js?v=9cf3d3f974";
-import { explanationCard } from "./explanation.js?v=9cf3d3f974";
-import { decisionFact, reasonDuration } from "./feedback.js?v=9cf3d3f974";
-import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=9cf3d3f974";
-import { CARD_GAP, fieldCapacity } from "./layout.js?v=9cf3d3f974";
-import { flowPositions } from "./motion.js?v=9cf3d3f974";
-import { lessonNotice, pressureNotice } from "./notices.js?v=9cf3d3f974";
-import { loadQuestionLocale, questionView } from "./question-locales.js?v=9cf3d3f974";
-import { availableAtLevel, difficulty } from "./recognition.js?v=9cf3d3f974";
-import { buildShare } from "./share.js?v=9cf3d3f974";
-import { formatSurvival } from "./time.js?v=9cf3d3f974";
+} from "./engine.js?v=c99bccde86";
+import { explanationCard } from "./explanation.js?v=c99bccde86";
+import { decisionFact, reasonDuration } from "./feedback.js?v=c99bccde86";
+import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=c99bccde86";
+import { CARD_GAP, fieldCapacity } from "./layout.js?v=c99bccde86";
+import { flowPositions } from "./motion.js?v=c99bccde86";
+import { lessonNotice } from "./notices.js?v=c99bccde86";
+import { clearSlices, pulseCombo, sliceCard } from "./paper-cut.js?v=c99bccde86";
+import { loadQuestionLocale, questionView } from "./question-locales.js?v=c99bccde86";
+import { buildShare } from "./share.js?v=c99bccde86";
+import { formatSurvival } from "./time.js?v=c99bccde86";
 
 const $ = (id) => document.getElementById(id);
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
@@ -42,9 +42,6 @@ const motion = new Map();
 let reasonUntil = 0,
   lastReason = "",
   shownLevel = 1,
-  shownPressure = 0,
-  pressureNoticeUntil = 0,
-  pressureMessage = null,
   lessonPaintToken = null;
 function text(id, value) {
   const node = $(id);
@@ -98,12 +95,10 @@ function prepare(seed = newSeed(), begin = false) {
   lastReason = "";
   reasonUntil = 0;
   shownLevel = 1;
-  shownPressure = 0;
-  pressureNoticeUntil = 0;
-  pressureMessage = null;
   lessonPaintToken = null;
   $("cards").replaceChildren();
   $("effects").replaceChildren();
+  clearSlices($("slice-effects"));
   $("review").hidden = true;
   $("about").open = false;
   if (begin) beginRound();
@@ -250,33 +245,16 @@ function pick(uid, thisEpoch) {
   const node = nodes.get(String(uid));
   if (!node || node.disabled) return;
   const accepted = collect(state, uid);
-  if (accepted && state.feedback?.kind === "flag" && node && !reduced.matches) {
-    const effect = node.cloneNode(true);
-    effect.classList.add("tap-hit");
-    effect.setAttribute("aria-hidden", "true");
-    effect.tabIndex = -1;
-    effect.disabled = true;
-    effect.dataset.resolvedUid = String(uid);
-    const transform = node.style.transform;
-    $("cards").append(effect);
-    effect
-      .animate(
-        [
-          { transform, opacity: 0.8 },
-          { transform: `${transform} translateX(18px) scale(0.97)`, opacity: 0 },
-        ],
-        { duration: 140, easing: "ease-out" },
-      )
-      .finished.then(
-        () => effect.remove(),
-        () => effect.remove(),
-      );
-  }
+  const success = accepted && state.feedback?.kind === "flag" && state.feedback.correct;
+  if (success)
+    sliceCard(node, $("slice-effects"), { uid, combo: state.combo, reduced: reduced.matches });
+
   render();
+  if (success) pulseCombo($("combo"), state.combo, reduced.matches);
 }
 function feedbackEffect(entry) {
   const n = document.createElement("div");
-  n.className = `impact${entry.correct ? "" : " wrong"}`;
+  n.className = `impact${entry.correct ? "" : " wrong"}${entry.kind === "pass" ? " pass" : ""}`;
   n.dataset.resolvedUid = String(entry.uid);
   n.dataset.operation = entry.question.operation;
 
@@ -307,12 +285,14 @@ function positions(items, previewing) {
     ...item,
     height: geometry.heights.get(String(item.uid)),
   }));
+  // Essential linear fall still communicates the pass line in reduced motion;
+  // decorative hit effects respect the reduced-motion preference separately.
   const located = previewing
     ? entries.map((item) => ({
         ...item,
         y: 14 + [0.18, 0.47][item.slot] * Math.max(0, geometry.height - item.height - 24),
       }))
-    : flowPositions(entries, motion, state.elapsed, geometry.height, columns, reduced.matches);
+    : flowPositions(entries, motion, state.elapsed, geometry.height, columns, false);
   for (const item of located) {
     const node = nodes.get(String(item.uid));
     const x = ((item.slot % columns) * geometry.width) / columns + (narrow ? 0 : 9);
@@ -530,11 +510,11 @@ function result() {
   }
   const actions = modal(
     tr("今回の生存記録"),
-    tr("正しい検知 {correct} ／ 正常通過 {passed} ／ ミス {mistakes} ／ 難度{level}", {
+    tr("正しい検知 {correct} ／ 正常通過 {passed} ／ ミス {mistakes} ／ Lv{level}", {
       correct: formatCount(state.correct),
       passed: formatCount(state.passed),
       mistakes: formatCount(state.mistakes),
-      level: formatCount(difficulty(state.elapsed, state.taughtLevel).level),
+      level: formatCount(state.level),
     }),
   );
   const score = document.createElement("div");
@@ -667,24 +647,20 @@ function lessonText(lesson, key) {
   return getLocale() === "en" ? lesson[key === "title" ? "enTitle" : "enExample"] : lesson[key];
 }
 function renderLevel() {
-  if (state.pressureIndex > shownPressure) {
-    pressureMessage = {
-      previous: shownPressure,
-      current: state.pressureIndex,
-      numeric: availableAtLevel(catalog, state.taughtLevel).some((s) => s.operator === "gt"),
-    };
-    shownPressure = state.pressureIndex;
-    pressureNoticeUntil = state.elapsed + 2000;
-    const message = currentProgressMessage(null, false, true);
-    announce(`${message.title}. ${message.detail}`);
-  }
-  const level = difficulty(state.elapsed, state.taughtLevel).level;
+  const level = state.level;
   if (level > shownLevel) {
     shownLevel = level;
     const message = lessonNotice(level, getLocale());
     announce(`${message.title}. ${message.detail}`);
   }
   text("level", String(level));
+  const progress = (state.correct + state.passed) % CORRECT_PER_LEVEL;
+  text("level-progress", `${progress}/${CORRECT_PER_LEVEL}`);
+  attribute(
+    $("level-progress"),
+    "aria-label",
+    tr("次のレベルへ {count}/10 正解", { count: progress }),
+  );
   const up = Boolean(
     state.lessonNotice?.shownAt !== null &&
       state.lessonNotice?.shownAt !== undefined &&
@@ -714,16 +690,9 @@ function confirmLessonPaint(notice, cue) {
     }),
   );
 }
-function currentProgressMessage(notice, teaching, speedingUp) {
+function currentProgressMessage(notice, teaching) {
   if (teaching) return lessonNotice(notice.level, getLocale());
-  if (speedingUp)
-    return pressureNotice(
-      pressureMessage.previous,
-      pressureMessage.current,
-      { capacity: state.maxCards, numeric: pressureMessage.numeric },
-      getLocale(),
-    );
-  return { title: tr("生存時間で難度アップ"), detail: "" };
+  return { title: tr("10枚正解でレベルアップ"), detail: "" };
 }
 function startReasonTimer() {
   if (!$("hit-reason").hidden && !reasonUntil)
@@ -734,10 +703,9 @@ function positionLevelCue() {
   const cue = $("level-transition"),
     notice = state.lessonNotice;
   const teaching = Boolean(notice && notice.readRemaining > 0);
-  const speedingUp = !notice && state.elapsed < pressureNoticeUntil;
   const active = ["playing", "hitstop"].includes(state.phase);
   const intro = state.elapsed < 3000 && $("hit-reason").hidden;
-  const visible = (teaching || speedingUp || intro) && active;
+  const visible = (teaching || intro) && active;
   cue.hidden = !visible;
   if (!visible) {
     if (notice) notice.visible = false;
@@ -745,7 +713,7 @@ function positionLevelCue() {
     return;
   }
   $("hit-reason").hidden = true;
-  const message = currentProgressMessage(notice, teaching, speedingUp);
+  const message = currentProgressMessage(notice, teaching);
   text("level-transition-title", message.title);
   text("level-transition-detail", message.detail);
   if (teaching) {
@@ -760,12 +728,7 @@ function positionLevelCue() {
 
 function cancelInactiveInput() {
   if (state.phase !== "playing") activeGestureCancel?.();
-  if (!["playing", "hitstop"].includes(state.phase))
-    $("cards")
-      .querySelectorAll(".tap-hit")
-      .forEach((n) => {
-        n.remove();
-      });
+  if (!["playing", "hitstop"].includes(state.phase)) clearSlices($("slice-effects"));
 }
 function render() {
   attribute(document.body, "data-phase", state.phase);
@@ -910,6 +873,7 @@ window.addEventListener("resize", () => {
   render();
 });
 reduced.addEventListener("change", () => {
+  if (reduced.matches) clearSlices($("slice-effects"));
   geometry = null;
   motion.clear();
   if (state) render();

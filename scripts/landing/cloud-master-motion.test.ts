@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { loadCatalog } from "../../landing/cloud-master/api-catalog.js";
-import { ALL_RULES_AT } from "../../landing/cloud-master/curriculum.js";
+import { LESSONS } from "../../landing/cloud-master/curriculum.js";
 import {
   createGame,
   next,
@@ -46,7 +46,9 @@ describe("independent falling trajectories", () => {
   });
   test("short-screen high-pressure normal cards reach the bottom and expire once with no stall", () => {
     const s = createGame(catalog, 12);
-    s.elapsed = ALL_RULES_AT + 300000;
+    s.elapsed = 600000;
+    s.taughtLevel = LESSONS.length;
+    s.pressureIndex = 10;
     s.maxCards = 3;
     s.outcomes = Array(10000).fill(false);
     start(s);
@@ -79,7 +81,7 @@ describe("independent falling trajectories", () => {
     expect(s.score).toBe(passes * 10);
     expect(new Set(s.history.map((x) => x.uid)).size).toBe(passes);
   });
-  test("teaching protection keeps the card above the boundary until its scoring deadline", () => {
+  test("normal cards retain their physical deadline through pause and never cross the boundary", () => {
     const s = createGame(catalog, 0);
     s.maxCards = 1;
     start(s);
@@ -105,7 +107,7 @@ describe("independent falling trajectories", () => {
         expect(first.decisionDeadline).toBe(before.deadline);
       }
     }
-    expect(first.decisionDeadline).toBeCloseTo(first.deadline + 4000, 5);
+    expect(first.decisionDeadline).toBeUndefined();
     expect(s.history.filter((h) => h.uid === first.uid)).toHaveLength(1);
     expect(s.score).toBe(10);
     tickFrame(s, 100);
@@ -138,7 +140,7 @@ describe("independent falling trajectories", () => {
     const taller = flowPositions([{ ...a, height: 170 }], cache, 10032, 476, 1)[0];
     expect(taller.y + 170).toBeLessThan(476);
   });
-  test("reduced motion lays out unequal heights without overlap", () => {
+  test("optional stationary layout lays out unequal heights without overlap", () => {
     const rows = flowPositions(
       [card(0, 0, 130), card(1, 1, 76), card(2, 2, 114)],
       new Map(),
