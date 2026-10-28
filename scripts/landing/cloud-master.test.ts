@@ -90,7 +90,7 @@ describe("pinned public AWS API catalog and visible policy keys", () => {
     a.elapsed = b.elapsed = 300000;
     a.taughtLevel = b.taughtLevel = LESSONS.length;
     b.taughtLevel = LESSONS.length;
-    b.pressureIndex = 10;
+    a.pressureIndex = b.pressureIndex = 10;
     const kinds = new Set(),
       cases = new Set();
     let dangerous = 0;
