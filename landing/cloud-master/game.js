@@ -1,5 +1,5 @@
-import { loadCatalog } from "./api-catalog.js?v=c99bccde86";
-import { CORRECT_PER_LEVEL, lessonForLevel } from "./curriculum.js?v=c99bccde86";
+import { loadCatalog } from "./api-catalog.js?v=175088a16d";
+import { CORRECT_PER_LEVEL, lessonForLevel } from "./curriculum.js?v=175088a16d";
 import {
   collect,
   createGame,
@@ -11,17 +11,18 @@ import {
   showLesson,
   start,
   tickFrame as tick,
-} from "./engine.js?v=c99bccde86";
-import { explanationCard } from "./explanation.js?v=c99bccde86";
-import { decisionFact, reasonDuration } from "./feedback.js?v=c99bccde86";
-import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=c99bccde86";
-import { CARD_GAP, fieldCapacity } from "./layout.js?v=c99bccde86";
-import { flowPositions } from "./motion.js?v=c99bccde86";
-import { lessonNotice } from "./notices.js?v=c99bccde86";
-import { clearSlices, pulseCombo, sliceCard } from "./paper-cut.js?v=c99bccde86";
-import { loadQuestionLocale, questionView } from "./question-locales.js?v=c99bccde86";
-import { buildShare } from "./share.js?v=c99bccde86";
-import { formatSurvival } from "./time.js?v=c99bccde86";
+} from "./engine.js?v=175088a16d";
+import { explanationCard } from "./explanation.js?v=175088a16d";
+import { decisionFact, reasonDuration } from "./feedback.js?v=175088a16d";
+import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=175088a16d";
+import { CARD_GAP, fieldCapacity } from "./layout.js?v=175088a16d";
+import { flowPositions } from "./motion.js?v=175088a16d";
+import { lessonNotice } from "./notices.js?v=175088a16d";
+import { clearSlices, pulseCombo, sliceCard } from "./paper-cut.js?v=175088a16d";
+import { createPaperSound } from "./paper-sound.js?v=175088a16d";
+import { loadQuestionLocale, questionView } from "./question-locales.js?v=175088a16d";
+import { buildShare } from "./share.js?v=175088a16d";
+import { formatSurvival } from "./time.js?v=175088a16d";
 
 const $ = (id) => document.getElementById(id);
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
@@ -36,6 +37,24 @@ try {
 } catch {}
 const duration = (milliseconds) => formatSurvival(milliseconds, getLocale());
 const languageButton = $("language-switch");
+const soundButton = $("sound-toggle");
+const paperSound = createPaperSound();
+function renderSound() {
+  soundButton.textContent = paperSound.enabled ? tr("効果音 オン") : tr("効果音 オフ");
+  soundButton.setAttribute("aria-pressed", String(paperSound.enabled));
+}
+soundButton.addEventListener("click", () => {
+  paperSound.setEnabled(!paperSound.enabled);
+  renderSound();
+});
+for (const name of ["pointerdown", "keydown"])
+  document.addEventListener(
+    name,
+    (event) => {
+      if (event.isTrusted) paperSound.unlock();
+    },
+    { capture: true },
+  );
 let cardLanguage = getLocale();
 let geometry = null;
 const motion = new Map();
@@ -79,6 +98,7 @@ function currentLayout() {
   return `${innerWidth <= 740 ? 1 : 2}:${layoutCapacity()}`;
 }
 function prepare(seed = newSeed(), begin = false) {
+  paperSound.stop();
   layoutBlocked = false;
   document.body.removeAttribute("data-layout-blocked");
   layoutKey = currentLayout();
@@ -246,8 +266,10 @@ function pick(uid, thisEpoch) {
   if (!node || node.disabled) return;
   const accepted = collect(state, uid);
   const success = accepted && state.feedback?.kind === "flag" && state.feedback.correct;
-  if (success)
+  if (success) {
+    paperSound.play(uid);
     sliceCard(node, $("slice-effects"), { uid, combo: state.combo, reduced: reduced.matches });
+  }
 
   render();
   if (success) pulseCombo($("combo"), state.combo, reduced.matches);
@@ -546,7 +568,7 @@ function result() {
   );
 }
 function phaseContent() {
-  $("language-home").append(languageButton);
+  $("language-home").append(languageButton, soundButton);
   $("overlay").hidden = true;
   $("overlay").classList.remove("miss-card");
   $("overlay").replaceChildren();
@@ -604,7 +626,7 @@ function phaseContent() {
   if (state.phase === "feedback") explanation();
   if (state.phase === "finished") result();
   if (["paused", "finished"].includes(state.phase))
-    $("overlay").querySelector(".actions").append(languageButton);
+    $("overlay").querySelector(".actions").append(languageButton, soundButton);
   if (["feedback", "paused", "finished"].includes(state.phase))
     $("overlay").querySelector("button")?.focus({ preventScroll: true });
 }
@@ -659,7 +681,7 @@ function renderLevel() {
   attribute(
     $("level-progress"),
     "aria-label",
-    tr("次のレベルへ {count}/10 正解", { count: progress }),
+    tr("次のレベルへ {count}/5 正解", { count: progress }),
   );
   const up = Boolean(
     state.lessonNotice?.shownAt !== null &&
@@ -692,7 +714,7 @@ function confirmLessonPaint(notice, cue) {
 }
 function currentProgressMessage(notice, teaching) {
   if (teaching) return lessonNotice(notice.level, getLocale());
-  return { title: tr("10枚正解でレベルアップ"), detail: "" };
+  return { title: tr("5枚正解でレベルアップ"), detail: "" };
 }
 function startReasonTimer() {
   if (!$("hit-reason").hidden && !reasonUntil)
@@ -727,7 +749,10 @@ function positionLevelCue() {
 }
 
 function cancelInactiveInput() {
-  if (state.phase !== "playing") activeGestureCancel?.();
+  if (state.phase !== "playing") {
+    activeGestureCancel?.();
+    paperSound.stop();
+  }
   if (!["playing", "hitstop"].includes(state.phase)) clearSlices($("slice-effects"));
 }
 function render() {
@@ -910,6 +935,7 @@ function applyStaticLocale() {
   document.querySelector(".game").setAttribute("aria-label", tr("AWSリクエスト検知ゲーム"));
   $("pause").setAttribute("aria-label", tr("一時停止"));
   $("lives").setAttribute("aria-label", tr("残りライフ{count}", { count: state?.lives ?? 3 }));
+  renderSound();
   languageButton.textContent = locale === "ja" ? "English" : "日本語";
   languageButton.setAttribute(
     "aria-label",
