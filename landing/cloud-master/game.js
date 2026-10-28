@@ -1,5 +1,5 @@
-import { loadCatalog } from "./api-catalog.js?v=c6615bff99";
-import { CORRECT_PER_LEVEL, lessonForLevel } from "./curriculum.js?v=c6615bff99";
+import { loadCatalog } from "./api-catalog.js?v=c99bccde86";
+import { CORRECT_PER_LEVEL, lessonForLevel } from "./curriculum.js?v=c99bccde86";
 import {
   collect,
   createGame,
@@ -11,17 +11,17 @@ import {
   showLesson,
   start,
   tickFrame as tick,
-} from "./engine.js?v=c6615bff99";
-import { explanationCard } from "./explanation.js?v=c6615bff99";
-import { decisionFact, reasonDuration } from "./feedback.js?v=c6615bff99";
-import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=c6615bff99";
-import { CARD_GAP, fieldCapacity } from "./layout.js?v=c6615bff99";
-import { flowPositions } from "./motion.js?v=c6615bff99";
-import { lessonNotice } from "./notices.js?v=c6615bff99";
-import { clearSlices, pulseCombo, sliceCard } from "./paper-cut.js?v=c6615bff99";
-import { loadQuestionLocale, questionView } from "./question-locales.js?v=c6615bff99";
-import { buildShare } from "./share.js?v=c6615bff99";
-import { formatSurvival } from "./time.js?v=c6615bff99";
+} from "./engine.js?v=c99bccde86";
+import { explanationCard } from "./explanation.js?v=c99bccde86";
+import { decisionFact, reasonDuration } from "./feedback.js?v=c99bccde86";
+import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=c99bccde86";
+import { CARD_GAP, fieldCapacity } from "./layout.js?v=c99bccde86";
+import { flowPositions } from "./motion.js?v=c99bccde86";
+import { lessonNotice } from "./notices.js?v=c99bccde86";
+import { clearSlices, pulseCombo, sliceCard } from "./paper-cut.js?v=c99bccde86";
+import { loadQuestionLocale, questionView } from "./question-locales.js?v=c99bccde86";
+import { buildShare } from "./share.js?v=c99bccde86";
+import { formatSurvival } from "./time.js?v=c99bccde86";
 
 const $ = (id) => document.getElementById(id);
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");

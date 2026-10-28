@@ -1,11 +1,11 @@
-import { LESSON_GRACE_MS, LESSON_NOTICE_MS } from "./curriculum.js?v=c6615bff99";
+import { LESSON_GRACE_MS, LESSON_NOTICE_MS } from "./curriculum.js?v=c99bccde86";
 import {
   createQuestionStream,
   difficulty,
   levelFor,
   nextQuestion,
   pressureFor,
-} from "./recognition.js?v=c6615bff99";
+} from "./recognition.js?v=c99bccde86";
 export const INPUT_GUARD_MS = 100;
 export const HITSTOP_MS = 0;
 export const REVIEW_DECISION_MS = 1500;
@@ -108,9 +108,12 @@ function spendReading(state, milliseconds) {
   const notice = state.lessonNotice;
   if (!notice || notice.shownAt === null) return;
   const reading = notice.visible ? Math.min(milliseconds, notice.readRemaining) : 0;
-  notice.readRemaining -= reading;
+  notice.readRemaining = Math.max(0, notice.readRemaining - reading);
+  // A sub-nanosecond remainder cannot advance a millisecond clock at this magnitude.
+  if (notice.readRemaining < 1e-7) notice.readRemaining = 0;
   if (notice.readRemaining === 0)
     notice.graceRemaining -= Math.min(milliseconds - reading, notice.graceRemaining);
+  if (notice.graceRemaining < 1e-7) notice.graceRemaining = 0;
 }
 function readingBoundary(state) {
   const notice = state.lessonNotice;

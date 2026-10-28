@@ -183,3 +183,42 @@ test("the hidden post-notice grace finishes without needing the cue to remain vi
   expect(s.taughtLevel).toBe(2);
   expect(s.lessonNotice).toBe(null);
 });
+
+test("fractional RAF notice boundaries cannot retain an unrepresentable clock remainder", () => {
+  const s = ready();
+  s.elapsed = 12345.678901;
+  s.active = [];
+  s.nextSpawnAt = Infinity;
+  s.level = 2;
+  s.lessonNotice = {
+    level: 2,
+    shownAt: s.elapsed,
+    visible: true,
+    readRemaining: 1e-13,
+    graceRemaining: 0,
+  };
+  expect(s.elapsed + s.lessonNotice.readRemaining).toBe(s.elapsed);
+  tickFrame(s, 16.6666667);
+  expect(s.taughtLevel).toBe(2);
+  expect(s.lessonNotice).toBe(null);
+  expect(s.elapsed).toBeGreaterThan(12345.678901);
+});
+
+test("a hidden notice also completes a sub-ULP grace remainder", () => {
+  const s = ready();
+  s.elapsed = 12345.678901;
+  s.active = [];
+  s.nextSpawnAt = Infinity;
+  s.level = 2;
+  s.lessonNotice = {
+    level: 2,
+    shownAt: s.elapsed,
+    visible: false,
+    readRemaining: 0,
+    graceRemaining: 1e-13,
+  };
+  expect(s.elapsed + s.lessonNotice.graceRemaining).toBe(s.elapsed);
+  tickFrame(s, 16.6666667);
+  expect(s.taughtLevel).toBe(2);
+  expect(s.lessonNotice).toBe(null);
+});
