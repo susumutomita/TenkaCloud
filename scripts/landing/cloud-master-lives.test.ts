@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { loadCatalog } from "../../landing/cloud-master/api-catalog.js";
-import { ALL_RULES_AT } from "../../landing/cloud-master/curriculum.js";
+import { LESSONS } from "../../landing/cloud-master/curriculum.js";
 import {
   collect,
   createGame,
@@ -14,7 +14,9 @@ import {
 const catalog = await loadCatalog();
 function batch(danger: boolean) {
   const s = createGame(catalog, 3);
-  s.elapsed = ALL_RULES_AT;
+  s.elapsed = 300000;
+  s.taughtLevel = LESSONS.length;
+  s.pressureIndex = 10;
   s.outcomes = Array(20).fill(danger);
   start(s);
   tick(s, 3800);

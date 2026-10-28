@@ -3,12 +3,12 @@ import { LESSONS } from "../../landing/cloud-master/curriculum.js";
 import { lessonNotice, pressureNotice } from "../../landing/cloud-master/notices.js";
 import { PRESSURE_STAGES } from "../../landing/cloud-master/recognition.js";
 
-test("every taught group has a concise bilingual difficulty notice with its actual rule", () => {
+test("every taught group has a concise bilingual level-up notice with its actual rule", () => {
   for (const [index, lesson] of LESSONS.entries()) {
     for (const locale of ["ja", "en"]) {
       const cue = lessonNotice(index + 1, locale);
       expect(cue.title).toContain(String(index + 1));
-      expect(cue.title).not.toMatch(/Lv\.|LEVEL|レベル/);
+      expect(cue.title).toContain(locale === "ja" ? "レベルアップ" : "Level up");
       expect(cue.detail).toBe(locale === "ja" ? lesson.cue : lesson.enCue);
       expect(cue.detail.length).toBeGreaterThan(10);
       expect(cue.detail.length).toBeLessThanOrEqual(locale === "ja" ? 40 : 60);

@@ -1,6 +1,6 @@
 export const EN_UI = {
   難度: "Difficulty ",
-  "難度{level}↑": "Difficulty {level}↑",
+  "難度{level}↑": "Lv{level}↑",
   難度アップ: "Difficulty up",
   "速度↑": "Faster",
   "枚数↑": "More cards",
@@ -11,7 +11,13 @@ export const EN_UI = {
   "落下が速く、危険の見分け方も少しずつ巧妙に。":
     "Faster falls; threats become subtler as you survive.",
   "参考となるAWS公式資料 ↗": "AWS reference for this exercise ↗",
-  レベルアップ: "LEVEL UP",
+  レベルアップ: "Level up",
+  "レベルアップ Lv{level}": "Level up · Lv{level}",
+  "10枚正解でレベルアップ": "10 correct decisions to level up",
+  "次のレベルへ {count}/10 正解": "Next level: {count}/10 correct",
+  "10枚正解でレベルアップ。正常通過も正解。":
+    "Level up every 10 correct decisions. Normal passes count too.",
+  "次も正しく見分けよう。": "Keep making the right call.",
   "スピードアップ · 新しい問題": "Faster · New patterns",
   スピードアップ: "Faster cards",
   最高スピードで継続: "Maximum pace continues",
@@ -86,13 +92,13 @@ export const EN_UI = {
     "Judge the displayed exercise policy. Passing is not proof of safety; this game does not determine whether GuardDuty creates a finding or block traffic.",
   "検知 ＋{points}": "Flagged +{points}",
   正しい検知: "Correct flags",
-  "正しい検知 {correct} ／ 正常通過 {passed} ／ ミス {mistakes} ／ 難度{level}":
-    "Correct flags {correct} / Normal passes {passed} / Mistakes {mistakes} / Difficulty {level}",
+  "正しい検知 {correct} ／ 正常通過 {passed} ／ ミス {mistakes} ／ Lv{level}":
+    "Correct flags {correct} / Normal passes {passed} / Mistakes {mistakes} / Lv{level}",
   正常の例: "Normal example",
   "正常は、そのまま流す。": "Let normal ones pass.",
   正常通過: "Normal passes",
-  "正常通過10点。検知はゲーム内危険度×10点。AWSのseverity値そのものではありません。3ライフ・見逃しは停止して解説。短い導入の後、脅威・速度・密度が生存時間で段階的に増加します。5分を超えても続行できます。1〜6キー・Tab・Pにも対応。背景移動中も停止します。":
-    "Normal cards passed: 10 points each. Correct flags: game danger level × 10 points. Game danger levels are not AWS severity values. You have 3 lives; a missed threat pauses play for an explanation. After a short introduction, threats, speed and density increase with active survival time. Play continues beyond 5 minutes. Keys 1–6, Tab, and P are supported. Play also pauses when the game is in the background.",
+  "正常通過10点。検知はゲーム内危険度×10点。AWSのseverity値そのものではありません。3ライフ・見逃しは停止して解説。危険な操作の検知と正常通過を合わせて、10枚正解するごとにレベルアップ。5分を超えても続行できます。1〜6キー・Tab・Pにも対応。背景移動中も停止します。":
+    "Normal cards passed: 10 points each. Correct flags: game danger level × 10 points. Game danger levels are not AWS severity values. You have 3 lives; a missed threat pauses play for an explanation. Level up every 10 correct decisions, counting both flagged threats and normal passes. Play continues beyond 5 minutes. Keys 1–6, Tab, and P are supported. Play also pauses when the game is in the background.",
   残りライフ3: "3 lives left",
   "残りライフ{count}": "{count} lives left",
   生存時間: "Survival",

@@ -1,11 +1,8 @@
 import { expect, test } from "bun:test";
 import { loadCatalog } from "../../landing/cloud-master/api-catalog.js";
 import {
-  ALL_RULES_AT,
-  FIRST_LESSON_MS,
   LESSON_GRACE_MS,
   LESSON_NOTICE_MS,
-  LESSON_TIMES,
   LESSONS,
   scenarioLevel,
 } from "../../landing/cloud-master/curriculum.js";
@@ -43,17 +40,22 @@ function game(seed = 12, level = 1) {
   return s;
 }
 function pending(s = game()) {
-  s.active = [];
-  s.lessonStats = { normal: 2, danger: 2 };
-  s.nextLessonAt = s.elapsed + 1;
-  tick(s, 1);
-  expect(s.lessonNotice.level).toBe(s.taughtLevel + 1);
+  s.correct = 10;
+  s.level = 2;
+  s.lessonNotice = {
+    level: 2,
+    shownAt: null,
+    visible: false,
+    readRemaining: LESSON_NOTICE_MS,
+    graceRemaining: LESSON_GRACE_MS,
+  };
   return s;
 }
 function generate(id: string, danger: boolean) {
   const stream = createQuestionStream(catalog, 38);
   Object.assign(stream, {
-    elapsed: ALL_RULES_AT,
+    elapsed: 300000,
+    taughtLevel: LESSONS.length,
     scenarioTier: LESSONS.length,
     scenarioBag: [availableScenarios(catalog).find((s) => s.id === id)],
     outcomes: [danger],
@@ -165,52 +167,45 @@ test("the introductory pool blocks active duplicates and waits without consuming
   s.history = s.active.map((x) => ({ question: x.question, at: 0 }));
   s.active = [];
   s.elapsed = 7999;
-  expect(nextQuestion(s)).toBe(null);
+  expect(nextQuestion(s)).not.toBe(null);
   s.elapsed = 8000;
   expect(nextQuestion(s)).not.toBe(null);
 });
-test("time introduces each rule without a correct-answer gate and never skips unseen lessons", () => {
+test("clock alone does not introduce a rule and earned notices cannot skip unseen lessons", () => {
   const s = game();
   s.active = [];
   s.nextSpawnAt = Infinity;
-  tick(s, FIRST_LESSON_MS);
-  expect(s.lessonStats).toEqual({ normal: 0, danger: 0 });
-  expect(s.lessonNotice.level).toBe(2);
+  tick(s, 300000);
+  expect(s.level).toBe(1);
+  expect(s.lessonNotice).toBe(null);
   expect(s.taughtLevel).toBe(1);
+  pending(s);
   tickFrame(s, 20000);
   expect(s.lessonNotice.shownAt).toBe(null);
   expect(s.taughtLevel).toBe(1);
   showLesson(s);
   tick(s, LESSON_NOTICE_MS + LESSON_GRACE_MS);
-  expect(s.nextLessonAt).toBe(LESSON_TIMES[2]);
-  tick(s, 1);
-  expect(s.lessonNotice.level).toBe(3);
   expect(s.taughtLevel).toBe(2);
+  expect(s.lessonNotice).toBe(null);
 });
-test("paint acknowledgment plus finite reading and grace precede every new-rule card", () => {
+test("paint acknowledgment and finite reading precede new-rule admission without blocking old cards", () => {
   const s = pending();
+  const old = s.active[0];
   expect(showLesson(s)).toBe(true);
-  expect(s.taughtLevel).toBe(2);
-  expect(s.lessonStats).toEqual({ normal: 0, danger: 0 });
+  expect(s.taughtLevel).toBe(1);
   const at = s.elapsed;
   tickFrame(s, 100000);
   expect(s.elapsed - at).toBe(100);
-  expect(s.active).toHaveLength(0);
-  expect(s.lessonNotice.readRemaining).toBe(LESSON_NOTICE_MS - 100);
+  expect(old.deadline).toBe(14000);
   tick(s, LESSON_NOTICE_MS + LESSON_GRACE_MS - 101);
-  expect(s.active).toHaveLength(0);
+  expect(s.taughtLevel).toBe(1);
   tick(s, 1);
   expect(s.lessonNotice).toBe(null);
-  expect(s.active).toHaveLength(1);
-  expect(s.active[0].question.lessonLevel).toBe(2);
-  expect(s.active[0].deadline - s.active[0].born).toBe(14000);
+  expect(s.taughtLevel).toBe(2);
+  expect(s.active.every((x) => x.question.lessonLevel <= 2)).toBe(true);
 });
-test("read budget and card identity survive pause, repeated acknowledgment and stale input", () => {
-  const s = game();
-  s.active[0].deadline = 10000;
-  s.lessonStats = { normal: 2, danger: 2 };
-  s.nextLessonAt = 1;
-  tick(s, 1);
+test("reading survives pause and acknowledgment never extends existing card deadlines", () => {
+  const s = pending();
   const old = s.active[0],
     identity = { uid: old.uid, born: old.born, deadline: old.deadline };
   showLesson(s);
@@ -226,7 +221,7 @@ test("read budget and card identity survive pause, repeated acknowledgment and s
   expect(s.lessonNotice.readRemaining).toBe(budget);
   expect({ uid: old.uid, born: old.born, deadline: old.deadline }).toEqual(identity);
   tick(s, LESSON_NOTICE_MS + LESSON_GRACE_MS - 500);
-  expect(old.decisionDeadline).toBe(old.deadline + LESSON_NOTICE_MS + LESSON_GRACE_MS);
+  expect(old.decisionDeadline).toBeUndefined();
   expect(s.lessonNotice).toBe(null);
   expect(collect(s, 999999)).toBe(false);
   expect(s.history).toHaveLength(0);
@@ -268,17 +263,17 @@ test("new API observations agree with request members and verified target labels
     expect(waf.parameters.Rules[0]).not.toHaveProperty("OverrideAction");
   }
 });
-test("perfect play unlocks all cases by five active minutes without skips or forced ending", () => {
+test("enough correct decisions unlock all cases without skips or a forced ending", () => {
   for (const capacity of [1, 2, 3, 6]) {
     const s = game(capacity),
       visited = new Set([1]);
     s.maxCards = capacity;
-    for (let step = 0; step < 6500; step++) {
+    for (let step = 0; step < 60000 && s.taughtLevel < LESSONS.length; step++) {
       tickFrame(s, 50);
       if (s.lessonNotice && s.lessonNotice.shownAt === null) {
         expect(s.lessonNotice.level).toBe(s.taughtLevel + 1);
         showLesson(s);
-        visited.add(s.taughtLevel);
+        visited.add(s.lessonNotice.level);
       }
       for (const item of [...s.active]) {
         expect(item.question.lessonLevel).toBeLessThanOrEqual(s.taughtLevel);

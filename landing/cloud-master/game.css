@@ -1436,7 +1436,7 @@ html[lang="en"] .start-action {font-size:clamp(19px,4.6vw,24px);}
 :root {--message-height:48px;}
 .message-bar {display:none;}
 body.active-game .field {height:calc(100svh - 56px - env(safe-area-inset-top) - var(--message-height) - env(safe-area-inset-bottom));}
-body.active-game .cards {bottom:8px;}
+body.active-game .cards {bottom:0;}
 body.active-game .message-bar {display:flex;align-items:center;justify-content:center;height:calc(var(--message-height) + env(safe-area-inset-bottom));box-sizing:border-box;padding:5px max(12px,env(safe-area-inset-right)) calc(5px + env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));background:#f2f7ff;color:#123b58;pointer-events:none;overflow:hidden;}
 .message-bar .level-transition {position:static;width:100%;max-width:1000px;box-sizing:border-box;text-align:left;font:600 14px/1.2 system-ui,sans-serif;overflow-wrap:anywhere;}
 .level-transition strong {font:750 14px/1.2 system-ui,sans-serif;}
@@ -1448,3 +1448,7 @@ body.active-game .message-bar #hit-reason:not([hidden]) {position:static;display
 .message-bar #hit-fact {gap:6px;}
 .message-bar #hit-label {font:400 12px/1.2 system-ui,sans-serif;white-space:nowrap;}
 .message-bar #hit-value {font:600 13px/1.2 ui-monospace,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+/* The card travel endpoint and the permanent message separator share one edge. */
+body.active-game .message-bar {border-top:2px solid #49647f;}
+body.active-game #level-progress {margin-left:4px;white-space:nowrap;font-weight:500;}

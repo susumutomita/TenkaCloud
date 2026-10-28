@@ -1,6 +1,6 @@
-import { LESSON_TIMES, LESSONS, scenarioLevel } from "./curriculum.js?v=9cf3d3f974";
-import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js?v=9cf3d3f974";
-import { SECURITY_SCENARIOS } from "./security-scenarios.js?v=9cf3d3f974";
+import { CORRECT_PER_LEVEL, LESSONS, scenarioLevel } from "./curriculum.js?v=021d9ea7a9";
+import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js?v=021d9ea7a9";
+import { SECURITY_SCENARIOS } from "./security-scenarios.js?v=021d9ea7a9";
 export const PATTERNS = [...SECURITY_SCENARIOS, ...EVIDENCE_SCENARIOS].map((s) => s.id);
 export function random(state) {
   state.rng = (Math.imul(state.rng, 1664525) + 1013904223) >>> 0;
@@ -14,38 +14,37 @@ export function shuffled(values, state) {
   }
   return list;
 }
-export const LEVEL_STAGES = LESSON_TIMES.map((at) => ({ at }));
+export const LEVEL_STAGES = LESSONS.map((_, index) => ({
+  level: index + 1,
+  correct: index * CORRECT_PER_LEVEL,
+}));
 export const PRESSURE_STAGES = [
-  { at: 0, fallMs: 14000, intervalMs: 1600, limit: 3, tier: 1 },
-  { at: 35000, fallMs: 12500, intervalMs: 1400, limit: 3, tier: 1 },
-  { at: 55000, fallMs: 11000, intervalMs: 1200, limit: 4, tier: 1 },
-  { at: 75000, fallMs: 10000, intervalMs: 1000, limit: 4, tier: 1 },
-  { at: 95000, fallMs: 9000, intervalMs: 900, limit: 4, tier: 1 },
-  { at: 115000, fallMs: 8000, intervalMs: 800, limit: 5, tier: 2 },
-  { at: 145000, fallMs: 7000, intervalMs: 700, limit: 5, tier: 2 },
-  { at: 175000, fallMs: 6200, intervalMs: 600, limit: 6, tier: 2 },
-  { at: 210000, fallMs: 5400, intervalMs: 500, limit: 6, tier: 3 },
-  { at: 250000, fallMs: 4600, intervalMs: 400, limit: 6, tier: 3 },
-  { at: 280000, fallMs: 4200, intervalMs: 280, limit: 6, tier: 3 },
+  { level: 1, fallMs: 14000, intervalMs: 1600, limit: 3, tier: 1 },
+  { level: 2, fallMs: 12500, intervalMs: 1400, limit: 3, tier: 1 },
+  { level: 3, fallMs: 11000, intervalMs: 1200, limit: 4, tier: 1 },
+  { level: 4, fallMs: 10000, intervalMs: 1000, limit: 4, tier: 1 },
+  { level: 5, fallMs: 9000, intervalMs: 900, limit: 4, tier: 1 },
+  { level: 6, fallMs: 8000, intervalMs: 800, limit: 5, tier: 2 },
+  { level: 8, fallMs: 7000, intervalMs: 700, limit: 5, tier: 2 },
+  { level: 10, fallMs: 6200, intervalMs: 600, limit: 6, tier: 2 },
+  { level: 12, fallMs: 5400, intervalMs: 500, limit: 6, tier: 3 },
+  { level: 15, fallMs: 4600, intervalMs: 400, limit: 6, tier: 3 },
+  { level: 18, fallMs: 4200, intervalMs: 280, limit: 6, tier: 3 },
 ];
-export function levelFor(elapsed) {
-  const time = Math.max(0, Number.isFinite(elapsed) ? elapsed : 0);
-  return LESSON_TIMES.findLastIndex((at) => time >= at) + 1;
+export function levelFor(correctDecisions) {
+  const count = Math.max(0, Number.isFinite(correctDecisions) ? correctDecisions : 0);
+  return 1 + Math.floor(count / CORRECT_PER_LEVEL);
 }
-export function pressureFor(elapsed) {
+export function pressureFor(level) {
   return Math.max(
     0,
-    PRESSURE_STAGES.findLastIndex((p) => elapsed >= p.at),
+    PRESSURE_STAGES.findLastIndex((p) => level >= p.level),
   );
 }
-export function difficulty(
-  elapsed = 0,
-  taughtLevel = levelFor(elapsed),
-  pressureIndex = pressureFor(elapsed),
-) {
+export function difficulty(level = 1, pressureIndex = pressureFor(level)) {
   return {
     ...PRESSURE_STAGES[Math.max(0, Math.min(PRESSURE_STAGES.length - 1, pressureIndex))],
-    level: Math.max(1, taughtLevel),
+    level: Math.max(1, level),
   };
 }
 export const QUESTION_COOLDOWN_MS = 8000;
@@ -100,7 +99,7 @@ export function availableAtLevel(catalog, level) {
   return poolsFor(catalog).stages[Math.min(LESSONS.length, Math.max(1, level))];
 }
 function currentLevel(state) {
-  return state.taughtLevel ?? difficulty(state.elapsed).level;
+  return state.taughtLevel ?? 1;
 }
 function currentGroup(state) {
   return availableAtLevel(state.catalog, currentLevel(state)).filter(
@@ -142,25 +141,33 @@ function chooseFromBag(state, key, pool, intended, blocked) {
   }
   return state[key].splice(index, 1)[0];
 }
+function eligibleOutcomeIndex(state, priority, pool, blocked) {
+  const preferred = state.outcomes.findLastIndex(
+    (outcome) => freshFor(priority, blocked, outcome).length,
+  );
+  return preferred >= 0
+    ? preferred
+    : state.outcomes.findLastIndex((outcome) => freshFor(pool, blocked, outcome).length);
+}
 function selection(state) {
   if (!state.outcomes.length)
     state.outcomes = shuffled([true, false, true, false, true, false], state);
   const level = currentLevel(state),
     stage = Math.min(level, LESSONS.length),
     pool = availableAtLevel(state.catalog, level),
-    group = currentGroup(state),
-    blocked = blockedDecisions(state);
+    group = currentGroup(state);
+  let blocked = blockedDecisions(state);
   if (state.scenarioTier !== stage) {
     state.scenarioBag = [];
     state.lessonBag = [];
     state.scenarioTier = stage;
   }
   const priority = state.practiceTurn && group.length ? group : pool;
-  let index = state.outcomes.findLastIndex(
-    (outcome) => freshFor(priority, blocked, outcome).length,
-  );
-  if (index < 0)
-    index = state.outcomes.findLastIndex((outcome) => freshFor(pool, blocked, outcome).length);
+  let index = eligibleOutcomeIndex(state, priority, pool, blocked);
+  if (index < 0 && !(state.active ?? []).length) {
+    blocked = new Set();
+    index = eligibleOutcomeIndex(state, priority, pool, blocked);
+  }
   if (index < 0) return null;
   const intended = state.outcomes[index];
   let scenario =
@@ -301,7 +308,7 @@ export function officialSource(base, reference) {
   return `${base}#:~:text=${encodeURIComponent(reference)}`;
 }
 function sampleNumericEvidence(state, s) {
-  const tier = difficulty(state.elapsed, state.taughtLevel, state.pressureIndex).tier;
+  const tier = difficulty(state.taughtLevel, state.pressureIndex).tier;
   const ratio = tier === 1 ? 0.2 : tier === 2 ? 0.6 : 0.8;
   const minimum = s.threshold > 0 ? Math.max(1, Math.ceil(s.threshold * ratio)) : 0;
   s.normal = minimum + Math.floor(random(state) * (s.threshold - minimum + 1));

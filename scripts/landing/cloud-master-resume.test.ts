@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { loadCatalog } from "../../landing/cloud-master/api-catalog.js";
-import { ALL_RULES_AT, LESSONS } from "../../landing/cloud-master/curriculum.js";
+import { LESSONS } from "../../landing/cloud-master/curriculum.js";
 import {
   collect,
   createGame,
@@ -16,6 +16,7 @@ import {
   createQuestionStream,
   difficulty,
   LEVEL_STAGES,
+  levelFor,
   nextQuestion,
   QUESTION_COOLDOWN_MS,
 } from "../../landing/cloud-master/recognition.js";
@@ -52,7 +53,9 @@ function perfectStep(s: ReturnType<typeof createGame>) {
 }
 function sampleFreshGame(seed: number) {
   const s = createGame(catalog, seed);
-  s.elapsed = ALL_RULES_AT;
+  s.elapsed = 300000;
+  s.taughtLevel = LESSONS.length;
+  s.pressureIndex = 10;
   start(s);
   const seen = new Set<number>();
   let count = 0;
@@ -65,7 +68,9 @@ function sampleFreshGame(seed: number) {
 }
 function generatedCase(source: ReturnType<typeof availableScenarios>[number], danger: boolean) {
   const stream = createQuestionStream(catalog, 37);
-  stream.elapsed = ALL_RULES_AT;
+  stream.elapsed = 300000;
+  stream.taughtLevel = LESSONS.length;
+  stream.pressureIndex = 10;
   stream.scenarioTier = LESSONS.length;
   stream.scenarioBag = [source];
   stream.outcomes = [danger];
@@ -107,14 +112,16 @@ describe("visible frame admission and resume ledger", () => {
     expect(s.serial - serial).toBe(1);
     expect(identity(s).slice(0, 2)).toEqual(untouched);
     expect(s.active.at(-1).born).toBe(s.elapsed);
-    expect(s.nextSpawnAt).toBe(s.elapsed + difficulty(s.elapsed).intervalMs);
+    expect(s.nextSpawnAt).toBe(s.elapsed + difficulty(s.taughtLevel, s.pressureIndex).intervalMs);
     tickFrame(s, 16);
     expect(s.serial - serial).toBe(1);
     expect(s.score).toBe(0);
   });
   test("existing physical deadlines and normal pass scoring survive long renderer gaps", () => {
     const s = createGame(catalog, 3);
-    s.elapsed = ALL_RULES_AT;
+    s.elapsed = 300000;
+    s.taughtLevel = LESSONS.length;
+    s.pressureIndex = 10;
     s.outcomes = Array(100).fill(false);
     start(s);
     const first = s.active[0];
@@ -126,19 +133,19 @@ describe("visible frame admission and resume ledger", () => {
     expect(s.active[0].born).toBe(s.elapsed);
     expect(collect(s, first.uid)).toBe(false);
   });
-  test("exhausted fresh-case pool waits without consuming an answer or inventing a case", () => {
+  test("an empty field can recycle an eligible known case without inventing an untaught case", () => {
     const s = createGame(catalog, 3);
     s.outcomes = [true];
     s.history = availableAtLevel(catalog, 1).map((source) => ({
       at: 0,
       question: { scenarioId: source.id, danger: true },
     }));
-    expect(nextQuestion(s)).toBe(null);
-    expect(s.outcomes).toEqual([true]);
-    expect(s.questionSerial).toBe(0);
+    expect(nextQuestion(s).lessonLevel).toBe(1);
+    expect(s.outcomes).toEqual([]);
+    expect(s.questionSerial).toBe(1);
     s.elapsed = QUESTION_COOLDOWN_MS;
     expect(nextQuestion(s)).not.toBe(null);
-    expect(s.questionSerial).toBe(1);
+    expect(s.questionSerial).toBe(2);
   });
   test("multiple misses preserve untouched identities, RNG/history/serial and score; gameover restart resets only new round", () => {
     const s = createGame(catalog, 49);
@@ -188,10 +195,10 @@ describe("discrete stages and compact evidence explanations", () => {
   test("each announced stage expands the cumulative pool", () => {
     let size = 0;
     for (let i = 0; i < LEVEL_STAGES.length; i++) {
-      const t = LEVEL_STAGES[i].at,
-        d = difficulty(t);
+      const t = LEVEL_STAGES[i].correct,
+        d = difficulty(levelFor(t));
       expect(d.level).toBe(i + 1);
-      if (i) expect(difficulty(t - 1).level).toBe(i);
+      if (i) expect(levelFor(t - 1)).toBe(i);
       expect(d.fallMs).toBeGreaterThanOrEqual(4200);
       const pool = availableAtLevel(catalog, i + 1);
       expect(pool.length).toBeGreaterThan(size);

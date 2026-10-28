@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { loadCatalog } from "../../landing/cloud-master/api-catalog.js";
-import { ALL_RULES_AT, LESSONS } from "../../landing/cloud-master/curriculum.js";
+import { LESSONS } from "../../landing/cloud-master/curriculum.js";
 import {
   collect,
   createGame,
@@ -79,7 +79,9 @@ describe("all published defensive evidence", () => {
       const pair = [];
       for (const danger of [false, true]) {
         const stream = createQuestionStream(catalog, 91);
-        stream.elapsed = ALL_RULES_AT;
+        stream.elapsed = 300000;
+        stream.taughtLevel = LESSONS.length;
+        stream.pressureIndex = 10;
         stream.scenarioTier = LESSONS.length;
         stream.scenarioBag = [scenario];
         stream.outcomes = [danger];
@@ -100,7 +102,9 @@ describe("all published defensive evidence", () => {
     ]) {
       const scenario = availableScenarios(catalog).find((s) => s.id === id);
       const stream = createQuestionStream(catalog, 42);
-      stream.elapsed = ALL_RULES_AT;
+      stream.elapsed = 300000;
+      stream.taughtLevel = LESSONS.length;
+      stream.pressureIndex = 10;
       stream.scenarioTier = LESSONS.length;
       stream.scenarioBag = [scenario];
       stream.outcomes = [false];
@@ -116,7 +120,10 @@ describe("all published defensive evidence", () => {
     const a = createQuestionStream(catalog, 102),
       b = createQuestionStream(catalog, 102),
       c = createQuestionStream(catalog, 103);
-    a.elapsed = b.elapsed = c.elapsed = ALL_RULES_AT;
+    a.taughtLevel = b.taughtLevel = c.taughtLevel = LESSONS.length;
+    a.elapsed = b.elapsed = c.elapsed = 300000;
+    c.taughtLevel = LESSONS.length;
+    c.pressureIndex = 10;
     const sequence = [];
     const different = [];
     let previous = "";
@@ -132,7 +139,9 @@ describe("all published defensive evidence", () => {
   });
   test("sampled indicators share address ranges and numeric thresholds remain visible", () => {
     const stream = createQuestionStream(catalog, 87);
-    stream.elapsed = ALL_RULES_AT;
+    stream.elapsed = 300000;
+    stream.taughtLevel = LESSONS.length;
+    stream.pressureIndex = 10;
     const flags = new Set(),
       normal = new Set();
     const groups = [normal, flags];
@@ -159,7 +168,9 @@ describe("all published defensive evidence", () => {
   });
   test("decision sources are specific official chapter references and every predicate field is visible", () => {
     const s = createQuestionStream(catalog, 62);
-    s.elapsed = ALL_RULES_AT;
+    s.elapsed = 300000;
+    s.taughtLevel = LESSONS.length;
+    s.pressureIndex = 10;
     for (let i = 0; i < 1500; i++) {
       const q = nextQuestion(s);
       const url = new URL(q.source);
