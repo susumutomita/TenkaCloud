@@ -95,6 +95,7 @@ async function signIn() {
 
 beforeEach(() => {
   window.localStorage.setItem("tenkacloud.application-admin.locale", "en");
+  sessionStorage.clear();
 });
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -205,6 +206,62 @@ describe("organizer journey in local-host mode", () => {
     );
     expect(await screen.findByLabelText("Organizer key")).toHaveValue("");
     expect(screen.queryByLabelText("Username")).toBeNull();
+    expect(sessionStorage.getItem("TenkaCloud.localHost.organizerSession")).toBeNull();
+  });
+
+  it("keeps the organizer signed in when the tab reloads", async () => {
+    const fetchMock = stubHost({
+      "/api/host/me": () =>
+        new Response(JSON.stringify({ user: null, role: "Admin", authMethod: "host-key" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    });
+    const app = () => (
+      <I18nProvider>
+        <MemoryRouter initialEntries={["/events"]}>
+          <App config={config} />
+        </MemoryRouter>
+      </I18nProvider>
+    );
+    const first = render(app());
+    await signIn();
+    expect(await screen.findByRole("heading", { name: "Events", level: 1 })).toBeInTheDocument();
+    first.unmount();
+    // A reload discards the in-memory session; only this tab's copy survives.
+    render(app());
+    expect(await screen.findByRole("heading", { name: "Events", level: 1 })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Organizer key")).toBeNull();
+    const logins = fetchMock.mock.calls.filter(([input]) => String(input).endsWith("/host/login"));
+    expect(logins).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledWith(`${origin}/api/host/me`, {
+      headers: { authorization: `Bearer ${organizerToken("Admin")}` },
+    });
+  });
+
+  it("asks for the key again when the host no longer accepts the saved session", async () => {
+    stubHost({
+      "/api/host/me": () =>
+        new Response(JSON.stringify({ message: "Invalid credential." }), { status: 401 }),
+    });
+    sessionStorage.setItem(
+      "TenkaCloud.localHost.organizerSession",
+      JSON.stringify({
+        idToken: organizerToken("Admin"),
+        accessToken: organizerToken("Admin"),
+        refreshToken: "revoked",
+        expiresAt: Date.now() + 60_000,
+      }),
+    );
+    render(
+      <I18nProvider>
+        <MemoryRouter initialEntries={["/events"]}>
+          <App config={config} />
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+    expect(await screen.findByLabelText("Organizer key")).toHaveValue("");
+    expect(sessionStorage.getItem("TenkaCloud.localHost.organizerSession")).toBeNull();
   });
 
   it.each(["/users", "/identity-providers", "/audit-log", "/settings"])(
