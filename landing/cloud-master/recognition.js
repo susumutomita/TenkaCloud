@@ -1,6 +1,6 @@
-import { CORRECT_PER_LEVEL, LESSONS, scenarioLevel } from "./curriculum.js?v=ab7d2594f9";
-import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js?v=ab7d2594f9";
-import { SECURITY_SCENARIOS } from "./security-scenarios.js?v=ab7d2594f9";
+import { CORRECT_PER_LEVEL, LESSONS, scenarioLevel } from "./curriculum.js?v=50732f9215";
+import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js?v=50732f9215";
+import { SECURITY_SCENARIOS } from "./security-scenarios.js?v=50732f9215";
 export const PATTERNS = [...SECURITY_SCENARIOS, ...EVIDENCE_SCENARIOS].map((s) => s.id);
 export function random(state) {
   state.rng = (Math.imul(state.rng, 1664525) + 1013904223) >>> 0;
@@ -42,16 +42,38 @@ export function levelFor(correctDecisions) {
   const count = Math.max(0, Number.isFinite(correctDecisions) ? correctDecisions : 0);
   return 1 + Math.floor(count / CORRECT_PER_LEVEL);
 }
+// Beyond Lv28, shorten both the flight and nominal cadence by 2.5% per level.
+// The 600ms floor leaves six 100ms input-guard windows in one flight; the matching
+// 100ms cadence floor caps arrivals at 10/s, while the existing viewport cap stays <=6.
+// These are rendering/input safety limits, not a promise to defeat automated players.
+export const MIN_FALL_MS = 600;
+export const MIN_INTERVAL_MS = 100;
+function safeLevel(level) {
+  if (level === Infinity) return Number.MAX_SAFE_INTEGER;
+  return Number.isFinite(level)
+    ? Math.min(Number.MAX_SAFE_INTEGER, Math.max(1, Math.floor(level)))
+    : 1;
+}
 export function pressureFor(level) {
   return Math.max(
     0,
-    PRESSURE_STAGES.findLastIndex((p) => level >= p.level),
+    PRESSURE_STAGES.findLastIndex((p) => safeLevel(level) >= p.level),
   );
 }
 export function difficulty(level = 1, pressureIndex = pressureFor(level)) {
+  const stage =
+    PRESSURE_STAGES[
+      Number.isFinite(pressureIndex)
+        ? Math.max(0, Math.min(PRESSURE_STAGES.length - 1, Math.floor(pressureIndex)))
+        : pressureFor(level)
+    ];
+  const current = safeLevel(level);
+  const scale = stage.level === 28 ? 0.975 ** Math.max(0, current - 28) : 1;
   return {
-    ...PRESSURE_STAGES[Math.max(0, Math.min(PRESSURE_STAGES.length - 1, pressureIndex))],
-    level: Math.max(1, level),
+    ...stage,
+    fallMs: Math.max(MIN_FALL_MS, Math.round(stage.fallMs * scale)),
+    intervalMs: Math.max(MIN_INTERVAL_MS, Math.round(stage.intervalMs * scale)),
+    level: current,
   };
 }
 export const QUESTION_COOLDOWN_MS = 8000;
