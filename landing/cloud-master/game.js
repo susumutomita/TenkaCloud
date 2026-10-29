@@ -1,5 +1,5 @@
-import { loadCatalog } from "./api-catalog.js?v=7ace2d323a";
-import { CORRECT_PER_LEVEL, lessonForLevel } from "./curriculum.js?v=7ace2d323a";
+import { loadCatalog } from "./api-catalog.js?v=8dd78c52dc";
+import { CORRECT_PER_LEVEL, lessonForLevel } from "./curriculum.js?v=8dd78c52dc";
 import {
   collect,
   createGame,
@@ -13,18 +13,18 @@ import {
   showLesson,
   start,
   tickInput,
-} from "./engine.js?v=7ace2d323a";
-import { explanationCard } from "./explanation.js?v=7ace2d323a";
-import { decisionFact, reasonDuration, reviewEntries } from "./feedback.js?v=7ace2d323a";
-import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=7ace2d323a";
-import { CARD_GAP, fieldCapacity } from "./layout.js?v=7ace2d323a";
-import { flowPositions } from "./motion.js?v=7ace2d323a";
-import { lessonNotice } from "./notices.js?v=7ace2d323a";
-import { clearSlices, pulseCombo, sliceCard } from "./paper-cut.js?v=7ace2d323a";
-import { createPaperSound } from "./paper-sound.js?v=7ace2d323a";
-import { loadQuestionLocale, questionView } from "./question-locales.js?v=7ace2d323a";
-import { buildShare } from "./share.js?v=7ace2d323a";
-import { formatSurvival } from "./time.js?v=7ace2d323a";
+} from "./engine.js?v=8dd78c52dc";
+import { explanationCard } from "./explanation.js?v=8dd78c52dc";
+import { decisionFact, reasonDuration, reviewEntries } from "./feedback.js?v=8dd78c52dc";
+import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=8dd78c52dc";
+import { CARD_GAP, fieldCapacity } from "./layout.js?v=8dd78c52dc";
+import { flowPositions } from "./motion.js?v=8dd78c52dc";
+import { lessonNotice } from "./notices.js?v=8dd78c52dc";
+import { clearSlices, pulseCombo, sliceCard } from "./paper-cut.js?v=8dd78c52dc";
+import { createPaperSound } from "./paper-sound.js?v=8dd78c52dc";
+import { loadQuestionLocale, questionView } from "./question-locales.js?v=8dd78c52dc";
+import { buildShare } from "./share.js?v=8dd78c52dc";
+import { formatSurvival } from "./time.js?v=8dd78c52dc";
 
 const $ = (id) => document.getElementById(id);
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
@@ -1014,6 +1014,7 @@ for (let node = walker.nextNode(); node; node = walker.nextNode()) {
 function applyStaticLocale() {
   const locale = getLocale();
   document.documentElement.lang = locale;
+  attribute($("privacy-link"), "href", locale === "en" ? "../privacy.en.html" : "../privacy.html");
   document.title = tr("APIの番人。 | 目指せクラウドマスター");
   document.querySelector('meta[name="description"]').content = tr(
     "本番AWSの異変をリクエスト引数から見抜く、生存時間チャレンジ。",

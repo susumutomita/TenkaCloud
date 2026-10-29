@@ -1,5 +1,5 @@
-import { tr } from "./i18n.js?v=7ace2d323a";
-import { questionView } from "./question-locales.js?v=7ace2d323a";
+import { tr } from "./i18n.js?v=8dd78c52dc";
+import { questionView } from "./question-locales.js?v=8dd78c52dc";
 export const REASON_DURATION_MS = 2000;
 export function decisionFact(question, locale = "ja") {
   const view = questionView(question, locale);
