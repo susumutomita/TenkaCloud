@@ -82,6 +82,8 @@ With Claude Code installed, run `claude` in the cloned repository and type `/ten
 
 First verify startup, joining and scoring on one PC. For remote participants, start with the hosting device's currently assigned Tailscale IPv4. Follow the [first-connection guide](https://tenkacloud.com/docs/getting-started/index.en.html#tailscale-first-connection) for app installation, account selection, dedicated-host sharing and effective permissions. Do not share a company tailnet or device without approval.
 
+Use Tailscale 1.104.4 or newer on the event host and on participant devices. `tailscale version --daemon` shows the client and local `tailscaled`. This path does not enable Tailscale SSH or Tailscale Serve. Before the event, set `TS_SSH_DISABLE_FORWARDING=1` for the host's `tailscaled`, restart it, and replace any allow-all rule that still lets invited users reach ports other than TCP 5175 (and the Docker gateway range only when those exercises are used). The [client security note](https://tenkacloud.com/docs/getting-started/index.en.html#tailscale-client-security) has the grant example and the headscale limitation.
+
 ```bash
 make local LOCAL_ARGS="--lan $(tailscale ip -4) --unsafe-lan"
 ```
