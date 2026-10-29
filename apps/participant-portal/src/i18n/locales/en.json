@@ -704,5 +704,22 @@
     "wrong": "The answer or check report did not meet the conditions.",
     "check": "Check result: {name}",
     "error": "Submission failed. Retry retains the same operation key."
+  },
+  "foundation_games": {
+    "title": "Quick foundation games",
+    "description": "Play in your browser. No AWS account or registration. These do not count toward event scores.",
+    "play": "Play {name}",
+    "mail-detective": {
+      "title": "Spot the risky email difference",
+      "description": "Compare two emails and find differences that bring a risk."
+    },
+    "cloud-master": {
+      "title": "API Guardian (Cloud Master)",
+      "description": "Spot suspicious API requests and stop them with a tap."
+    },
+    "page_title": "Games and problems",
+    "page_description": "Start with browser foundation games, then explore the competition demo below.",
+    "competition_title": "Competition interface demo",
+    "competition_description": "Join a real event through your organizer’s invitation. Local and cloud are hosting choices; participants do not need to select them here."
   }
 }

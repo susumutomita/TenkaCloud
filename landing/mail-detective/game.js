@@ -1,7 +1,7 @@
-import { CASES } from "./cases.js?v=5b03650870";
-import { COPY } from "./copy.js?v=5b03650870";
-import { advanceClock, createClock, progress } from "./deadline.js?v=5b03650870";
-import { createEmail } from "./mail-view.js?v=5b03650870";
+import { CASES } from "./cases.js?v=d6ed1fef3f";
+import { COPY } from "./copy.js?v=d6ed1fef3f";
+import { advanceClock, createClock, progress } from "./deadline.js?v=d6ed1fef3f";
+import { createEmail } from "./mail-view.js?v=d6ed1fef3f";
 import {
   createRun,
   currentCase,
@@ -11,7 +11,8 @@ import {
   reveal,
   tap,
   totals,
-} from "./model.js?v=5b03650870";
+} from "./model.js?v=d6ed1fef3f";
+import { createReview } from "./review.js?v=d6ed1fef3f";
 
 const element = (tag, text, className) => {
   const node = document.createElement(tag);
@@ -22,6 +23,7 @@ const element = (tag, text, className) => {
 const byId = (id) => document.getElementById(id);
 let lang = new URL(location.href).searchParams.get("lang") === "en" ? "en" : "ja";
 let run = createRun();
+const guideOpen = new Set();
 const freshView = () => ({
   active: "received",
   lastTarget: null,
@@ -233,6 +235,7 @@ function resultsView(t) {
   const replay = button(
     timedOut ? t.retry : t.again,
     () => {
+      guideOpen.clear();
       run = createRun();
       resetClock();
       mailUI = freshView();
@@ -261,7 +264,7 @@ function resultsView(t) {
     }
     panel.append(missed);
   }
-  fragment.append(panel, review);
+  fragment.append(panel, review, createReview(lang, guideOpen));
   return fragment;
 }
 function render(focusId) {
@@ -272,8 +275,12 @@ function render(focusId) {
   byId("title").textContent = t.title;
   byId("instruction").textContent = `${t.instruction} ${t.processing}`;
   byId("safety").textContent = t.safety;
-  byId("home").textContent = t.home;
+  byId("home").textContent = "TenkaCloud";
+  byId("home").setAttribute("aria-label", t.home);
   byId("home").href = `../?lang=${lang}`;
+  byId("games").textContent = t.games;
+  byId("games").href =
+    `../portal-demo/?demo=1&goto=${encodeURIComponent(`/problems?lang=${lang}`)}`;
   byId("exit").textContent = t.exit;
   byId("exit").hidden = ["ended", "results", "timed-out"].includes(run.phase);
   for (const locale of ["ja", "en"])

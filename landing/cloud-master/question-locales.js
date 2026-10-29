@@ -1,5 +1,5 @@
-import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js?v=649cc787a2";
-import { SECURITY_SCENARIOS } from "./security-scenarios.js?v=649cc787a2";
+import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js?v=5f7dd30ac3";
+import { SECURITY_SCENARIOS } from "./security-scenarios.js?v=5f7dd30ac3";
 
 const SOURCE = new Map([...SECURITY_SCENARIOS, ...EVIDENCE_SCENARIOS].map((s) => [s.id, s]));
 const JAPANESE = /[\u3040-\u30ff\u3400-\u9fff]/u;
@@ -42,7 +42,7 @@ export function validateEnglishCatalog(data) {
 }
 export async function loadQuestionLocale(locale) {
   if (locale !== "en" || english) return;
-  loading ??= import("./locales/en-scenarios.js?v=649cc787a2")
+  loading ??= import("./locales/en-scenarios.js?v=5f7dd30ac3")
     .then((module) => {
       validateEnglishCatalog(module.EN_SCENARIOS);
       english = module.EN_SCENARIOS;

@@ -139,6 +139,7 @@
     <div class="nav-links">
       <a href="#modes" data-i18n="nav.product">プロダクト</a>
       <a href="#use-cases" data-i18n="nav.useCases">活用例</a>
+      <a href="./portal-demo/?demo=1&amp;goto=%2Fproblems%3Flang%3Dja" data-i18n-href="mailGame.href" data-i18n="nav.games">ゲームで学ぶ</a>
       <a href="./docs/" data-i18n="nav.docs">ドキュメント</a>
       <a href="#pricing" data-i18n="nav.pricing">料金</a>
       <a href="./presentations/" data-i18n="nav.presentations">発表資料</a>
@@ -165,7 +166,7 @@
         <span data-i18n="hero.h1a">クラウドエンジニアの、</span><em data-i18n="hero.h1b">天下一武道会。</em>
       </h1>
       <p class="sub" data-i18n="hero.sub">ローカルと AWS クラウドで開催する OSS の競技プラットフォーム。チームで問題を解き、得点と進捗を共有します。まずは同じ PC でローカル競技を試せます。</p>
-      <p class="hero-vibe" data-i18n="hero.vibe"><strong>まずは、同じ PC で。</strong> ローカル開催は SQLite を使い、AWS アカウントは不要です。Docker 問題には Docker Engine と Compose が必要です。</p>
+      <p class="hero-vibe" data-i18n="hero.vibe"><strong>開催する方へ。</strong> ローカル開催は SQLite を使い、AWS アカウントは不要です。Docker 問題には Docker Engine と Compose が必要です。</p>
       <a class="hero-quest-card" href="/portal-demo/?demo=1&amp;goto=start" data-cta="start-drill">
         <span class="hero-quest-meta" data-i18n="hero.quest_meta">最初の1問 · 登録不要 · 約3分</span>
         <span class="hero-quest-tags">
@@ -178,6 +179,7 @@
         <span class="hero-quest-cta"><span data-i18n="hero.quest_cta">最初の問題を解く</span> →</span>
       </a>
       <p class="hero-secondary">
+        <a href="./portal-demo/?demo=1&amp;goto=%2Fproblems%3Flang%3Dja" data-i18n-href="mailGame.href" data-i18n="nav.games">ゲームで学ぶ</a> ·
         <a href="/docs/getting-started/#local-start" data-i18n-href="hero.startHref" data-cta="local-start"><span data-i18n="hero.cta_demo">自分の PC で起動する</span></a>
         ·
         <a href="/videos/lp/tenkacloud-30s.mp4" target="_blank" rel="noopener noreferrer" data-cta="watch-30s"><span data-i18n="hero.cta_video">▶ 30 秒でわかる</span></a>
@@ -436,18 +438,11 @@
 
 <section id="security-minigames">
   <div class="wrap">
-    <h2 data-i18n="mailGame.h">その違い、危険につながる？</h2>
-    <p class="lead" data-i18n="mailGame.p">2つのメールを見比べる、短い間違いさがし。まず遊んで、押した場所で理由を知る。登録不要です。</p>
-    <a class="more" href="./mail-detective/?lang=ja" data-i18n-href="mailGame.href"><span data-i18n="mailGame.cta">メールの間違いさがしで遊ぶ →</span></a>
-  </div>
-</section>
-
-<section class="alt" id="cloud-foundations" lang="ja">
-  <div class="wrap">
-    <div class="eyebrow">CLOUD FOUNDATIONS</div>
-    <h2>目指せクラウドマスター。</h2>
-    <p class="lead">本番AWSを守る「APIの番人。」。リクエストの引数と状況から異変を見抜き、どこまで生き残れるか挑戦。3ライフと見逃し解説で学べます。</p>
-    <a class="more" href="./cloud-master/">APIの番人。で遊ぶ →</a>
+    <h2 data-i18n="mailGame.h">ゲームで学ぶ。</h2>
+    <p class="lead" data-i18n="mailGame.p">まず遊んで、気づいたらもう一度。ブラウザーで試せる基礎ゲームを集めました。AWS・登録不要です。</p>
+    <a class="more" href="./portal-demo/?demo=1&amp;goto=%2Fproblems%3Flang%3Dja" data-i18n-href="mailGame.href"><span data-i18n="mailGame.cta">ゲーム一覧へ →</span></a>
+    <p class="lead" data-i18n="mailGame.roles">競技への参加は主催者の招待から。ローカル／クラウドは主催者が選ぶ開催方式です。</p>
+    <p><a class="more" href="./docs/manual/participant/" data-i18n-href="mailGame.joinHref" data-i18n="mailGame.join">競技に参加する →</a> · <a class="more" href="./docs/manual/organizer/" data-i18n-href="mailGame.hostHref" data-i18n="mailGame.host">競技を開催する →</a></p>
   </div>
 </section>
 
@@ -663,7 +658,7 @@
 </footer>
 
 <script src="./ink-bg.js" defer></script>
-<script src="./app.js?v=d86a5682f9" defer></script>
+<script src="./app.js?v=1edb446612" defer></script>
 
 </body>
 </html>

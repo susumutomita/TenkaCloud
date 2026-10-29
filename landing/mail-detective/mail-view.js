@@ -1,6 +1,6 @@
-import { COPY } from "./copy.js?v=5b03650870";
+import { COPY } from "./copy.js?v=d6ed1fef3f";
 
-import { createOriginal, domainInspection } from "./message-headers.js?v=5b03650870";
+import { createOriginal, domainInspection } from "./message-headers.js?v=d6ed1fef3f";
 
 const node = (tag, text, className) => {
   const result = document.createElement(tag);

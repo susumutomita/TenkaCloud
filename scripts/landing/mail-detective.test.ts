@@ -25,6 +25,7 @@ import {
   tap,
   totals,
 } from "../../landing/mail-detective/model.js";
+import { REVIEW } from "../../landing/mail-detective/review.js";
 import { cloudMasterFiles, cloudMasterVersion, stampCloudMasterFile } from "./stamp-asset-versions";
 
 describe("email difference game", () => {
@@ -171,12 +172,17 @@ describe("email difference game", () => {
     expect(html).toContain(`./game.css?v=${version}`);
     for (const [name, value] of Object.entries({ ...files, "index.html": html }))
       expect(stampCloudMasterFile(value, name, files, version)).toBe(value);
-    expect(readFileSync(join(import.meta.dir, "../../landing/index.html"), "utf8")).toContain(
-      "./mail-detective/?lang=ja",
-    );
-    expect(readFileSync(join(import.meta.dir, "../../landing/index.en.html"), "utf8")).toContain(
-      "./mail-detective/?lang=en",
-    );
+    for (const [file, lang] of [
+      ["index.html", "ja"],
+      ["index.en.html", "en"],
+    ]) {
+      const landing = readFileSync(
+        join(import.meta.dir, "../../landing/", file),
+        "utf8",
+      ).replaceAll("&amp;", "&");
+      expect(landing).toContain(`./portal-demo/?demo=1&goto=%2Fproblems%3Flang%3D${lang}`);
+      expect(landing).not.toContain('id="cloud-foundations"');
+    }
   });
 });
 
@@ -342,4 +348,83 @@ test("input timestamps followed by an older RAF never rewind or double count the
   expect(clock.elapsed).toBe(20);
   clock = advanceClock(clock, 100033, true);
   expect(clock.elapsed).toBe(33);
+});
+
+describe("TenkaCloud shell and end-of-play mail review", () => {
+  test("review topics have bilingual where/check/action guidance and official references", () => {
+    const ids = ["sender", "destination", "idn", "request", "authentication", "independent"];
+    for (const lang of ["ja", "en"]) {
+      expect(REVIEW[lang].items.map((item) => item.id)).toEqual(ids);
+      expect(REVIEW[lang].labels).toHaveLength(3);
+      for (const item of REVIEW[lang].items) {
+        for (const key of ["title", "brief"]) expect(item[key].length).toBeGreaterThan(1);
+        for (const key of ["where", "check", "action"])
+          expect(item[key].length).toBeGreaterThan(20);
+        expect(item.source.length).toBeGreaterThan(0);
+      }
+    }
+    const content = JSON.stringify(REVIEW.en);
+    for (const term of [
+      "Reply-To",
+      "From",
+      "Return-Path",
+      "header.d",
+      "SPF",
+      "DKIM",
+      "DMARC",
+      "Unicode",
+      "Punycode",
+      "U+0430",
+      "minamo.example.notice.example",
+      "grammar",
+      "passwords",
+      "payment",
+      "bookmark",
+    ])
+      expect(content).toContain(term);
+    expect(content).toContain("Internationalized domains are not inherently dangerous");
+    expect(content).toContain("failure alone does not prove fraud");
+    expect(content).toContain("Pass does not prove good intent");
+  });
+  test("review is optional after results; fictional mail cannot navigate to reference sites", () => {
+    const source = readFileSync(
+      join(import.meta.dir, "../../landing/mail-detective/review.js"),
+      "utf8",
+    );
+    expect(source).toContain("details.open = openItems.has(item.id)");
+    expect(source).toContain('link.rel = "noopener noreferrer"');
+    expect(source).not.toMatch(/innerHTML|fetch\(|XMLHttpRequest|sendBeacon|localStorage/);
+    const game = readFileSync(
+      join(import.meta.dir, "../../landing/mail-detective/game.js"),
+      "utf8",
+    );
+    const playCode = game.slice(
+      game.indexOf("function playView("),
+      game.indexOf("function resultsView("),
+    );
+    expect(playCode).not.toContain("createReview");
+    expect(game).toContain("createReview(lang, guideOpen)");
+    expect(game).toContain("guideOpen.clear()");
+  });
+  test("shell uses current LP tokens and font stack while keeping the separate email layout", () => {
+    const brand = readFileSync(
+      join(import.meta.dir, "../../landing/mail-detective/brand.css"),
+      "utf8",
+    );
+    const lp = readFileSync(join(import.meta.dir, "../../landing/styles/main.css"), "utf8");
+    for (const token of [
+      "#07111f",
+      "#0969da",
+      "#008a55",
+      "#d9dee8",
+      "#f5f7fb",
+      '"Inter"',
+      '"Noto Sans JP"',
+    ]) {
+      expect(brand).toContain(token);
+      expect(lp).toContain(token);
+    }
+    expect(brand).toContain("border-radius:999px");
+    expect(brand).not.toMatch(/@import|https?:|\.mail-body|\.message-header/);
+  });
 });

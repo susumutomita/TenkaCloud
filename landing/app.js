@@ -126,6 +126,7 @@
   var I18N = {
     ja: {
       "nav.product": "プロダクト",
+      "nav.games": "ゲームで学ぶ",
       "nav.useCases": "活用例",
       "nav.problems": "問題",
       "nav.extend": "問題を作る",
@@ -141,7 +142,7 @@
       "hero.sub":
         "ローカルと AWS クラウドで開催する OSS の競技プラットフォーム。チームで問題を解き、得点と進捗を共有します。まずは同じ PC でローカル競技を試せます。",
       "hero.vibe":
-        "<strong>まずは、同じ PC で。</strong> ローカル開催は SQLite を使い、AWS アカウントは不要です。Docker 問題には Docker Engine と Compose が必要です。",
+        "<strong>開催する方へ。</strong> ローカル開催は SQLite を使い、AWS アカウントは不要です。Docker 問題には Docker Engine と Compose が必要です。",
       "hero.quest_meta": "最初の1問 · 登録不要 · 約3分",
       "hero.quest_badge": "ブラウザ体験版",
       "hero.quest_diff": "インストール不要",
@@ -274,11 +275,17 @@
         "ローカル開催は SQLite で動き、AWS アカウントは不要です。LAN や Tailscale 越しに別の端末から参加できます。接続条件と Docker 問題の利用条件は起動ガイドで確認してください。",
       "uc.e.more": "起動ガイド",
       "uc.e.moreHref": "/docs/getting-started/#local-start",
-      "mailGame.h": "その違い、危険につながる？",
+      "mailGame.roles":
+        "競技への参加は主催者の招待から。ローカル／クラウドは主催者が選ぶ開催方式です。",
+      "mailGame.join": "競技に参加する →",
+      "mailGame.joinHref": "./docs/manual/participant/",
+      "mailGame.host": "競技を開催する →",
+      "mailGame.hostHref": "./docs/manual/organizer/",
+      "mailGame.h": "ゲームで学ぶ。",
       "mailGame.p":
-        "2つのメールを見比べる、短い間違いさがし。まず遊んで、押した場所で理由を知る。登録不要です。",
-      "mailGame.cta": "メールの間違いさがしで遊ぶ →",
-      "mailGame.href": "./mail-detective/?lang=ja",
+        "まず遊んで、気づいたらもう一度。ブラウザーで試せる基礎ゲームを集めました。AWS・登録不要です。",
+      "mailGame.cta": "ゲーム一覧へ →",
+      "mailGame.href": "./portal-demo/?demo=1&goto=%2Fproblems%3Flang%3Dja",
       "uc.f.role": "定着の確認",
       "uc.f.h": "繰り返して、定着を確かめる。",
       "uc.f.p":
@@ -422,6 +429,7 @@
     },
     en: {
       "nav.product": "Product",
+      "nav.games": "Learn through games",
       "nav.useCases": "Use cases",
       "nav.problems": "Problems",
       "nav.extend": "Author problems",
@@ -437,7 +445,7 @@
       "hero.sub":
         "An open-source competition platform for local and AWS cloud hosting. Teams solve problems and share scores and progress. Start with a local competition on one PC.",
       "hero.vibe":
-        "<strong>Start on one PC.</strong> Local hosting uses SQLite and needs no AWS account. Docker exercises require Docker Engine and Compose.",
+        "<strong>For organizers.</strong> Local hosting uses SQLite and needs no AWS account. Docker exercises require Docker Engine and Compose.",
       "hero.quest_meta": "First problem · No signup · About 3 minutes",
       "hero.quest_badge": "Browser walkthrough",
       "hero.quest_diff": "No installation",
@@ -570,11 +578,17 @@
         "Local hosting runs on SQLite and needs no AWS account. Participants can join from other devices over the LAN or Tailscale. Check the startup guide for connection and Docker problem requirements.",
       "uc.e.more": "Startup guide",
       "uc.e.moreHref": "/docs/getting-started/index.en.html#local-start",
-      "mailGame.h": "Which difference brings a risk?",
+      "mailGame.roles":
+        "Join a competition through your organizer's invitation. Local and cloud are hosting choices made by the organizer.",
+      "mailGame.join": "Join a competition →",
+      "mailGame.joinHref": "./docs/manual/participant/index.en.html",
+      "mailGame.host": "Host a competition →",
+      "mailGame.hostHref": "./docs/manual/organizer/index.en.html",
+      "mailGame.h": "Learn through games.",
       "mailGame.p":
-        "Compare two emails in a short spot-the-difference game. Play first, then discover the reason where you tap. No registration.",
-      "mailGame.cta": "Play spot the risky difference →",
-      "mailGame.href": "./mail-detective/?lang=en",
+        "Play, notice something, and try again. Explore browser-based foundation games. No AWS account or registration.",
+      "mailGame.cta": "Browse games →",
+      "mailGame.href": "./portal-demo/?demo=1&goto=%2Fproblems%3Flang%3Den",
       "uc.f.role": "Checking retention",
       "uc.f.h": "Repeat rounds to check retention.",
       "uc.f.p":

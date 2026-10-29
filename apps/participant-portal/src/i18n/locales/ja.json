@@ -704,5 +704,22 @@
     "wrong": "解答または検証結果が条件を満たしていません。",
     "check": "検証結果: {name}",
     "error": "提出に失敗しました。再送には同じ操作キーを使います。"
+  },
+  "foundation_games": {
+    "title": "すぐ遊べる基礎ゲーム",
+    "description": "ブラウザーで、AWS・登録不要。大会の得点には含まれません。",
+    "play": "{name}で遊ぶ",
+    "mail-detective": {
+      "title": "メールの間違いさがし",
+      "description": "2通を見比べて、危険につながる違いを探す。"
+    },
+    "cloud-master": {
+      "title": "APIの番人（Cloud Master）",
+      "description": "不審なAPIリクエストを見抜いて、タップで止める。"
+    },
+    "page_title": "ゲームと問題一覧",
+    "page_description": "まずはブラウザー基礎ゲームから。下には競技画面のデモもあります。",
+    "competition_title": "競技画面のデモ",
+    "competition_description": "実際の競技への参加は主催者の招待から。ローカル／クラウドは開催方式で、参加者がここで選ぶ必要はありません。"
   }
 }

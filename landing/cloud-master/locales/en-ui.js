@@ -51,6 +51,8 @@ export const EN_UI = {
   GuardDutyの公式説明: "Official GuardDuty documentation",
   "GuardDutyの公開説明 ↗": "Public GuardDuty documentation ↗",
   "JavaScriptを有効にすると遊べます。": "Enable JavaScript to play.",
+  ゲーム一覧へ: "Back to games",
+  ゲーム一覧へ戻る: "Back to game list",
   TenkaCloudへ: "Visit TenkaCloud",
   "Xでシェア ↗": "Share on X ↗",
   "{count}連続": "{count} combo",
