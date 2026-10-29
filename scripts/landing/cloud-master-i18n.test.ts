@@ -188,3 +188,28 @@ test("incomplete English catalogs fail explicitly", () => {
   );
   expect(() => validateEnglishCatalog(missing)).toThrow();
 });
+
+test("the game intro covers the full game while the EC2 first lesson stays actionable", () => {
+  const html = readFileSync(
+    new URL("../../landing/cloud-master/index.html", import.meta.url),
+    "utf8",
+  );
+  const game = readFileSync(new URL("../../landing/cloud-master/game.js", import.meta.url), "utf8");
+  const body = "脅威検知サービスの気持ちになって、不審なAPIリクエストを弾き飛ばそう。";
+  const closing = "今日は、あなたがAPIの番人になるときだ。";
+  expect(html).toContain(`<p class="start-role">${body}</p>`);
+  expect(html).toContain(`<p class="start-closing">${closing}</p>`);
+  expect(tr(body, {}, "en")).toBe(
+    "Think like a threat detection service and knock suspicious API requests away.",
+  );
+  expect(tr(closing, {}, "en")).toBe("Today, it’s your turn to be the API guardian.");
+  expect(tr("APIの番人。", {}, "en")).toBe("API Guardian.");
+  expect(game).not.toContain('document.querySelector(".start-role").textContent');
+  expect(game).toContain('return { title: "Lv1 · EC2", detail: lessonText(first, "example") };');
+  expect(LESSONS[0].title).toBe("EC2の稼働と保護を守る");
+  expect(LESSONS[0].example).toBe("本番の未承認停止・終了と、終了保護OFFをタップ。");
+  expect(LESSONS[0].enExample).toBe(
+    "Flag unapproved stops/termination and turning production protection OFF.",
+  );
+  expect(html).toContain("実際のGuardDuty findingの有無・通信遮断は判定しません。");
+});

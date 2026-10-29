@@ -1339,6 +1339,7 @@ body:not(.active-game) .game { margin:0; }
 .start-action strong { font-weight:800; }
 .start-rules { margin:0; padding-left:1.1em; font:14px/1.8 system-ui,sans-serif; color:#3d566c; }
 .start-rules li+li { margin-top:5px; }
+.start-closing {margin:18px 0 0;font:600 14px/1.65 system-ui,sans-serif;color:#48627a;}
 .start-best { margin:22px 0 0; font:600 14px/1.6 system-ui,sans-serif; font-variant-numeric:tabular-nums; color:#245a87; }
 .start-best:empty { display:none; }
 .start-card .controls { padding:24px 0 0; min-height:0; display:block; }

@@ -1,5 +1,5 @@
-import { loadCatalog } from "./api-catalog.js?v=084aceea91";
-import { CORRECT_PER_LEVEL, lessonForLevel } from "./curriculum.js?v=084aceea91";
+import { loadCatalog } from "./api-catalog.js?v=7ace2d323a";
+import { CORRECT_PER_LEVEL, lessonForLevel } from "./curriculum.js?v=7ace2d323a";
 import {
   collect,
   createGame,
@@ -13,18 +13,18 @@ import {
   showLesson,
   start,
   tickInput,
-} from "./engine.js?v=084aceea91";
-import { explanationCard } from "./explanation.js?v=084aceea91";
-import { decisionFact, reasonDuration, reviewEntries } from "./feedback.js?v=084aceea91";
-import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=084aceea91";
-import { CARD_GAP, fieldCapacity } from "./layout.js?v=084aceea91";
-import { flowPositions } from "./motion.js?v=084aceea91";
-import { lessonNotice } from "./notices.js?v=084aceea91";
-import { clearSlices, pulseCombo, sliceCard } from "./paper-cut.js?v=084aceea91";
-import { createPaperSound } from "./paper-sound.js?v=084aceea91";
-import { loadQuestionLocale, questionView } from "./question-locales.js?v=084aceea91";
-import { buildShare } from "./share.js?v=084aceea91";
-import { formatSurvival } from "./time.js?v=084aceea91";
+} from "./engine.js?v=7ace2d323a";
+import { explanationCard } from "./explanation.js?v=7ace2d323a";
+import { decisionFact, reasonDuration, reviewEntries } from "./feedback.js?v=7ace2d323a";
+import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=7ace2d323a";
+import { CARD_GAP, fieldCapacity } from "./layout.js?v=7ace2d323a";
+import { flowPositions } from "./motion.js?v=7ace2d323a";
+import { lessonNotice } from "./notices.js?v=7ace2d323a";
+import { clearSlices, pulseCombo, sliceCard } from "./paper-cut.js?v=7ace2d323a";
+import { createPaperSound } from "./paper-sound.js?v=7ace2d323a";
+import { loadQuestionLocale, questionView } from "./question-locales.js?v=7ace2d323a";
+import { buildShare } from "./share.js?v=7ace2d323a";
+import { formatSurvival } from "./time.js?v=7ace2d323a";
 
 const $ = (id) => document.getElementById(id);
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
@@ -777,7 +777,8 @@ function confirmLessonPaint(notice, cue) {
 }
 function currentProgressMessage(notice, teaching) {
   if (teaching) return lessonNotice(notice.level, getLocale());
-  return { title: tr("5枚正解でレベルアップ"), detail: "" };
+  const first = lessonForLevel(1);
+  return { title: "Lv1 · EC2", detail: lessonText(first, "example") };
 }
 function startReasonTimer() {
   if (!$("hit-reason").hidden && !reasonUntil)
@@ -826,8 +827,6 @@ function render() {
   const pauseHost = active ? document.querySelector(".hud") : document.querySelector(".top");
   if ($("pause").parentElement !== pauseHost) pauseHost.append($("pause"));
   text("start-best", bestMs > 0 ? tr("自己ベスト {time}", { time: duration(bestMs) }) : "");
-  document.querySelector(".start-role").textContent =
-    `${lessonText(lessonForLevel(1), "title")}。${lessonText(lessonForLevel(1), "example")}`;
   text("score", formatCount(state.score));
   text("combo", state.combo >= 2 ? tr("{count}連続", { count: formatCount(state.combo) }) : "");
   cancelInactiveInput();

@@ -39,7 +39,7 @@ export const EN_UI = {
   "{summary}。{detail}": "{summary}. {detail}",
   "0.0秒": "0.0s",
   "1〜6で検知 · Pで一時停止": "1–6 to flag · P to pause",
-  "APIの番人。": "API Guardian",
+  "APIの番人。": "API Guardian.",
   "APIの番人。 | 目指せクラウドマスター": "API Guardian | Become a Cloud Master",
   "APIの番人。｜目指せクラウドマスター\n生存 {time} / {score} pt\n正しい検知 {correct}・正常通過 {passed}{preview}\n架空のイベントを使う練習記録":
     "API Guardian | Become a Cloud Master\nSurvived {time} / {score} pt\nCorrect flags {correct} · Normal passes {passed}{preview}\nPractice record using fictional events",
@@ -102,7 +102,9 @@ export const EN_UI = {
   最初からやり直す: "Restart",
   "本番AWSの顧客データ・監査ログを守る合成イベントの演習。カードのAPI引数（SDK形式の抜粋）と、対象・用途を読んで検知します。CloudTrailのログイン記録はAPI要求と区別して表示します。API名だけで危険と判定しません。":
     "Practice with synthetic events involving customer data and audit logs in a production AWS environment. Read each card’s API arguments (SDK-style excerpts), target, and purpose to spot suspicious activity. CloudTrail sign-in records are labeled separately from API requests. An API name alone does not make a request suspicious.",
-  "本番AWSを守る監視担当は、あなた。": "You’re on watch for a production AWS environment.",
+  "脅威検知サービスの気持ちになって、不審なAPIリクエストを弾き飛ばそう。":
+    "Think like a threat detection service and knock suspicious API requests away.",
+  "今日は、あなたがAPIの番人になるときだ。": "Today, it’s your turn to be the API guardian.",
   "表示した演習方針への適合を判断する学習ゲーム。正常例も安全の証明ではなく、実際のGuardDuty findingの有無・通信遮断は判定しません。":
     "Judge the displayed exercise policy. Passing is not proof of safety; this game does not determine whether GuardDuty creates a finding or block traffic.",
   "検知 ＋{points}": "Flagged +{points}",
