@@ -19,6 +19,7 @@ async function fixture(
     seed: string;
     failUp: string;
     failDown: string;
+    calls: string;
   }) => Promise<void>,
 ) {
   const data = mkdtempSync(join(tmpdir(), "tenka-docker-cleanup-synthetic-"));
@@ -26,9 +27,11 @@ async function fixture(
   mkdirSync(bin);
   const failUp = join(data, "fail-up");
   const failDown = join(data, "fail-down");
+  const calls = join(data, "docker-calls");
   writeFileSync(
     join(bin, "docker"),
     `#!/bin/sh
+echo "$*" >> ${JSON.stringify(calls)}
 case " $* " in
   *" up "*) if [ -f ${JSON.stringify(failUp)} ]; then exit 1; fi ;;
   *" down "*) if [ -f ${JSON.stringify(failDown)} ]; then exit 1; fi ;;
@@ -78,6 +81,7 @@ exit 0
       seed: join(directory, "problem-secrets.key"),
       failUp,
       failDown,
+      calls,
     });
   } finally {
     await verifier.stop(true);
@@ -132,3 +136,18 @@ for (const cleanupFails of [false, true]) {
     });
   });
 }
+
+test("resume brings back an environment whose stopped containers were removed", async () => {
+  await fixture(async (f) => {
+    await f.engine.start(f.job, (unit) => {
+      f.job.unit = unit;
+    });
+    await f.engine.pause(f.job);
+    writeFileSync(f.calls, "");
+    await f.engine.resume(f.job);
+    const calls = readFileSync(f.calls, "utf8").trim().split("\n");
+    // `compose restart` does nothing for removed containers; `up --no-recreate` creates them
+    // again and still starts surviving stopped containers in place.
+    expect(calls).toEqual([`compose -f ${f.compose} -p tch-synthetic-job up -d --no-recreate`]);
+  });
+});
