@@ -1,28 +1,30 @@
-import { loadCatalog } from "./api-catalog.js?v=50732f9215";
-import { CORRECT_PER_LEVEL, lessonForLevel } from "./curriculum.js?v=50732f9215";
+import { loadCatalog } from "./api-catalog.js?v=084aceea91";
+import { CORRECT_PER_LEVEL, lessonForLevel } from "./curriculum.js?v=084aceea91";
 import {
   collect,
   createGame,
+  enableRenderTracking,
   finish,
-  INPUT_GUARD_MS,
+  frameStep,
+  inputGuardFor,
   next,
   pause,
   resume,
   showLesson,
   start,
-  tickFrame as tick,
-} from "./engine.js?v=50732f9215";
-import { explanationCard } from "./explanation.js?v=50732f9215";
-import { decisionFact, reasonDuration } from "./feedback.js?v=50732f9215";
-import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=50732f9215";
-import { CARD_GAP, fieldCapacity } from "./layout.js?v=50732f9215";
-import { flowPositions } from "./motion.js?v=50732f9215";
-import { lessonNotice } from "./notices.js?v=50732f9215";
-import { clearSlices, pulseCombo, sliceCard } from "./paper-cut.js?v=50732f9215";
-import { createPaperSound } from "./paper-sound.js?v=50732f9215";
-import { loadQuestionLocale, questionView } from "./question-locales.js?v=50732f9215";
-import { buildShare } from "./share.js?v=50732f9215";
-import { formatSurvival } from "./time.js?v=50732f9215";
+  tickInput,
+} from "./engine.js?v=084aceea91";
+import { explanationCard } from "./explanation.js?v=084aceea91";
+import { decisionFact, reasonDuration, reviewEntries } from "./feedback.js?v=084aceea91";
+import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=084aceea91";
+import { CARD_GAP, fieldCapacity } from "./layout.js?v=084aceea91";
+import { flowPositions } from "./motion.js?v=084aceea91";
+import { lessonNotice } from "./notices.js?v=084aceea91";
+import { clearSlices, pulseCombo, sliceCard } from "./paper-cut.js?v=084aceea91";
+import { createPaperSound } from "./paper-sound.js?v=084aceea91";
+import { loadQuestionLocale, questionView } from "./question-locales.js?v=084aceea91";
+import { buildShare } from "./share.js?v=084aceea91";
+import { formatSurvival } from "./time.js?v=084aceea91";
 
 const $ = (id) => document.getElementById(id);
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
@@ -74,6 +76,7 @@ let catalog,
   epoch = 0,
   phase = "",
   lastTime = null,
+  lastFrameTime = null,
   seen = 0;
 const nodes = new Map();
 const newSeed = () => crypto.getRandomValues(new Uint32Array(1))[0];
@@ -105,9 +108,17 @@ function prepare(seed = newSeed(), begin = false) {
   activeGestureCancel?.();
   epoch++;
   state = createGame(catalog, seed);
+  enableRenderTracking(state, {
+    width: innerWidth,
+    height: innerHeight,
+    dpr: devicePixelRatio,
+    userAgent: navigator.userAgent,
+    reducedMotion: reduced.matches,
+  });
   state.maxCards = layoutCapacity();
   phase = "";
   lastTime = null;
+  lastFrameTime = null;
   seen = 0;
   nodes.clear();
   motion.clear();
@@ -130,6 +141,7 @@ function beginRound() {
   layoutKey = currentLayout();
   start(state);
   lastTime = null;
+  lastFrameTime = null;
   render();
 }
 function makeCard(item, previewing) {
@@ -255,7 +267,7 @@ function bindTap(node, suppress, beginTap) {
 }
 function updateNow() {
   const time = performance.now();
-  if (lastTime !== null) tick(state, Math.max(0, time - lastTime));
+  if (lastTime !== null) tickInput(state, Math.max(0, time - lastTime));
   lastTime = time;
 }
 function pick(uid, thisEpoch) {
@@ -289,6 +301,16 @@ function feedbackEffect(entry) {
   $("effects").replaceChildren(n);
   setTimeout(() => n.remove(), 900);
 }
+function updateCardInput(node, item) {
+  const disabled =
+    state.phase !== "playing" ||
+    item.presentationPending ||
+    state.elapsed - item.born < inputGuardFor(item) ||
+    item.y < 0;
+  if (node.disabled !== disabled) node.disabled = disabled;
+  const original = state.active.find((entry) => entry.uid === item.uid);
+  if (original?.renderTracked) original.renderedEligible = !disabled;
+}
 function positions(items, previewing) {
   const field = $("cards"),
     narrow = innerWidth <= 740;
@@ -319,9 +341,7 @@ function positions(items, previewing) {
     const node = nodes.get(String(item.uid));
     const x = ((item.slot % columns) * geometry.width) / columns + (narrow ? 0 : 9);
     node.style.transform = `translate3d(${x}px,${item.y}px,0)`;
-    const disabled =
-      state.phase !== "playing" || state.elapsed - item.born < INPUT_GUARD_MS || item.y < 0;
-    if (node.disabled !== disabled) node.disabled = disabled;
+    updateCardInput(node, item);
   }
 }
 function syncCards() {
@@ -350,7 +370,8 @@ function syncCards() {
     }
     const node = nodes.get(uid);
     if (changedLanguage) refreshCard(node, item.question);
-    const arriving = !previewing && state.elapsed - item.born < INPUT_GUARD_MS;
+    const arriving =
+      !previewing && !item.renderTracked && state.elapsed - item.born < inputGuardFor(item);
     attribute(node, "data-slot", String(item.slot));
     const slot = node.querySelector(".slot");
     if (slot.textContent !== String(item.slot + 1)) slot.textContent = String(item.slot + 1);
@@ -388,6 +409,7 @@ function officialLink(question) {
       updateNow();
       pause(state);
       lastTime = null;
+      lastFrameTime = null;
       render();
     }
   });
@@ -438,6 +460,7 @@ function explanation() {
     button(!state.lives ? tr("結果を見る") : tr("続ける"), () => {
       next(state);
       lastTime = null;
+      lastFrameTime = null;
       render();
     }),
   );
@@ -451,7 +474,12 @@ function review() {
   const root = $("review-list");
   root.replaceChildren();
   $("review").hidden = state.history.length === 0;
-  for (const e of [...state.history].reverse()) {
+  if (state.history.length > 50) {
+    const windowNote = document.createElement("p");
+    windowNote.textContent = tr("直近50件と誤答を表示");
+    root.append(windowNote);
+  }
+  for (const e of reviewEntries(state.history)) {
     const view = questionView(e.question, getLocale()),
       explanationView = explanationCard(e.question, getLocale());
     const article = document.createElement("article"),
@@ -523,15 +551,48 @@ function sharing() {
   note.textContent = tr("投稿はXで確認。開けないときはコピーできます。");
   $("overlay").append(note);
 }
+function measurementResult() {
+  if (state.end?.reason !== "measurement-limit") return;
+  const note = document.createElement("p");
+  note.textContent = tr("端末の表示・入力機会の測定上限です。判断ミスやAIの失敗ではありません。");
+  const details = document.createElement("details"),
+    summary = document.createElement("summary"),
+    data = document.createElement("pre");
+  summary.textContent = tr("測定条件と記録");
+  data.style.whiteSpace = "pre-wrap";
+  data.style.overflowWrap = "anywhere";
+  data.textContent = JSON.stringify(state.end.measurement, null, 2);
+  const method = document.createElement("p");
+  method.textContent =
+    state.end.measurement.terminalReason === "sustained-slow-frames"
+      ? tr(
+          "連続8回の大きな描画遅延の中央値を使い、3フレーム分の時間を確保できるか判定しました。比較時は端末・画面・ブラウザー・方法を揃えてください。",
+        )
+      : tr(
+          "描画間隔の直近60〜120件の90パーセンタイルを使い、3フレーム分の時間を確保できるか判定します。比較時は端末・画面・ブラウザー・方法を揃えてください。",
+        );
+  details.append(summary, method, data);
+  try {
+    localStorage.setItem(
+      "tenkacloud.api-watch.measurement.v1",
+      JSON.stringify(state.end.measurement),
+    );
+  } catch {
+    const unavailable = document.createElement("p");
+    unavailable.textContent = tr("端末に保存できません。表示中の測定記録を控えてください。");
+    details.append(unavailable);
+  }
+  $("overlay").append(note, details);
+}
 function result() {
-  if (state.elapsed > bestMs) {
+  if (state.end?.reason !== "measurement-limit" && state.elapsed > bestMs) {
     bestMs = state.elapsed;
     try {
       localStorage.setItem(BEST_KEY, String(bestMs));
     } catch {}
   }
   const actions = modal(
-    tr("今回の生存記録"),
+    state.end?.reason === "measurement-limit" ? tr("測定上限到達") : tr("今回の生存記録"),
     tr("正しい検知 {correct} ／ 正常通過 {passed} ／ ミス {mistakes} ／ Lv{level}", {
       correct: formatCount(state.correct),
       passed: formatCount(state.passed),
@@ -557,14 +618,16 @@ function result() {
     button(tr("もう一回"), () => prepare(newSeed(), true)),
     button(tr("同じ流れで復習"), () => prepare(seed, true), false),
   );
+  measurementResult();
   sharing();
   review();
   announce(
-    tr("結果。生存時間{time}。{score}点。正しい検知{correct}回。", {
-      time: duration(state.elapsed),
-      score: formatCount(state.score),
-      correct: formatCount(state.correct),
-    }),
+    (state.end?.reason === "measurement-limit" ? `${tr("測定上限到達")} · ` : "") +
+      tr("結果。生存時間{time}。{score}点。正しい検知{correct}回。", {
+        time: duration(state.elapsed),
+        score: formatCount(state.score),
+        correct: formatCount(state.correct),
+      }),
   );
 }
 function phaseContent() {
@@ -769,7 +832,14 @@ function render() {
   text("combo", state.combo >= 2 ? tr("{count}連続", { count: formatCount(state.combo) }) : "");
   cancelInactiveInput();
   text("survival", duration(state.elapsed));
-  text("personal-best", tr("BEST {time}", { time: duration(Math.max(bestMs, state.elapsed)) }));
+  text(
+    "personal-best",
+    tr("BEST {time}", {
+      time: duration(
+        state.end?.reason === "measurement-limit" ? bestMs : Math.max(bestMs, state.elapsed),
+      ),
+    }),
+  );
   renderLevel();
   text("lives", `${"♥".repeat(state.lives)}${"♡".repeat(3 - state.lives)}`);
   attribute($("lives"), "aria-label", tr("残りライフ{count}", { count: formatCount(state.lives) }));
@@ -792,6 +862,7 @@ function togglePause() {
   if (state.phase === "paused") resume(state);
   else pause(state);
   lastTime = null;
+  lastFrameTime = null;
   render();
 }
 $("pause").addEventListener("click", togglePause);
@@ -800,6 +871,7 @@ function pauseForRules() {
     updateNow();
     pause(state);
     lastTime = null;
+    lastFrameTime = null;
     render();
   }
 }
@@ -842,6 +914,7 @@ function backgroundPause() {
   if (!state || !["playing", "hitstop"].includes(state.phase)) return;
   pause(state);
   lastTime = null;
+  lastFrameTime = null;
   render();
 }
 document.addEventListener("visibilitychange", () => {
@@ -877,6 +950,7 @@ window.addEventListener("resize", () => {
     layoutBlocked = true;
     document.body.dataset.layoutBlocked = "true";
     lastTime = null;
+    lastFrameTime = null;
     layoutKey = key;
     phase = "";
     render();
@@ -892,6 +966,7 @@ window.addEventListener("resize", () => {
     layoutBlocked = false;
     document.body.removeAttribute("data-layout-blocked");
     lastTime = null;
+    lastFrameTime = null;
     phase = "";
   }
   layoutKey = key;
@@ -905,8 +980,23 @@ reduced.addEventListener("change", () => {
 });
 window.addEventListener("pagehide", backgroundPause);
 function frame(time) {
-  if (lastTime !== null) tick(state, Math.max(0, time - lastTime));
-  lastTime = time;
+  if (state.renderBudget.enabled) {
+    Object.assign(state.renderBudget.context, {
+      width: innerWidth,
+      height: innerHeight,
+      dpr: devicePixelRatio,
+      reducedMotion: reduced.matches,
+    });
+  }
+  if (lastFrameTime !== null)
+    frameStep(
+      state,
+      Math.max(0, time - (lastTime ?? time)),
+      !document.hidden,
+      Math.max(0, time - lastFrameTime),
+    );
+  lastFrameTime = time;
+  lastTime = Math.max(lastTime ?? time, time);
   if (["playing", "hitstop"].includes(state.phase) || phase !== state.phase) render();
   requestAnimationFrame(frame);
 }
@@ -947,6 +1037,7 @@ function pauseForLanguage() {
     updateNow();
     pause(state);
     lastTime = null;
+    lastFrameTime = null;
     render();
   }
 }
