@@ -18,12 +18,18 @@ test("Cloud Master loads the existing LP destination once with a locale-ready st
   expect(bootstrap).toContain('window.gtag("config", "G-6WQ914PCKT"');
   expect(bootstrap).toContain('page_title: tr("APIの番人。 | 目指せクラウドマスター")');
   expect(bootstrap).toContain("page_location: location.href");
+  expect(bootstrap).toContain("send_page_view: false");
+  expect(
+    [...bootstrap.matchAll(/window\.gtag\("event", "([^"]+)"/g)].map((match) => match[1]),
+  ).toEqual(["page_view"]);
   expect(bootstrap.match(/window\.gtag\("config"/g)).toHaveLength(1);
 });
 
 test("analytics does not add custom game events or override consent and opt-out controls", () => {
-  expect(bootstrap).toContain("window.dataLayer = window.dataLayer || []");
-  expect(bootstrap).not.toMatch(/user_id|user_properties|gtag\(['"]event|consent|ga-disable/);
+  expect(html).toContain("window.dataLayer = window.dataLayer || []");
+  expect(html).toContain("dataLayer.push(arguments)");
+  expect(html).toContain("window.gtag = window.gtag ||");
+  expect(bootstrap).not.toMatch(/user_id|user_properties|consent|ga-disable/);
   for (const path of ["game.js", "engine.js", "share.js"])
     expect(read(`cloud-master/${path}`)).not.toMatch(
       /gtag|dataLayer|google-analytics|googletagmanager/,
