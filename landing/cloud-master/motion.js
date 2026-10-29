@@ -1,4 +1,4 @@
-import { CARD_GAP } from "./layout.js?v=7ace2d323a";
+import { CARD_GAP } from "./layout.js?v=649cc787a2";
 
 // New arrivals queue behind older cards without moving those cards.
 // After a removal, ease toward the independent trajectory while respecting expiry.

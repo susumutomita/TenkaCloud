@@ -94,8 +94,11 @@ export const EN_UI = {
   同じ流れで復習: "Replay this sequence",
   "問題を読み込めませんでした・再試行": "Could not load exercises · Retry",
   得点: "Score",
-  "得点はカジュアルな練習記録。スキル認定ではありません。自己ベストと測定上限の記録を端末内に保存。追跡・AWSへの通信なし。":
-    "Scores are casual practice records, not skill certifications. Your personal best and last measurement-limit record are saved on this device. No tracking or communication with AWS.",
+  "得点はカジュアルな練習記録。スキル認定ではありません。自己ベストと測定上限の記録を端末内に保存。ゲームは実際のAWS操作を実行しません。":
+    "Scores are casual practice records, not skill certifications. Your personal best and last measurement-limit record are saved on this device. The game does not perform real AWS operations.",
+  "アクセス集計にGoogle Analyticsを使用。閲覧ページ・端末情報やスクロール・リンク等の自動計測をGoogle LLCへ送信し、Cookieを利用します。ゲーム独自の回答・得点イベントは追加しません。":
+    "Google Analytics uses cookies and sends page, device and automatic interaction measurements, such as scrolling and links, to Google LLC for traffic analysis. No custom game-answer or score events are added.",
+  プライバシーポリシー: "Privacy Policy",
   "投稿はXで確認。開けないときはコピーできます。":
     "Review your post on X. If X does not open, you can copy the result.",
   日本語に切り替え: "Switch to Japanese",

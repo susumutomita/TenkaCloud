@@ -155,7 +155,11 @@ make before-commit
 ```
 
 Existing Cloudflare Pages branch path and landing output remain. No main merge,
-Passport, hosting/access/security settings, tracking or paid services change.
+Passport, hosting/access/security settings or paid services change.
+The public game uses the same GA4 tag as the top LP, including its existing automatic
+measurements. It adds no custom gameplay events or identifiers; the bilingual
+privacy policy describes Google LLC, cookies and automatic collection. Browser
+settings and Google’s opt-out add-on remain applicable. No GA property settings change.
 Direct Pages and terminal documentation fetches previously received CONNECT403;
 those denied accesses are not retried/bypassed. Source review used available cached
 primary excerpts; deployment confirmation and exact-source local browser QA remain
