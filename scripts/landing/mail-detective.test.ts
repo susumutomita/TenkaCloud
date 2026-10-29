@@ -1,0 +1,345 @@
+import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { CASES } from "../../landing/mail-detective/cases.js";
+import { COPY } from "../../landing/mail-detective/copy.js";
+import {
+  advanceClock,
+  createClock,
+  progress,
+  ROUND_WINDOW_MS,
+} from "../../landing/mail-detective/deadline.js";
+import {
+  asciiDomain,
+  headerFacts,
+  originalHeaders,
+} from "../../landing/mail-detective/message-headers.js";
+import {
+  createRun,
+  currentCase,
+  end,
+  expire,
+  next,
+  reveal,
+  risks,
+  tap,
+  totals,
+} from "../../landing/mail-detective/model.js";
+import { cloudMasterFiles, cloudMasterVersion, stampCloudMasterFile } from "./stamp-asset-versions";
+
+describe("email difference game", () => {
+  test("starts playing directly with two different pairs and bounded progress", () => {
+    const run = createRun(() => 0.5);
+    expect(run.phase).toBe("playing");
+    expect(run.rounds).toHaveLength(2);
+    expect(new Set(run.rounds).size).toBe(2);
+    expect(totals(run)).toEqual({ found: 0, reviewed: 0, target: 6 });
+    expect(next(run)).toBe(run);
+    expect(tap(run, "unknown")).toBe(run);
+  });
+  test("all pairs have three consequential changes and two justified normal variations", () => {
+    expect(CASES).toHaveLength(5);
+    const patterns = new Set();
+    for (const item of CASES) {
+      expect(item.rows).toHaveLength(5);
+      expect(new Set(item.rows.map((row) => row.id)).size).toBe(5);
+      const riskRows = item.rows.filter((row) => row.kind === "risk");
+      expect(riskRows).toHaveLength(3);
+      expect(item.rows.filter((row) => row.kind === "benign")).toHaveLength(2);
+      patterns.add(
+        riskRows
+          .map((row) => row.id)
+          .sort()
+          .join(","),
+      );
+      for (const lang of ["ja", "en"]) {
+        expect(item.context[lang].length).toBeGreaterThan(20);
+        for (const row of item.rows) {
+          for (const key of ["label", "before", "after", "reason", "detail"])
+            expect(row[key][lang].length).toBeGreaterThan(1);
+          expect(row.before[lang]).not.toBe(row.after[lang]);
+        }
+      }
+    }
+    expect(patterns.size).toBe(4);
+  });
+  test("normal variations do not score or block the next attempt; repeated taps never double count", () => {
+    let run = createRun(() => 0);
+    const benign = currentCase(run).rows.find((row) => row.kind === "benign");
+    const initial = JSON.stringify(run);
+    const changed = tap(run, benign.id);
+    expect(JSON.stringify(run)).toBe(initial);
+    run = changed;
+    expect(run.phase).toBe("playing");
+    expect(totals(run).found).toBe(0);
+    expect(run.feedback.kind).toBe("benign");
+    const id = risks(run)[0].id;
+    for (let n = 0; n < 500; n++) run = tap(run, id);
+    expect(totals(run).found).toBe(1);
+    expect(run.feedback.fresh).toBe(false);
+    expect(run.checked[0]).toHaveLength(2);
+  });
+  test("completion requires all three and no double next can skip a round", () => {
+    let run = createRun(() => 0.1);
+    for (const row of risks(run)) run = tap(run, row.id);
+    expect(run.phase).toBe("round-complete");
+    run = next(run);
+    expect(run.index).toBe(1);
+    expect(next(run)).toBe(run);
+    for (const row of risks(run)) run = tap(run, row.id);
+    run = next(run);
+    expect(run.phase).toBe("results");
+    expect(totals(run)).toEqual({ found: 6, reviewed: 0, target: 6 });
+    expect(tap(run, risks(run)[0].id)).toBe(run);
+  });
+  test("showing answers is transparent and cannot turn reviewed spots into independent finds", () => {
+    let run = createRun(() => 0.2);
+    run = tap(run, risks(run)[0].id);
+    run = reveal(run);
+    for (const row of risks(run)) run = tap(run, row.id);
+    expect(totals(run)).toEqual({ found: 1, reviewed: 2, target: 6 });
+    expect(reveal(run)).toBe(run);
+    run = reveal(next(run));
+    run = next(run);
+    expect(totals(run)).toEqual({ found: 1, reviewed: 5, target: 6 });
+  });
+  test("finish early and fresh replay never pretend the learner completed unseen spots", () => {
+    const run = end(createRun(() => 0.3));
+    expect(run.phase).toBe("ended");
+    expect(totals(run).found).toBe(0);
+    expect(next(run)).toBe(run);
+    expect(reveal(run)).toBe(run);
+    expect(createRun(() => 0.4).phase).toBe("playing");
+  });
+  test("different random streams vary pairs and never repeat a pair within a play", () => {
+    const combinations = new Set();
+    for (let n = 0; n < 1000; n++) {
+      let seed = n + 1;
+      const random = () => {
+        seed = (1664525 * seed + 1013904223) >>> 0;
+        return seed / 2 ** 32;
+      };
+      const run = createRun(random);
+      combinations.add(run.rounds.join(","));
+      expect(new Set(run.rounds).size).toBe(2);
+    }
+    expect(combinations.size).toBe(4);
+    for (const value of [NaN, -1, 1, Infinity]) expect(() => createRun(() => value)).toThrow();
+  });
+  test("normal sender/path/request differences prevent memorising one universal dangerous row", () => {
+    const normalIds = CASES.flatMap((item) =>
+      item.rows.filter((row) => row.kind === "benign").map((row) => row.id),
+    );
+    for (const id of ["from", "link", "request"]) expect(normalIds).toContain(id);
+    const values = CASES.flatMap((item) =>
+      item.mailRows.flatMap((row) => [...Object.values(row.before), ...Object.values(row.after)]),
+    );
+    for (const value of values)
+      for (const url of value.matchAll(/https:\/\/([^/"\s]+)\//g)) {
+        expect(new URL(url[0]).hostname.endsWith(".example")).toBe(true);
+      }
+  });
+  test("bilingual copy has matching keys and no course, registration or timer gate", () => {
+    expect(Object.keys(COPY.ja).sort()).toEqual(Object.keys(COPY.en).sort());
+    const html = readFileSync(
+      join(import.meta.dir, "../../landing/mail-detective/index.html"),
+      "utf8",
+    );
+    const game = readFileSync(
+      join(import.meta.dir, "../../landing/mail-detective/game.js"),
+      "utf8",
+    );
+    expect(html).not.toMatch(/<input|<form|googletagmanager|analytics\.js/);
+    expect(html).toContain("connect-src 'none'");
+    expect(game).not.toMatch(
+      /fetch\(|XMLHttpRequest|sendBeacon|innerHTML|localStorage|setInterval|setTimeout/,
+    );
+    expect(game).toContain("let run = createRun()");
+    const css = readFileSync(
+      join(import.meta.dir, "../../landing/mail-detective/game.css"),
+      "utf8",
+    );
+    expect(css).toContain("prefers-reduced-motion:reduce");
+    expect(css).toContain("grid-template-columns:1fr");
+  });
+  test("the complete static module graph has one content hash and an LP link in each language", () => {
+    const dir = join(import.meta.dir, "../../landing/mail-detective");
+    const files = cloudMasterFiles(dir);
+    const version = cloudMasterVersion(files);
+    const html = readFileSync(join(dir, "index.html"), "utf8");
+    expect(html).toContain(`./game.js?v=${version}`);
+    expect(html).toContain(`./game.css?v=${version}`);
+    for (const [name, value] of Object.entries({ ...files, "index.html": html }))
+      expect(stampCloudMasterFile(value, name, files, version)).toBe(value);
+    expect(readFileSync(join(import.meta.dir, "../../landing/index.html"), "utf8")).toContain(
+      "./mail-detective/?lang=ja",
+    );
+    expect(readFileSync(join(import.meta.dir, "../../landing/index.en.html"), "utf8")).toContain(
+      "./mail-detective/?lang=en",
+    );
+  });
+});
+
+describe("natural email presentation", () => {
+  test("full messages retain all seven fields without changing the five authored decisions", () => {
+    for (const item of CASES) {
+      expect(item.mailRows.map((row) => row.id)).toEqual([
+        "from",
+        "subject",
+        "date",
+        "link",
+        "request",
+        "attachment",
+        "reply",
+      ]);
+      expect(item.rows).toHaveLength(5);
+      for (const row of item.rows)
+        expect(item.mailRows.find((full) => full.id === row.id)).toBe(row);
+    }
+  });
+  test("message inspection is collapsed initially and never contains real navigation or authentication fields", () => {
+    const source = readFileSync(
+      join(import.meta.dir, "../../landing/mail-detective/mail-view.js"),
+      "utf8",
+    );
+    expect(source).toContain("headers.hidden = !ui.address[side]");
+    expect(source).toContain("target.hidden = !ui.link[side]");
+    expect(source).toContain('"learner@practice.example"');
+    expect(source).not.toMatch(/href|window\.open|location\s*=|innerHTML|fetch\(/);
+    expect(source).toContain("ui.lastTarget !== content.id");
+    const css = readFileSync(
+      join(import.meta.dir, "../../landing/mail-detective/mail.css"),
+      "utf8",
+    );
+    expect(css).toContain(".email-card:not(.active-mobile){display:none}");
+    expect(css).toContain("grid-template-columns:minmax(0,1fr) minmax(0,1fr)");
+  });
+  test("language changes keep disclosures while moving to the next round clears them", () => {
+    const source = readFileSync(
+      join(import.meta.dir, "../../landing/mail-detective/game.js"),
+      "utf8",
+    );
+    const languageCode = source.slice(source.indexOf("function language("));
+    expect(languageCode).not.toContain("mailUI = freshView()");
+    expect(source).toContain("mailUI.address.received = true");
+    expect(source).toContain("mailUI.link.received = true");
+    expect(source).toContain("mailUI = freshView()");
+  });
+});
+
+describe("simulated mail authentication and IDN", () => {
+  test("a familiar pair precedes the look-alike pair without a lecture or a new scoring rule", () => {
+    for (let n = 1; n <= 40; n++) {
+      let seed = n;
+      const run = createRun(() => {
+        seed = (seed * 1664525 + 1013904223) >>> 0;
+        return seed / 2 ** 32;
+      });
+      expect(currentCase(run).advanced).not.toBe(true);
+      expect(run.rounds[1]).toBe("lookalike");
+      expect(totals(run).target).toBe(6);
+    }
+  });
+  test("SPF failure with aligned DKIM can pass DMARC, while unaligned passes cannot", () => {
+    const reference = headerFacts(
+      CASES.find((item) => item.id === "shared-file"),
+      "reference",
+    );
+    expect(reference.spf).toBe("fail");
+    expect(reference.dkim).toBe("pass");
+    expect(reference.signingDomain).toBe(reference.fromDomain);
+    expect(reference.dmarc).toBe("pass");
+    const unaligned = headerFacts(
+      CASES.find((item) => item.id === "account"),
+      "received",
+    );
+    expect(unaligned.spf).toBe("pass");
+    expect(unaligned.dkim).toBe("pass");
+    expect(unaligned.signingDomain).not.toBe(unaligned.fromDomain);
+    expect(unaligned.envelopeDomain).not.toBe(unaligned.fromDomain);
+    expect(unaligned.dmarc).toBe("fail");
+  });
+  test("look-alike authentication passes for its own distinct domain without proving safety", () => {
+    const item = CASES.find((entry) => entry.id === "lookalike");
+    const from = item.mailRows.find((row) => row.id === "from").after.en;
+    expect(from).toContain("\u0430");
+    const facts = headerFacts(item, "received");
+    expect(facts.fromDomain).toBe("xn--minmo-6ve.example");
+    expect(facts.fromDomain).not.toBe("minamo.example");
+    expect(facts.signingDomain).toBe(facts.fromDomain);
+    expect(facts.dmarc).toBe("pass");
+    expect(asciiDomain("minаmo.example")).toBe(facts.fromDomain);
+    expect(asciiDomain("日本語.example")).toStartWith("xn--");
+    for (const lang of ["ja", "en"]) {
+      const headers = originalHeaders(item, "received", lang);
+      for (const field of [
+        "Authentication-Results: mx.practice.example;",
+        "From:",
+        "Reply-To:",
+        "Return-Path:",
+        "header.d=",
+        "header.from=",
+      ])
+        expect(headers).toContain(field);
+      expect(headers).not.toContain("DKIM-Signature:");
+    }
+  });
+  test("authentication results are authored observations, with no DNS, mail or external lookups", () => {
+    const source = readFileSync(
+      join(import.meta.dir, "../../landing/mail-detective/message-headers.js"),
+      "utf8",
+    );
+    expect(source).not.toMatch(/fetch\(|XMLHttpRequest|sendBeacon|innerHTML|href\s*=|window\.open/);
+    expect(source).toContain("panel.hidden = !ui.original[side]");
+    expect(source).toContain("An identically named header");
+    expect(source).toContain("Internationalized domains are not inherently dangerous");
+  });
+});
+
+describe("automatic-processing deadline prototype", () => {
+  test("active presented frames reach the boundary once, without a numeric countdown", () => {
+    let clock = createClock(0);
+    for (let now = 100; now <= ROUND_WINDOW_MS; now += 100) clock = advanceClock(clock, now, true);
+    expect(progress(clock)).toBe(1);
+    expect(advanceClock(clock, ROUND_WINDOW_MS + 100, true).elapsed).toBe(ROUND_WINDOW_MS);
+    expect(progress(createClock())).toBe(0);
+  });
+  test("inspection/background time, invalid timestamps and suspended frames never spend the window", () => {
+    let clock = advanceClock(createClock(), 500, true);
+    clock = advanceClock(clock, 90_000, false);
+    clock = advanceClock(clock, 90_100, true);
+    expect(clock.elapsed).toBe(600);
+    clock = advanceClock(clock, 180_100, true);
+    expect(clock.elapsed).toBe(600);
+    expect(advanceClock(clock, NaN, true)).toBe(clock);
+    expect(advanceClock(clock, Infinity, true)).toBe(clock);
+    expect(advanceClock(clock, 0, true).elapsed).toBe(600);
+  });
+  test("timeout preserves independent finds, reveals misses, blocks late input and is idempotent", () => {
+    let run = createRun(() => 0.4);
+    run = tap(run, risks(run)[0].id);
+    run = expire(run);
+    expect(run.phase).toBe("timed-out");
+    expect(totals(run)).toEqual({ found: 1, reviewed: 2, target: 6 });
+    expect(expire(run)).toBe(run);
+    expect(next(run)).toBe(run);
+    expect(tap(run, risks(run)[1].id)).toBe(run);
+    expect(reveal(run)).toBe(run);
+    let completed = createRun(() => 0.5);
+    for (const row of risks(completed)) completed = tap(completed, row.id);
+    expect(expire(completed)).toBe(completed);
+    expect(expire(end(createRun(() => 0.2))).phase).toBe("ended");
+    expect(createClock(123).elapsed).toBe(0);
+  });
+});
+
+test("input timestamps followed by an older RAF never rewind or double count the clock", () => {
+  let clock = createClock(100000);
+  clock = advanceClock(clock, 100020, true);
+  expect(clock.elapsed).toBe(20);
+  clock = advanceClock(clock, 100016, true);
+  expect(clock.last).toBe(100020);
+  expect(clock.elapsed).toBe(20);
+  clock = advanceClock(clock, 100033, true);
+  expect(clock.elapsed).toBe(33);
+});

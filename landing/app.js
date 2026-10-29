@@ -274,6 +274,11 @@
         "ローカル開催は SQLite で動き、AWS アカウントは不要です。LAN や Tailscale 越しに別の端末から参加できます。接続条件と Docker 問題の利用条件は起動ガイドで確認してください。",
       "uc.e.more": "起動ガイド",
       "uc.e.moreHref": "/docs/getting-started/#local-start",
+      "mailGame.h": "その違い、危険につながる？",
+      "mailGame.p":
+        "2つのメールを見比べる、短い間違いさがし。まず遊んで、押した場所で理由を知る。登録不要です。",
+      "mailGame.cta": "メールの間違いさがしで遊ぶ →",
+      "mailGame.href": "./mail-detective/?lang=ja",
       "uc.f.role": "定着の確認",
       "uc.f.h": "繰り返して、定着を確かめる。",
       "uc.f.p":
@@ -565,6 +570,11 @@
         "Local hosting runs on SQLite and needs no AWS account. Participants can join from other devices over the LAN or Tailscale. Check the startup guide for connection and Docker problem requirements.",
       "uc.e.more": "Startup guide",
       "uc.e.moreHref": "/docs/getting-started/index.en.html#local-start",
+      "mailGame.h": "Which difference brings a risk?",
+      "mailGame.p":
+        "Compare two emails in a short spot-the-difference game. Play first, then discover the reason where you tap. No registration.",
+      "mailGame.cta": "Play spot the risky difference →",
+      "mailGame.href": "./mail-detective/?lang=en",
       "uc.f.role": "Checking retention",
       "uc.f.h": "Repeat rounds to check retention.",
       "uc.f.p":
