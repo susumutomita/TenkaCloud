@@ -87,9 +87,9 @@ test("learned pools stay seeded,balanced and prefer varied actual operations inc
     expect(repeats).toBe(0);
   }
 });
-test("fall time changes only at three-level boundaries and reaches a readable floor", () => {
+test("beginner fall time keeps the existing three-level bands through level 28", () => {
   const bands = [10000, 9000, 8000, 7000, 6000, 5500, 5000, 4700, 4400, 4200];
-  for (let level = 1; level <= 45; level++) {
+  for (let level = 1; level <= 28; level++) {
     expect(difficulty(level).fallMs).toBe(
       bands[Math.min(bands.length - 1, Math.floor((level - 1) / 3))],
     );

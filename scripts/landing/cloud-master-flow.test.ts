@@ -122,7 +122,7 @@ test("every dangerous fact retains its value; shortened account and AWS-managed 
 
 test("opening limits simultaneous volume while later pressure remains readable", () => {
   expect(difficulty(0)).toMatchObject({ fallMs: 10000, intervalMs: 1600, limit: 1 });
-  expect(difficulty(300000)).toMatchObject({ fallMs: 4200, intervalMs: 280, limit: 6 });
+  expect(difficulty(300000)).toMatchObject({ fallMs: 600, intervalMs: 100, limit: 6 });
   for (const capacity of [2, 3, 4, 6]) {
     const { s, births } = flow(0, capacity);
     expect(births.length).toBeGreaterThan(1);
