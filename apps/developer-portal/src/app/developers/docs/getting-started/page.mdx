@@ -55,9 +55,9 @@ Share only a dedicated event host. Participants do not need to join the organize
 
 **Organizer preparation**
 
-1. Install Tailscale from the [official download](https://tailscale.com/download) on an approved dedicated host. Sign in with the approved event account. Record the selected tailnet, host name and its own IPv4; compare `tailscale ip -4` and `tailscale status`. For a VM, use the VM's own address.
+1. Install Tailscale 1.104.4 or newer from the [official download](https://tailscale.com/download) on an approved dedicated host. Sign in with the approved event account. Record the selected tailnet, host name and its own IPv4; compare `tailscale ip -4` and `tailscale status`. Confirm the client and local `tailscaled` with `tailscale version --daemon`. For a VM, use the VM's own address.
 2. Agree with each participant on their sign-in method, account and receiving tailnet. Issuing and accepting shares requires Owner / Admin / IT admin privileges in the respective tailnets. Check the selected identity when personal and company accounts coexist.
-3. Administrators on both sides review effective [grants](https://tailscale.com/docs/features/access-control/grants) / [ACLs](https://tailscale.com/docs/features/access-control/acls). Scope access from the receiving user to the dedicated host's TCP 5175. Only for Docker exercise gateways, also scope the configured `--gateway-ports` TCP range, default 5200–5239. Do not permit 5174, SSH, unnecessary services or raw container ports. Adding a narrow permission does not constrain an existing broader allowance.
+3. Administrators on both sides review effective [grants](https://tailscale.com/docs/features/access-control/grants) / [ACLs](https://tailscale.com/docs/features/access-control/acls). Scope access from the receiving user to the dedicated host's TCP 5175. Only for Docker exercise gateways, also scope the configured `--gateway-ports` TCP range, default 5200–5239. Do not permit 5174, SSH, unnecessary services or raw container ports. Adding a narrow permission does not constrain an existing broader allowance. Replace any allow-all rule that still covers invited users, using [Tailscale 1.104.4, forwarding and policy](#tailscale-client-security).
 4. In Machines, verify the event host name and IP, then use Share → Copy invite link → Copy share link to issue an individual single-use invitation. Leave reusable links disabled. Give its link only to the intended recipient: it grants access. Sharing exposes a machine, not a guaranteed single port. Read the [official sharing rules](https://tailscale.com/docs/features/sharing).
 
 **First-time participant preparation**
@@ -87,6 +87,52 @@ Expect health `status: ok` / `role: participant`, successful TCP 5175 and unreac
 Start the event after everyone connects. Check native actions and scores; for Docker, use the portal-issued gateway URL to reach that team’s exercise. Check correct/incorrect submissions and hints where the problem supports them. End Event stops scoring; preserve needed results. Use Stop (keep data) to retain environments, then have the organizer stop the host through the maintenance procedure. Before selecting Teardown, confirm the deletion target and data impact.
 
 Finally, the organizer uses the event host's Share dialog to Revoke invite for the recipient and cancel unused invitations. Verify in the Share dialog that the recipient and unused invitations are revoked. Failed participant reconnection is a supplementary check: failure after host shutdown alone does not prove revocation. This revokes sharing without deleting someone else's device. Joining again requires a fresh invitation and acceptance. Use a recipient-side removal menu only after verifying its target and scope; do not confuse it with generic Remove machine.
+
+<h2 id="tailscale-client-security">Tailscale 1.104.4, forwarding and policy</h2>
+
+TenkaCloud does not install Tailscale, and this repository does not pin it in a container image, install script or IaC module. Install [1.104.4 or newer](https://tailscale.com/changelog) on the event host and on each participant device. `tailscale version` prints the client. `tailscale version --daemon` also prints local `tailscaled`. Require 1.104.4 or newer for both. That release fixes [TS-2026-014](https://tailscale.com/security-bulletins), [TS-2026-015](https://tailscale.com/security-bulletins), [TS-2026-016](https://tailscale.com/security-bulletins) and [TS-2026-017](https://tailscale.com/security-bulletins). Tailscale explains the findings in [Tailscale SSH: Findings and fixes](https://tailscale.com/blog/tailscale-ssh-findings-fixes).
+
+The participant path is HTTP on TCP 5175. Add the configured gateway range only while a Docker exercise is running. Leave Tailscale SSH off. `tailscale set --ssh` defaults to false; if SSH was enabled, run `tailscale set --ssh=false`. On the event host, set `TS_SSH_DISABLE_FORWARDING=1` in the `tailscaled` service environment and restart `tailscaled` before participants connect. [TS-2026-014](https://tailscale.com/security-bulletins) reports that Unix-socket forwarding ran as root, so an authorized peer could reach root-only sockets such as the Docker socket or the `tailscaled` local API. The variable disables forwarding and leaves Tailscale SSH itself available. Restarting `tailscaled` drops tailnet connectivity until the node returns; then compare `tailscale ip -4` again. Do not point `tailscale serve` at the Docker socket or the local API socket, and leave `TS_SERVE_ALLOW_ALL_INTERFACES` unset.
+
+The documented flow does not enable Tailscale SSH or Tailscale Serve. Those four bulletins apply to nodes where the named feature is on. The event host may still have a Docker socket, and turning SSH on later meets the condition in TS-2026-014. Set the version and the forwarding variable before the event.
+
+Disabling forwarding stops `ssh -L`, `ssh -R`, Unix-socket forwarding and agent forwarding through Tailscale SSH. This procedure does not use them. An organizer who uses those forwards for their own administration loses them until the variable is removed.
+
+On systemd, put the variable in a drop-in, reload and restart. On another installer, set the same variable in the environment that starts `tailscaled`, then restart that service.
+
+```ini
+# /etc/systemd/system/tailscaled.service.d/50-disable-ssh-forwarding.conf
+[Service]
+Environment=TS_SSH_DISABLE_FORWARDING=1
+```
+
+```sh
+sudo systemctl daemon-reload
+sudo systemctl restart tailscaled
+```
+
+Sharing shows the recipient only the shared machine. The tailnet policy still chooses which ports on that machine answer. The default policy allows every port. Adding a narrow grant does not remove a broader allow that remains. On a dedicated event tailnet, replace the allow-all rule. Give `autogroup:shared` only TCP 5175, and TCP 5200–5239 only when Docker gateways are used. Keep the organizer's own access in a separate grant, for example `autogroup:admin`. Do not add an `ssh` rule for participants or for a tag on the event host. Tailscale documents that a user can SSH to a tagged device shared with them when an SSH rule and port 22 are both allowed. Leave the default SSH destination as `autogroup:self`.
+
+```json
+{
+  "grants": [
+    {
+      "src": ["autogroup:admin"],
+      "dst": ["*"],
+      "ip": ["*"]
+    },
+    {
+      "src": ["autogroup:shared"],
+      "dst": ["*"],
+      "ip": ["5175"]
+    }
+  ]
+}
+```
+
+Bare port numbers in `ip` are TCP, matching Tailscale's [sharing example](https://tailscale.com/docs/features/sharing). Add `"5200-5239"` to the shared grant only for Docker gateways. This fragment is not a complete policy. Keep the default `ssh` rule's `dst` as `autogroup:self`, remove any `*` or `*:*` allow that still includes invited users, and add a [policy test](https://tailscale.com/docs/reference/syntax/policy-file) that the invited user is denied `:22` and `:5174` and accepted on `:5175`. `autogroup:member` includes invited users when the destination device is shared with them.
+
+This repository does not install or configure headscale. Use Tailscale's control plane for an event. The bulletins above do not name a patched headscale release. The [headscale 0.29.6 changelog](https://github.com/juanfont/headscale/blob/main/CHANGELOG.md) (2026-10-24) records a Tailscale Go dependency bump to v1.102.0 and does not mention TS-2026-014 through TS-2026-017. That dependency is the control server's library. Nodes run their own Tailscale client. The public [Tailworm report](https://tailworm.com/) is not a Tailscale bulletin. It says headscale 0.29.5 attaches forwarding to every accepted SSH session, with no policy switch to turn forwarding off, and it describes unauthenticated availability issues in that server. Do not grant Tailscale SSH on a headscale network until that project publishes a fix. Nodes on Tailscale 1.104.4 or newer still need the client upgrade and `TS_SSH_DISABLE_FORWARDING=1`.
 
 <h2 id="changed-host-ip">When the event host IP changes</h2>
 

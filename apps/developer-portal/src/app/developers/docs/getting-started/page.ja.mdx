@@ -55,9 +55,9 @@ make local LOCAL_ARGS="--lan 100.96.12.34 --unsafe-lan --unsafe-docker-lan"
 
 **主催者の準備**
 
-1. 共有を許可された専用端末を用意し、[公式ダウンロード](https://tailscale.com/download)から Tailscale を導入します。開催用に承認されたアカウントでログインし、選択中の tailnet、開催端末名、自 IPv4 を記録します。端末では `tailscale ip -4` と `tailscale status` で照合できます。VM なら VM 自身の IP を使います。
+1. 共有を許可された専用端末を用意し、[公式ダウンロード](https://tailscale.com/download)から Tailscale 1.104.4 以降を導入します。開催用に承認されたアカウントでログインし、選択中の tailnet、開催端末名、自 IPv4 を記録します。端末では `tailscale ip -4` と `tailscale status` で照合できます。`tailscale version --daemon` でクライアントと手元の `tailscaled` が 1.104.4 以降であることを確認します。VM なら VM 自身の IP を使います。
 2. 参加者と、共有を受けるログイン方法・アカウント・参加者自身の tailnet を事前に確認します。共有の発行・承認には、それぞれの tailnet の Owner / Admin / IT admin 権限が必要です。個人用と会社用がある場合、同じ名前でも選択先を確認します。
-3. 開催側と参加側の管理者が [grants](https://tailscale.com/docs/features/access-control/grants) / [ACL](https://tailscale.com/docs/features/access-control/acls) の有効な許可をレビューします。共有先ユーザーから専用開催端末への TCP 5175 を対象にし、Docker の演習 gateway を使う場合だけ、設定した `--gateway-ports` の TCP 範囲も対象にします。既定は 5200–5239 です。5174、SSH、不要なサービスや生のコンテナ port は許可しません。既存の広い許可が残っていれば、狭い許可を追加するだけでは制限できません。
+3. 開催側と参加側の管理者が [grants](https://tailscale.com/docs/features/access-control/grants) / [ACL](https://tailscale.com/docs/features/access-control/acls) の有効な許可をレビューします。共有先ユーザーから専用開催端末への TCP 5175 を対象にし、Docker の演習 gateway を使う場合だけ、設定した `--gateway-ports` の TCP 範囲も対象にします。既定は 5200–5239 です。5174、SSH、不要なサービスや生のコンテナ port は許可しません。既存の広い許可が残っていれば、狭い許可を追加するだけでは制限できません。招待ユーザーを含む allow-all は、[Tailscale 1.104.4、転送の無効化とポリシー](#tailscale-client-security) に従って置き換えます。
 4. 管理画面の Machines で開催端末の名前と IP を確認し、Share → Copy invite link → Copy share link から、参加者ごとに単発の招待を発行します。再利用リンクは選びません。招待リンクは接続権を与えるため、本人にだけ渡します。共有は端末へのアクセスを渡す仕組みで、単一 port の公開保証ではありません。[共有の公式仕様](https://tailscale.com/docs/features/sharing)を確認してください。
 
 **初参加者の準備と接続**
@@ -87,6 +87,52 @@ health は `status: ok` / `role: participant`、5175 は接続成功、5174 は�
 全員の接続を確認してから大会を開始します。native 問題は操作と得点、Docker 問題はポータルが発行した gateway URL から自チームの演習への接続を確認します。正答・誤答・ヒントは対応する問題で確認します。終了時は End Event で採点を止め、必要な結果を保存します。環境を残すなら Stop (keep data) で停止し、主催者が保守手順に沿って host を停止します。削除を選ぶ場合は Teardown の対象とデータ消去を先に確認します。
 
 最後に主催者が対象端末の Share 画面から対象者の Revoke invite を実行し、未使用の招待も取り消します。Share 画面で対象者と未使用招待が失効したことを確認します。参加者の再接続失敗は補助確認です。host 停止による接続失敗だけでは共有失効の証明になりません。これは共有の失効で、他人の端末本体を削除する操作ではありません。再参加には新しい招待と承認が必要です。受信側の解除メニューは実画面の対象・影響を確認してから使い、一般の Remove machine と混同しません。
+
+<h2 id="tailscale-client-security">Tailscale 1.104.4、転送の無効化とポリシー</h2>
+
+TenkaCloud は Tailscale を導入しません。このリポジトリのコンテナーイメージ、導入スクリプト、IaC でも版を固定しません。開催端末と参加者の端末へ [1.104.4 以降](https://tailscale.com/changelog)を入れてください。`tailscale version` はクライアントを表示します。`tailscale version --daemon` は手元の `tailscaled` も表示します。両方を 1.104.4 以降にします。この版で [TS-2026-014](https://tailscale.com/security-bulletins)、[TS-2026-015](https://tailscale.com/security-bulletins)、[TS-2026-016](https://tailscale.com/security-bulletins)、[TS-2026-017](https://tailscale.com/security-bulletins) が修正されています。Tailscale の説明は [Tailscale SSH: Findings and fixes](https://tailscale.com/blog/tailscale-ssh-findings-fixes) です。
+
+文書どおりの参加経路は TCP 5175 の HTTP です。設定した gateway の範囲は、Docker 演習の使用中だけ追加します。Tailscale SSH は無効のままにします。`tailscale set --ssh` の既定は無効です。有効になっている場合は `tailscale set --ssh=false` を実行します。開催端末では、`tailscaled` のサービス環境に `TS_SSH_DISABLE_FORWARDING=1` を設定し、参加者を接続させる前に `tailscaled` を再起動します。[TS-2026-014](https://tailscale.com/security-bulletins) は、Unix ソケットの転送が root で実行され、許可された対向が Docker ソケットや `tailscaled` の local API など root 専用ソケットへ到達できた、と報告しています。この環境変数は Tailscale SSH 自体を止めずに転送を止めます。再起動の間は tailnet が切れます。復帰後に `tailscale ip -4` を再度照合します。`tailscale serve` を Docker ソケットや local API ソケットへ向けず、`TS_SERVE_ALLOW_ALL_INTERFACES` は未設定のままにします。
+
+文書どおりの手順は Tailscale SSH も Tailscale Serve も有効にしません。上の 4 件の対象は、名前のある機能を有効にしたノードです。開催端末が Docker ソケットを持つことはあり、後から SSH を有効にすると TS-2026-014 の条件に入ります。大会の前に版と転送の環境変数を揃えます。
+
+転送を止めると、Tailscale SSH の `ssh -L`、`ssh -R`、Unix ソケット転送、エージェント転送は使えなくなります。この手順はそれらを使いません。開催者が自分の管理作業で転送を使っている場合は、変数を外すまで使えません。
+
+systemd では drop-in に変数を書き、再読み込みして再起動します。他の導入方法では、`tailscaled` を起動する環境に同じ変数を入れて、そのサービスを再起動します。
+
+```ini
+# /etc/systemd/system/tailscaled.service.d/50-disable-ssh-forwarding.conf
+[Service]
+Environment=TS_SSH_DISABLE_FORWARDING=1
+```
+
+```sh
+sudo systemctl daemon-reload
+sudo systemctl restart tailscaled
+```
+
+共有は、相手に見せる端末を共有した端末に限る仕組みです。その端末のどの port が応答するかは tailnet の policy が決めます。既定の policy は全 port を許可します。狭い grant を足すだけでは、残っている広い許可は消えません。専用の開催 tailnet では allow-all を置き換え、`autogroup:shared` には TCP 5175 だけを渡します。Docker の gateway を使うときだけ TCP 5200–5239 も足します。開催者自身の通信は `autogroup:admin` のような別の grant に残します。参加者向け、および開催端末の tag 向けの `ssh` 規則は足しません。Tailscale は、共有された tag 付き端末へ、SSH 規則と port 22 の両方が許すときに SSH できる、と説明しています。既定の SSH の宛先 `autogroup:self` は変えないでください。
+
+```json
+{
+  "grants": [
+    {
+      "src": ["autogroup:admin"],
+      "dst": ["*"],
+      "ip": ["*"]
+    },
+    {
+      "src": ["autogroup:shared"],
+      "dst": ["*"],
+      "ip": ["5175"]
+    }
+  ]
+}
+```
+
+`ip` にポート番号だけを書くと TCP です。書き方は [共有の公式例](https://tailscale.com/docs/features/sharing) に合わせています。Docker gateway を使うときだけ、共有側の `ip` に `"5200-5239"` を足します。この断片は完全な policy ではありません。既定の `ssh` 規則の `dst` は `autogroup:self` のままにし、招待ユーザーを含む `*` や `*:*` の許可を消し、[policy test](https://tailscale.com/docs/reference/syntax/policy-file) で招待ユーザーの `:22` と `:5174` が拒否され `:5175` が許可されることを確認します。`autogroup:member` は、宛先端末がそのユーザーへ共有されているとき、招待ユーザーも含みます。
+
+このリポジトリは headscale を導入も設定もしません。大会の制御プレーンには Tailscale を使います。上記の bulletin は、修正済み headscale の版を示していません。[headscale 0.29.6 の changelog](https://github.com/juanfont/headscale/blob/main/CHANGELOG.md)（2026-10-24）は、Tailscale の Go 依存を v1.102.0 へ上げた記録があり、TS-2026-014 から TS-2026-017 には触れていません。この依存は制御サーバーのライブラリです。ノードは自分の Tailscale クライアントで動作します。公開されている [Tailworm の報告](https://tailworm.com/) は Tailscale の bulletin ではありません。報告は、headscale 0.29.5 では受理した SSH セッションに転送が付き、policy で転送を切れないと述べ、そのサーバーの認証前の可用性の問題も記述しています。headscale 側が修正を出すまで、headscale 上で Tailscale SSH を許可しないでください。Tailscale 1.104.4 以降のノードでも、クライアントの更新と `TS_SSH_DISABLE_FORWARDING=1` は必要です。
 
 <h2 id="changed-host-ip">開催端末の IP が変わったとき</h2>
 

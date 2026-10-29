@@ -49,7 +49,7 @@ AskUserQuestion で、次の 4 つから選んでもらう。1 で Codespaces �
 
 ## 4. LAN か Tailscale で開催する
 
-1. 待受 IP を決める。Tailscale なら `tailscale ip -4` の値を使う。LAN なら、この PC のプライベート IPv4 を利用者と確かめる。`--lan` が受け付けるのは 10.0.0.0/8、172.16.0.0/12、192.168.0.0/16、100.64.0.0/10 の IPv4 で、`0.0.0.0` は受け付けない。
+1. 待受 IP を決める。Tailscale なら `tailscale ip -4` の値を使う。LAN なら、この PC のプライベート IPv4 を利用者と確かめる。`--lan` が受け付けるのは 10.0.0.0/8、172.16.0.0/12、192.168.0.0/16、100.64.0.0/10 の IPv4 で、`0.0.0.0` は受け付けない。Tailscale を使う前に、`tailscale version --daemon` でクライアントと手元の `tailscaled` が 1.104.4 以降であることを利用者に確認してもらう。古い場合は公式の更新手順を示し、了承を得てから更新する。開催端末では、大会の前に `tailscaled` の環境変数 `TS_SSH_DISABLE_FORWARDING=1` を設定して `tailscaled` を再起動する手順を示す。再起動はエージェントが実行しない。Tailscale SSH は有効にしない（`tailscale set --ssh` の既定は false）。ACL の書き換えも実行しない。版、転送の無効化、`autogroup:shared` の許可例は getting-started の「Tailscale 1.104.4、転送の無効化とポリシー」（`id="tailscale-client-security"`）にある。
 2. `--unsafe-lan` の意味を伝える。通信は暗号化しない HTTP になる。信頼できる隔離されたネットワークでだけ使い、インターネットへポートを転送しない。
 3. 開けるポートを伝える。参加者向けの TCP 5175 を開ける。Docker 演習を使うときだけ、TCP 5200-5239 (`--gateway-ports` の既定値) も開ける。5174 は開けない。主催者コンソールは `127.0.0.1` だけで待ち受け、主催者はこの PC で `http://127.0.0.1:5174/` を開く。
 4. firewall と Tailscale の ACL・共有は、手順を示すだけにする。Tailscale の手順は、`apps/developer-portal/src/app/developers/docs/getting-started/page.ja.mdx` の「Tailscale 未接続の端末から参加する」節にある。英語版は `apps/developer-portal/src/app/developers/docs/getting-started/page.mdx` である。

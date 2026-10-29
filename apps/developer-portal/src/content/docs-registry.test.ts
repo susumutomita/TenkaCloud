@@ -433,6 +433,31 @@ describe("integration candidate documentation contract", () => {
     }
   });
 
+  it("should require Tailscale 1.104.4 and disabled SSH forwarding for remote participation", () => {
+    for (const filename of ["page.mdx", "page.ja.mdx"]) {
+      const source = readFileSync(`src/app/developers/docs/getting-started/${filename}`, "utf8");
+      expect(source).toContain('id="tailscale-client-security"');
+      expect(source).toContain("1.104.4");
+      expect(source).toContain("TS_SSH_DISABLE_FORWARDING=1");
+      expect(source).toContain("TS-2026-014");
+      expect(source).toContain("autogroup:shared");
+      expect(source).toContain("headscale");
+      expect(source).toContain("tailscale version --daemon");
+    }
+    const page = findDocBySlug("getting-started");
+    expect(page?.body).toContain("1.104.4");
+    expect(page?.body).toContain("TS_SSH_DISABLE_FORWARDING");
+    expect(page?.headings.some((heading) => heading.id === "tailscale-client-security")).toBe(true);
+    for (const filename of ["page.mdx", "page.ja.mdx"]) {
+      const pack = readFileSync(
+        `src/app/developers/docs/operate/use-existing-pack/${filename}`,
+        "utf8",
+      );
+      expect(pack).toContain("1.104.4");
+      expect(pack).toContain("#tailscale-first-connection");
+    }
+  });
+
   it("should stop advertising executable legacy hosting in current search metadata", () => {
     for (const slug of [
       "getting-started",

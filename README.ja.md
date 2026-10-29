@@ -84,6 +84,8 @@ Claude Code があれば、clone したリポジトリで `claude` を起動し�
 
 まず同じ PC で起動・参加・得点を確認します。別端末からは、接続済みの開催端末自身の Tailscale IPv4 を指定して起動します。初参加者のアプリ導入・アカウントの照合・専用端末共有・権限確認は [初回接続の手順](https://tenkacloud.com/docs/getting-started/#tailscale-first-connection) に従います。会社の tailnet や端末を承認なしに共有しないでください。
 
+開催端末と参加者の端末は Tailscale 1.104.4 以降にします。`tailscale version --daemon` で表示された版と手元の `tailscaled` を確認します。文書どおりの参加は TCP 5175 の HTTP で、Tailscale SSH と Tailscale Serve は使いません。大会の前に、開催端末の `tailscaled` へ `TS_SSH_DISABLE_FORWARDING=1` を設定して再起動し、参加者が TCP 5175 以外へ到達できる allow-all を置き換えます。Docker 演習を使うときだけ、設定済み gateway の範囲も許可します。手順、許可の例、headscale を開催に使わない理由は [セキュリティ注記](https://tenkacloud.com/docs/getting-started/#tailscale-client-security) にあります。
+
 ```bash
 make local LOCAL_ARGS="--lan $(tailscale ip -4) --unsafe-lan"
 ```
