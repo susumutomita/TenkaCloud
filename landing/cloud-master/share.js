@@ -1,5 +1,5 @@
-import { tr } from "./i18n.js?v=084aceea91";
-import { formatSurvival } from "./time.js?v=084aceea91";
+import { tr } from "./i18n.js?v=7ace2d323a";
+import { formatSurvival } from "./time.js?v=7ace2d323a";
 
 const PREVIEW_ORIGIN = "https://feat-cloud-master-game.tenkacloud-www.pages.dev";
 const PRODUCTION_HOSTS = new Set([

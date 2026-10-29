@@ -1,18 +1,18 @@
-import { LESSON_GRACE_MS, LESSON_NOTICE_MS, LESSONS } from "./curriculum.js?v=084aceea91";
+import { LESSON_GRACE_MS, LESSON_NOTICE_MS, LESSONS } from "./curriculum.js?v=7ace2d323a";
 import {
   createQuestionStream,
   difficulty,
   levelFor,
   nextQuestion,
   pressureFor,
-} from "./recognition.js?v=084aceea91";
+} from "./recognition.js?v=7ace2d323a";
 import {
   createRenderBudget,
   observeFrame,
   outlierThreshold,
   RENDER_MIN_SAMPLES,
   renderEvidence,
-} from "./render-budget.js?v=084aceea91";
+} from "./render-budget.js?v=7ace2d323a";
 export const INPUT_GUARD_MS = 100;
 export const HITSTOP_MS = 0;
 export const REVIEW_DECISION_MS = 1500;
