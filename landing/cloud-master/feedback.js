@@ -1,5 +1,5 @@
-import { tr } from "./i18n.js?v=50732f9215";
-import { questionView } from "./question-locales.js?v=50732f9215";
+import { tr } from "./i18n.js?v=084aceea91";
+import { questionView } from "./question-locales.js?v=084aceea91";
 export const REASON_DURATION_MS = 2000;
 export function decisionFact(question, locale = "ja") {
   const view = questionView(question, locale);
@@ -20,4 +20,15 @@ export function reasonDuration(copy, value, locale = "ja") {
   return locale === "ja"
     ? REASON_DURATION_MS
     : Math.min(3000, Math.max(REASON_DURATION_MS, (copy.length + value.length) * 25));
+}
+
+// Bounded result DOM even after long runs; retain all mistakes (at most three).
+export function reviewEntries(history) {
+  const rows = new Map(
+    [...history.filter((entry) => !entry.correct), ...history.slice(-50)].map((entry) => [
+      entry.uid,
+      entry,
+    ]),
+  );
+  return [...rows.values()].sort((a, b) => b.at - a.at || b.uid - a.uid);
 }

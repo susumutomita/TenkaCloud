@@ -1,4 +1,17 @@
 export const EN_UI = {
+  "連続8回の大きな描画遅延の中央値を使い、3フレーム分の時間を確保できるか判定しました。比較時は端末・画面・ブラウザー・方法を揃えてください。":
+    "The median of eight consecutive slow frames checked whether three frames could fit. Use the same device, screen, browser and method for comparisons.",
+  直近50件と誤答を表示: "Showing the latest 50 decisions and mistakes",
+  "描画間隔の直近60〜120件の90パーセンタイルを使い、3フレーム分の時間を確保できるか判定します。比較時は端末・画面・ブラウザー・方法を揃えてください。":
+    "The 90th percentile of the latest 60–120 active frame intervals checks whether three frames can fit. Use the same device, screen, browser and method for comparisons.",
+  "端末に保存できません。表示中の測定記録を控えてください。":
+    "This device could not save the record. Keep a copy of the measurement shown here.",
+  測定上限到達: "Measurement limit reached",
+  "端末の表示・入力機会の測定上限です。判断ミスやAIの失敗ではありません。":
+    "The device's rendering/input measurement limit was reached. This is not a wrong answer or an AI failure.",
+  測定条件と記録: "Measurement conditions and record",
+  "測定上限到達 Lv{level} / 判定間隔 {frame}ms / {width}×{height}（端末条件付き）":
+    "Measurement limit reached Lv{level} / limiting frame interval {frame}ms / {width}×{height} (device-specific)",
   "効果音 オン": "Sound on",
   "効果音 オフ": "Sound off",
   難度: "Difficulty ",
@@ -81,8 +94,8 @@ export const EN_UI = {
   同じ流れで復習: "Replay this sequence",
   "問題を読み込めませんでした・再試行": "Could not load exercises · Retry",
   得点: "Score",
-  "得点はカジュアルな練習記録。スキル認定ではありません。自己ベストのみ端末内に保存。追跡・AWSへの通信なし。":
-    "Scores are casual practice records, not skill certifications. Only your personal best is saved on this device. No tracking or communication with AWS.",
+  "得点はカジュアルな練習記録。スキル認定ではありません。自己ベストと測定上限の記録を端末内に保存。追跡・AWSへの通信なし。":
+    "Scores are casual practice records, not skill certifications. Your personal best and last measurement-limit record are saved on this device. No tracking or communication with AWS.",
   "投稿はXで確認。開けないときはコピーできます。":
     "Review your post on X. If X does not open, you can copy the result.",
   日本語に切り替え: "Switch to Japanese",

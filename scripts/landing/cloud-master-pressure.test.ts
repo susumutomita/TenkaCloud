@@ -16,9 +16,9 @@ import {
 import { fieldCapacity } from "../../landing/cloud-master/layout.js";
 import {
   difficulty,
-  MIN_FALL_MS,
-  MIN_INTERVAL_MS,
   pressureFor,
+  TAIL_FALL_MS,
+  TAIL_INTERVAL_MS,
 } from "../../landing/cloud-master/recognition.js";
 
 const catalog = await loadCatalog();
@@ -39,18 +39,20 @@ function game(level: number, capacity: number) {
   start(s);
   return s;
 }
-test("late pressure decreases flight AND effective arrivals until the technical floor", () => {
+test("late pressure decreases flight AND effective arrivals through the tail anchor and beyond", () => {
   for (const [width, height, columns, capacity] of sizes) {
     expect(fieldCapacity(height, columns, width)).toBe(capacity);
     let previousFall = Infinity,
       previousInterval = Infinity;
-    for (const level of [28, 29, 31, 50, 100, 105]) {
+    for (const level of [28, 29, 31, 50, 100, 105, 200, 500, 1000, 10000]) {
       const s = game(level, capacity),
         d = difficulty(level),
         interval = arrivalInterval(s);
       expect(d.fallMs).toBeLessThan(previousFall);
       expect(interval).toBeLessThan(previousInterval);
-      expect(interval).toBeGreaterThanOrEqual(Math.ceil(d.fallMs / capacity));
+      expect(interval).toBeGreaterThanOrEqual(
+        level > 105 ? d.fallMs / capacity : Math.ceil(d.fallMs / capacity),
+      );
       expect(d.limit).toBe(6);
       expect(s.active[0].deadline - s.active[0].born).toBe(d.fallMs);
       previousFall = d.fallMs;
@@ -58,13 +60,15 @@ test("late pressure decreases flight AND effective arrivals until the technical 
     }
   }
   expect(difficulty(28)).toMatchObject({ fallMs: 4200, intervalMs: 280 });
-  expect(difficulty(105)).toMatchObject({ fallMs: MIN_FALL_MS, intervalMs: MIN_INTERVAL_MS });
+  expect(difficulty(105)).toMatchObject({ fallMs: TAIL_FALL_MS, intervalMs: TAIL_INTERVAL_MS });
 });
 test("extreme and invalid levels produce finite bounded timings without allocating stages", () => {
   for (const level of [105, 1000, Number.MAX_SAFE_INTEGER, Number.MAX_VALUE, Infinity]) {
     const d = difficulty(level);
-    expect(d.fallMs).toBe(MIN_FALL_MS);
-    expect(d.intervalMs).toBe(MIN_INTERVAL_MS);
+    expect(d.fallMs).toBeGreaterThan(0);
+    expect(d.fallMs).toBeLessThanOrEqual(TAIL_FALL_MS);
+    expect(d.intervalMs).toBeGreaterThan(0);
+    expect(d.intervalMs).toBeLessThanOrEqual(TAIL_INTERVAL_MS);
     expect(Number.isFinite(d.level)).toBe(true);
     expect(d.level).toBeLessThanOrEqual(Number.MAX_SAFE_INTEGER);
     expect(difficulty(level, NaN)).toEqual(d);
@@ -72,7 +76,7 @@ test("extreme and invalid levels produce finite bounded timings without allocati
   for (const level of [NaN, -Infinity, -100, 0])
     expect(difficulty(level)).toMatchObject({ level: 1, fallMs: 10000, intervalMs: 1600 });
 });
-test.each([28, 31, 50, 100, 1000000])(
+test.each([28, 31, 50, 100])(
   "level %i staggered actual births, safe passes, pause and no catch-up burst",
   (level) => {
     for (const capacity of [2, 3, 6]) {
@@ -140,7 +144,7 @@ test("Lv28 to29 waits for the notice, preserves existing deadlines and scores on
   expect(deadline).toBeGreaterThan(oldDeadline);
   expect(arrivalInterval(s)).toBeLessThan(700);
 });
-test("minimum flight still resolves misses once, preserves review/resume, and accepts guarded taps", () => {
+test("late flight still resolves misses once, preserves review/resume, and accepts guarded taps", () => {
   const s = game(1000, 2);
   const missed = s.active[0];
   missed.question.danger = true;

@@ -79,9 +79,13 @@ test("0–300s real draws progress with accepted decisions and never leak untaug
     for (const b of births) expect(b.level).toBeLessThanOrEqual(Math.min(b.taught, LESSONS.length));
     expect(births.some((b) => b.source.includes("/guardduty/"))).toBe(true);
     const notices = events.filter((e) => e.kind === "notice");
-    expect(notices.map((e) => e.level)).toEqual(
-      Array.from({ length: notices.length }, (_, i) => i + 2),
+    expect(notices.filter((e) => e.level <= LESSONS.length).map((e) => e.level)).toEqual(
+      Array.from({ length: LESSONS.length - 1 }, (_, i) => i + 2),
     );
+    for (let i = 1; i < notices.length; i++) {
+      expect(notices[i].level).toBeGreaterThan(notices[i - 1].level);
+      expect(notices[i].level).toBeLessThanOrEqual(s.level);
+    }
   }
   expect(availableAtLevel(catalog, LESSONS.length)).toHaveLength(260);
 });

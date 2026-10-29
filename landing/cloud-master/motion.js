@@ -1,14 +1,15 @@
-import { CARD_GAP } from "./layout.js?v=50732f9215";
+import { CARD_GAP } from "./layout.js?v=084aceea91";
 
 // New arrivals queue behind older cards without moving those cards.
 // After a removal, ease toward the independent trajectory while respecting expiry.
 function independentY(item, old, elapsed, fieldHeight) {
+  if (item.presentationPending) return 8;
   const deadline = item.decisionDeadline ?? item.deadline;
-  const span = Math.max(1, deadline - item.born);
+  const span = Math.max(Number.EPSILON, deadline - item.born);
   const range = Math.max(0, fieldHeight - item.height);
   const desired = Math.max(8, Math.min(1, (elapsed - item.born) / span) * range);
   if (!old || old.range !== range) return desired;
-  const remaining = Math.max(1, deadline - old.elapsed);
+  const remaining = Math.max(Number.EPSILON, deadline - old.elapsed);
   const speed = Math.max((range / span) * 3, (range - old.y) / remaining);
   return Math.max(old.y, Math.min(desired, old.y + Math.max(0, elapsed - old.elapsed) * speed));
 }

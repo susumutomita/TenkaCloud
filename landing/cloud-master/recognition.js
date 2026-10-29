@@ -1,6 +1,6 @@
-import { CORRECT_PER_LEVEL, LESSONS, scenarioLevel } from "./curriculum.js?v=50732f9215";
-import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js?v=50732f9215";
-import { SECURITY_SCENARIOS } from "./security-scenarios.js?v=50732f9215";
+import { CORRECT_PER_LEVEL, LESSONS, scenarioLevel } from "./curriculum.js?v=084aceea91";
+import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js?v=084aceea91";
+import { SECURITY_SCENARIOS } from "./security-scenarios.js?v=084aceea91";
 export const PATTERNS = [...SECURITY_SCENARIOS, ...EVIDENCE_SCENARIOS].map((s) => s.id);
 export function random(state) {
   state.rng = (Math.imul(state.rng, 1664525) + 1013904223) >>> 0;
@@ -42,12 +42,11 @@ export function levelFor(correctDecisions) {
   const count = Math.max(0, Number.isFinite(correctDecisions) ? correctDecisions : 0);
   return 1 + Math.floor(count / CORRECT_PER_LEVEL);
 }
-// Beyond Lv28, shorten both the flight and nominal cadence by 2.5% per level.
-// The 600ms floor leaves six 100ms input-guard windows in one flight; the matching
-// 100ms cadence floor caps arrivals at 10/s, while the existing viewport cap stays <=6.
-// These are rendering/input safety limits, not a promise to defeat automated players.
-export const MIN_FALL_MS = 600;
-export const MIN_INTERVAL_MS = 100;
+// Preserve v2.6.9 through Lv105, then use a positive power-law tail with no fixed
+// late-game floor. Rendering and floating-point clock granularity remain limits.
+export const TAIL_START_LEVEL = 105;
+export const TAIL_FALL_MS = 600;
+export const TAIL_INTERVAL_MS = 100;
 function safeLevel(level) {
   if (level === Infinity) return Number.MAX_SAFE_INTEGER;
   return Number.isFinite(level)
@@ -68,11 +67,18 @@ export function difficulty(level = 1, pressureIndex = pressureFor(level)) {
         : pressureFor(level)
     ];
   const current = safeLevel(level);
-  const scale = stage.level === 28 ? 0.975 ** Math.max(0, current - 28) : 1;
+  const tail = stage.level === 28 && current > TAIL_START_LEVEL;
+  const scale = tail
+    ? Math.sqrt(TAIL_START_LEVEL / current)
+    : stage.level === 28
+      ? 0.975 ** Math.max(0, current - 28)
+      : 1;
   return {
     ...stage,
-    fallMs: Math.max(MIN_FALL_MS, Math.round(stage.fallMs * scale)),
-    intervalMs: Math.max(MIN_INTERVAL_MS, Math.round(stage.intervalMs * scale)),
+    fallMs: tail ? TAIL_FALL_MS * scale : Math.max(TAIL_FALL_MS, Math.round(stage.fallMs * scale)),
+    intervalMs: tail
+      ? TAIL_INTERVAL_MS * scale
+      : Math.max(TAIL_INTERVAL_MS, Math.round(stage.intervalMs * scale)),
     level: current,
   };
 }
