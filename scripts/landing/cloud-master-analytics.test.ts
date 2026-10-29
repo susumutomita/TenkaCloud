@@ -6,21 +6,22 @@ const read = (path: string) =>
   readFileSync(new URL(`../../landing/${path}`, import.meta.url), "utf8");
 const html = read("cloud-master/index.html");
 const property = "G-6WQ914PCKT";
-const tag = (source: string) =>
-  source.match(/<!-- Google tag \(gtag\.js\) -->[\s\S]*?<\/script>\s*<script>([\s\S]*?)<\/script>/);
+const bootstrap = read("cloud-master/analytics.js");
 
-test("Cloud Master uses the unchanged top-LP Google tag exactly once", () => {
-  expect(tag(html)?.[0]).toBe(tag(read("index.html"))?.[0]);
-  expect(tag(read("index.en.html"))?.[0]).toBe(tag(html)?.[0]);
+test("Cloud Master loads the existing LP destination once with a locale-ready standard page title", () => {
+  const url = `https://www.googletagmanager.com/gtag/js?id=${property}`;
+  expect(read("index.html")).toContain(url);
+  expect(read("index.en.html")).toContain(url);
   expect(html.match(/https:\/\/www\.googletagmanager\.com\/gtag\/js\?id=/g)).toHaveLength(1);
-  expect(html.match(/gtag\('config'/g)).toHaveLength(1);
-  expect(html).toContain(
-    `<script async src="https://www.googletagmanager.com/gtag/js?id=${property}">`,
-  );
+  expect(html.match(/src="\.\/analytics\.js\?v=/g)).toHaveLength(1);
+  expect(html).toContain(`<script async src="${url}">`);
+  expect(bootstrap).toContain('window.gtag("config", "G-6WQ914PCKT"');
+  expect(bootstrap).toContain('page_title: tr("APIの番人。 | 目指せクラウドマスター")');
+  expect(bootstrap).toContain("page_location: location.href");
+  expect(bootstrap.match(/window\.gtag\("config"/g)).toHaveLength(1);
 });
 
 test("analytics does not add custom game events or override consent and opt-out controls", () => {
-  const bootstrap = tag(html)?.[1] ?? "";
   expect(bootstrap).toContain("window.dataLayer = window.dataLayer || []");
   expect(bootstrap).not.toMatch(/user_id|user_properties|gtag\(['"]event|consent|ga-disable/);
   for (const path of ["game.js", "engine.js", "share.js"])
