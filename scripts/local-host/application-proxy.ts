@@ -4,6 +4,29 @@ import { digest } from "./store";
 
 const METHODS = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]);
 const MAX_BYTES = 2 * 1024 * 1024;
+// Challenge APIs define their own `X-*` headers (for example `X-Ops-Key`) and those are forwarded.
+// TenkaCloud's own capability headers, the proxy chain, and overrides that would change the method
+// or path the gateway already checked stay behind. Entries ending in `-` are prefixes.
+const HOST_ONLY_HEADERS = [
+  "x-tenkacloud-",
+  "x-forwarded-",
+  "x-real-ip",
+  "x-original-url",
+  "x-original-uri",
+  "x-rewrite-url",
+  "x-http-method",
+  "x-http-method-override",
+  "x-method-override",
+];
+
+function challengeHeader(name: string): boolean {
+  return (
+    name.startsWith("x-") &&
+    !HOST_ONLY_HEADERS.some((entry) =>
+      entry.endsWith("-") ? name.startsWith(entry) : name === entry,
+    )
+  );
+}
 
 function privatePath(path: string, denied: readonly string[]): boolean {
   let decoded = path;
@@ -69,6 +92,8 @@ function upstreamHeaders(
     const value = request.headers[name];
     if (typeof value === "string") headers.set(name, value);
   }
+  for (const [name, value] of Object.entries(request.headers))
+    if (typeof value === "string" && challengeHeader(name)) headers.set(name, value);
   const authorization = request.headers.authorization;
   if (
     forwardAuthorization &&

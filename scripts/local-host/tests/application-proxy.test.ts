@@ -243,3 +243,40 @@ test("a range request reaches the service as a full request, so a 206 never lose
   );
   expect(seen).toEqual([undefined]);
 });
+
+test("generic challenge gateway forwards challenge X-* headers but keeps TenkaCloud and proxy headers", async () => {
+  const seen: IncomingMessage["headers"][] = [];
+  await fixture(
+    (request, response) => {
+      seen.push(request.headers);
+      response.end("ok");
+    },
+    async ({ origin }) => {
+      const result = await fetch(`${origin}/api/ops/whoami`, {
+        headers: {
+          "x-ops-key": "SSOPS-synthetic",
+          "X-Break-Glass": "synthetic-break-glass",
+          authorization: `Bearer ${key}`,
+          cookie: "organizer_session=must-not-leak",
+          "x-tenkacloud-capability": "must-not-leak",
+          "x-forwarded-host": "spoofed.invalid",
+          "x-real-ip": "203.0.113.9",
+          "x-original-url": "/verify",
+          "x-http-method-override": "DELETE",
+        },
+      });
+      expect(result.status).toBe(200);
+      await result.text();
+      const headers = seen[0];
+      expect(headers?.["x-ops-key"]).toBe("SSOPS-synthetic");
+      expect(headers?.["x-break-glass"]).toBe("synthetic-break-glass");
+      expect(headers?.authorization).toBeUndefined();
+      expect(headers?.cookie).toBeUndefined();
+      expect(headers?.["x-tenkacloud-capability"]).toBeUndefined();
+      expect(headers?.["x-forwarded-host"]).toBe(new URL(origin).host);
+      expect(headers?.["x-real-ip"]).toBeUndefined();
+      expect(headers?.["x-original-url"]).toBeUndefined();
+      expect(headers?.["x-http-method-override"]).toBeUndefined();
+    },
+  );
+});
