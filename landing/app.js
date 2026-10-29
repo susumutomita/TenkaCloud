@@ -136,19 +136,19 @@
       "nav.contact": "お問い合わせ",
       "nav.github": "GitHub",
 
-      "hero.h1a": "クラウドエンジニアの、",
-      "hero.h1b": "天下一武道会。",
+      "hero.h1a": "身近な判断問題から、",
+      "hero.h1b": "クラウドの実践まで。",
       "hero.sub":
-        "ローカルと AWS クラウドで開催する OSS の競技プラットフォーム。チームで問題を解き、得点と進捗を共有します。まずは同じ PC でローカル競技を試せます。",
+        "TenkaCloudは、短い回答問題から実際のクラウドを使う演習まで、学ぶ人に合わせて作り、開催できるプラットフォーム。問題選択・チーム運営・採点・結果確認を支えます。",
       "hero.vibe":
         "<strong>まずは、同じ PC で。</strong> ローカル開催は SQLite を使い、AWS アカウントは不要です。Docker 問題には Docker Engine と Compose が必要です。",
-      "hero.quest_meta": "最初の1問 · 登録不要 · 約3分",
+      "hero.quest_meta": "TenkaCloud ブラウザ体験版 · 登録不要",
       "hero.quest_badge": "ブラウザ体験版",
       "hero.quest_diff": "インストール不要",
-      "hero.quest_title": "TenkaCloud を、問題を解きながら知る。",
+      "hero.quest_title": "演習の流れを、試してみる。",
       "hero.quest_desc":
-        "練習環境を開き、ヒントと回答提出、得点を6つのステップで体験します。ブラウザ内の体験後は、同じ流れで自分の PC に競技を起動できます。",
-      "hero.quest_cta": "最初の問題を解く",
+        "問題を開き、接続先を確かめ、回答を提出。ヒントと採点まで、参加者の操作をブラウザで体験できます。",
+      "hero.quest_cta": "TenkaCloud を体験する",
       "hero.startHref": "/docs/getting-started/#local-start",
       "hero.cta_demo": "自分の PC で起動する",
       "hero.cta_video": "▶ 30 秒でわかる",
@@ -248,16 +248,17 @@
 
       "uc.eyebrow": "企業での活用",
       "uc.h2": "セキュリティ研修を、ゲームにする。",
+      "uc.loop": "遊ぶ → 気づく → また挑む",
       "uc.lead":
-        "これまでのセキュリティ研修はスライド中心の e-ラーニングが多く、手を動かすインタラクティブな研修は作るのも運営するのも大変でした。AI の進化で、セキュリティは専門家だけの関心ごとではなくなっています。それでも、見て読むだけの研修にはゲーム性がなく、定着しにくいままです。<strong>TenkaCloud は、チームで問題を解き、得点と順位で競う形にして、この課題に応えます。</strong>",
+        "得点や結果を振り返り、次の演習で試す。ゲームとして何度も挑みたくなる体験で、知識の定着につなげることを目指します。",
       "uc.a.role": "全社員 / 非エンジニア",
       "uc.a.h": "だまされる場面を、体験で学ぶ。",
       "uc.a.p":
         "フィッシングやソーシャルエンジニアリングなど、自社で起きそうな場面を問題にして、チームで解きながら気づきを共有します。参加者はブラウザで参加でき、TenkaCloud のインストールは不要です。",
       "uc.b.role": "新任エンジニア",
-      "uc.b.h": "オンボーディングを、実戦形式で。",
+      "uc.b.h": "簡単な問題から、実践へ。",
       "uc.b.p":
-        "Web 脆弱性やクラウド設定のハンズオン問題を、入社後の演習として出題します。ヒントを見ながら回答を提出し、自分のペースで解き進められます。",
+        "問題文とヒントを読み、答えを提出する短いChallengeから。調査や環境操作を伴う課題まで、主催者が受講者に合わせて問題を選べます。",
       "uc.c.role": "SRE / SOC",
       "uc.c.h": "障害・インシデント対応を、訓練する。",
       "uc.c.p":
@@ -304,6 +305,8 @@
 
       "extend.eyebrow": "問題は、増やせる",
       "extend.h2": "足りない問題は、自分で作ればいい。",
+      "extend.idea":
+        "<strong>教材のアイデア例：</strong>怪しいメールや急かされた依頼を見て、確認方法や安全な対応を選ぶ。",
       "extend.lead":
         '問題は <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer">TenkaCloudChallenge</a> などの URL と ref を選んで取得し、大会は不変 snapshot を使います。独自問題の定義・実行環境・採点方法は作問ガイドで検証してください。Problem Pack の対応範囲も同ガイドで確認できます。',
       "extend.cta1": "問題カタログを見る",
@@ -427,19 +430,19 @@
       "nav.contact": "Contact",
       "nav.github": "GitHub",
 
-      "hero.h1a": "The cloud engineer's ",
-      "hero.h1b": "Tenka-Ichi.",
+      "hero.h1a": "From everyday decisions ",
+      "hero.h1b": "to hands-on cloud exercises.",
       "hero.sub":
-        "An open-source competition platform for local and AWS cloud hosting. Teams solve problems and share scores and progress. Start with a local competition on one PC.",
+        "TenkaCloud lets you create and host exercises for your learners, from short answer problems to tasks using real cloud environments. It supports problem selection, teams, scoring and result review.",
       "hero.vibe":
         "<strong>Start on one PC.</strong> Local hosting uses SQLite and needs no AWS account. Docker exercises require Docker Engine and Compose.",
-      "hero.quest_meta": "First problem · No signup · About 3 minutes",
+      "hero.quest_meta": "TenkaCloud browser walkthrough · No signup",
       "hero.quest_badge": "Browser walkthrough",
       "hero.quest_diff": "No installation",
-      "hero.quest_title": "Learn TenkaCloud by solving a problem.",
+      "hero.quest_title": "Try the exercise flow.",
       "hero.quest_desc":
-        "Open a practice environment, reveal hints, submit answers and earn points in six steps. Then follow the same flow to start a competition on your own PC.",
-      "hero.quest_cta": "Solve the first problem",
+        "Open a problem, explore its endpoint and submit an answer. Try the participant workflow, including hints and scoring, in your browser.",
+      "hero.quest_cta": "Try TenkaCloud",
       "hero.startHref": "/docs/getting-started/index.en.html#local-start",
       "hero.cta_demo": "Start on your computer",
       "hero.cta_video": "▶ Watch the 30-second tour",
@@ -539,16 +542,17 @@
 
       "uc.eyebrow": "Enterprise use cases",
       "uc.h2": "Turn security training into a game.",
+      "uc.loop": "Play → Reflect → Try again",
       "uc.lead":
-        "Security training has mostly meant slide-based e-learning, and interactive, hands-on training has been hard to build and run. With AI, security is no longer a concern for specialists only. Yet training you only watch and read has no game mechanics, so it rarely sticks. <strong>TenkaCloud answers this by turning training into team competitions with problems, scores and rankings.</strong>",
+        "Review scores and outcomes, then try what you learned in another exercise. We aim to help knowledge stick through practice that teams want to repeat.",
       "uc.a.role": "All employees / non-engineers",
       "uc.a.h": "Learn to spot deception by doing.",
       "uc.a.p":
         "Turn phishing, social engineering and other situations your company could face into problems, and share what teams notice as they solve them. Participants join from a browser; they do not install TenkaCloud.",
       "uc.b.role": "New engineers",
-      "uc.b.h": "Onboarding as hands-on practice.",
+      "uc.b.h": "Start simple. Put it into practice.",
       "uc.b.p":
-        "Assign hands-on web vulnerability and cloud configuration problems as onboarding exercises. Participants use hints, submit answers and progress at their own pace.",
+        "Start with a short Challenge: read the problem and hints, then submit an answer. Organizers can choose topics for their learners, including investigation and hands-on environment tasks.",
       "uc.c.role": "SRE / SOC",
       "uc.c.h": "Drill incident response.",
       "uc.c.p":
@@ -595,6 +599,8 @@
 
       "extend.eyebrow": "Catalog grows with you",
       "extend.h2": "Missing a problem? Author your own.",
+      "extend.idea":
+        "<strong>Exercise idea:</strong> Review a suspicious email or an urgent request, then choose how to verify it and respond safely.",
       "extend.lead":
         'Select a repository URL and ref, such as <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer">TenkaCloudChallenge</a>, to download problems; events retain immutable snapshots. Use the authoring guide to verify custom definitions, runtimes and scoring, and check its Problem Pack support boundaries.',
       "extend.cta1": "Browse the catalog",
