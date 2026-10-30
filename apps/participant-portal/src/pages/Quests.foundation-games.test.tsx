@@ -5,7 +5,9 @@ import { I18nProvider } from "../i18n";
 import {
   FoundationGames,
   foundationGameHref,
+  learningGuideHref,
   practiceHref,
+  practiceSourceHref,
   practiceTheme,
 } from "./Quests.foundation-games";
 
@@ -142,4 +144,72 @@ it("keeps semantic themes independent of runtime and preserves deployment prefix
   expect(practiceHref("/TenkaCloud/portal-demo/", "actual/cloud")).toBe(
     "/TenkaCloud/portal-demo/problems/actual%2Fcloud",
   );
+});
+
+it.each(["ja", "en"])(
+  "shows ordered ready practice with localized names and real source/setup links in %s",
+  (lang) => {
+    localStorage.setItem("tenkacloud.portal.locale", lang);
+    const entry = (id: string, name: string, provider = "aws") => ({
+      id,
+      name,
+      status: "ready",
+      visibility: "public",
+      category: "Challenge",
+      tags: ["aws"],
+      runtime: { provider },
+    });
+    const catalog = [
+      entry("z-other", "Last cloud"),
+      entry("a-other", "Other cloud"),
+      {
+        ...entry("security-battle-royale", "Battle JA"),
+        category: "Battle",
+        i18n: { en: { name: "Battle EN" } },
+      },
+      entry("stackstack", "First cloud"),
+      { ...entry("ready-social", "Social practice", "docker"), tags: ["phishing-awareness"] },
+      entry("not-supported", "Unsupported runtime", "other"),
+      { ...entry("unmatched", "Other topic", "docker"), tags: ["memory-safety"] },
+    ] as unknown as import("@tenkacloud/portal-contracts").ProblemCatalogEntry[];
+    render(
+      <AppConfigProvider config={config}>
+        <I18nProvider>
+          <FoundationGames catalog={catalog} />
+        </I18nProvider>
+      </AppConfigProvider>,
+    );
+    const text = screen.getByTestId("foundation-games").textContent ?? "";
+    const battleName = lang === "en" ? "Battle EN" : "Battle JA";
+    expect(text.indexOf("First cloud")).toBeLessThan(text.indexOf(battleName));
+    expect(text.indexOf(battleName)).toBeLessThan(text.indexOf("Other cloud"));
+    expect(text.indexOf("Other cloud")).toBeLessThan(text.indexOf("Last cloud"));
+    expect(screen.getByText("Social practice")).toBeInTheDocument();
+    expect(screen.queryByText("Unsupported runtime")).not.toBeInTheDocument();
+    expect(screen.queryByText("Other topic")).not.toBeInTheDocument();
+    const hrefs = screen.getAllByRole("link").map((link) => link.getAttribute("href"));
+    const suffix = lang === "ja" ? ".ja" : "";
+    expect(hrefs).toContain(
+      `https://github.com/susumutomita/TenkaCloudChallenge/blob/main/battles/security-battle-royale/README${suffix}.md`,
+    );
+    expect(hrefs).toContain(
+      `https://github.com/susumutomita/TenkaCloudChallenge/blob/main/challenges/ready-social/README${suffix}.md`,
+    );
+    const guide = lang === "en" ? "index.en.html" : "";
+    expect(hrefs).toContain(`/docs/manual/organizer/${guide}#prepare-local-host`);
+    expect(hrefs).toContain(`/docs/manual/organizer/${guide}#aws-problems`);
+    expect(hrefs.some((href) => href?.startsWith("/problems/"))).toBe(false);
+  },
+);
+
+it("keeps guide/source destinations prefix-safe and preserves meaningful theme precedence", () => {
+  expect(learningGuideHref("/TenkaCloud/portal-demo/", "participant", "en")).toBe(
+    "/TenkaCloud/docs/manual/participant/index.en.html",
+  );
+  expect(learningGuideHref("/portal-demo/", "organizer", "ja")).toBe("/docs/manual/organizer/");
+  expect(practiceSourceHref({ id: "example/id", category: "Challenge" }, "en")).toContain(
+    "/challenges/example%2Fid/README.md",
+  );
+  expect(practiceTheme({ tags: ["phishing-awareness", "web-security"] })).toBe("social");
+  expect(practiceTheme({ id: "security-battle-royale", tags: [] })).toBe("cloud");
 });
