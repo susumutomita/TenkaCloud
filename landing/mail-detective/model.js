@@ -1,5 +1,5 @@
-import { inspectionRow } from "./cases.js?v=cf1e358cad";
-import { chooseVariant, LEVELS, levelCase } from "./levels.js?v=cf1e358cad";
+import { inspectionRow } from "./cases.js?v=09ce225f20";
+import { chooseVariant, LEVELS, levelCase } from "./levels.js?v=09ce225f20";
 
 export function createRun(
   random = Math.random,
@@ -37,10 +37,6 @@ export function currentLevel(run) {
 }
 export function currentCase(run) {
   return levelCase(currentLevel(run), run.variants[currentLevel(run)]);
-}
-export function nextStartLevel(run) {
-  const level = run.startLevel + run.rounds.length;
-  return run.phase === "results" && level <= LEVELS.length ? level : null;
 }
 export function risks(run) {
   return currentCase(run).rows.filter((item) => item.kind === "risk");

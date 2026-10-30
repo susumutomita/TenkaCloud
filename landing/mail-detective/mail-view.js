@@ -1,15 +1,10 @@
-import { inspectionRow } from "./cases.js?v=cf1e358cad";
-import { COPY } from "./copy.js?v=cf1e358cad";
-import { createIdnExplanation } from "./idn-explanation.js?v=cf1e358cad";
+import { inspectionRow } from "./cases.js?v=09ce225f20";
+import { COPY } from "./copy.js?v=09ce225f20";
+import { element as node } from "./dom.js?v=09ce225f20";
+import { createIdnExplanation } from "./idn-explanation.js?v=09ce225f20";
 
-import { createOriginal } from "./message-headers.js?v=cf1e358cad";
+import { createOriginal } from "./message-headers.js?v=09ce225f20";
 
-const node = (tag, text, className) => {
-  const result = document.createElement(tag);
-  if (text !== undefined) result.textContent = text;
-  if (className) result.className = className;
-  return result;
-};
 const presentations = {
   invoice: {
     ja: ["みなも請求", "今月のご利用についてご案内します。", "ご利用明細を確認"],

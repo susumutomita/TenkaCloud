@@ -1,15 +1,15 @@
-import { inspectionRow } from "./cases.js?v=cf1e358cad";
-import { COPY } from "./copy.js?v=cf1e358cad";
+import { inspectionRow } from "./cases.js?v=09ce225f20";
+import { COPY } from "./copy.js?v=09ce225f20";
 import {
   advanceClock,
   createClock,
   inspectionOpen,
   progress,
   viewAfterAnswer,
-} from "./deadline.js?v=cf1e358cad";
-import { updateIdnFonts } from "./idn-explanation.js?v=cf1e358cad";
-import { levelCase } from "./levels.js?v=cf1e358cad";
-import { createEmail } from "./mail-view.js?v=cf1e358cad";
+} from "./deadline.js?v=09ce225f20";
+import { button, element } from "./dom.js?v=09ce225f20";
+import { updateIdnFonts } from "./idn-explanation.js?v=09ce225f20";
+import { createEmail } from "./mail-view.js?v=09ce225f20";
 import {
   createRun,
   currentCase,
@@ -17,22 +17,14 @@ import {
   end,
   expire,
   next,
-  nextStartLevel,
   reveal,
   risks,
   roundScore,
   tap,
   totals,
-} from "./model.js?v=cf1e358cad";
-import { createMailShareLink, createNextStep } from "./next-step.js?v=cf1e358cad";
-import { createReview } from "./review.js?v=cf1e358cad";
+} from "./model.js?v=09ce225f20";
+import { createResultsView } from "./result-view.js?v=09ce225f20";
 
-const element = (tag, text, className) => {
-  const node = document.createElement(tag);
-  if (text !== undefined) node.textContent = text;
-  if (className) node.className = className;
-  return node;
-};
 const byId = (id) => document.getElementById(id);
 let lang = new URL(location.href).searchParams.get("lang") === "en" ? "en" : "ja";
 const previousVariants = {};
@@ -136,12 +128,6 @@ window.addEventListener("blur", () => {
   rebaseClock();
 });
 window.addEventListener("focus", visibility);
-const button = (label, action, className) => {
-  const node = element("button", label, className);
-  node.type = "button";
-  node.addEventListener("click", action);
-  return node;
-};
 function choose(id, focusId) {
   if (run.phase !== "playing" || !settleClock()) return;
   run = tap(run, id);
@@ -155,6 +141,13 @@ function choose(id, focusId) {
 }
 function advance() {
   run = next(run);
+  resetClock();
+  mailUI = freshView();
+  render("round-title");
+}
+function restartRun(level = 1) {
+  guideOpen.clear();
+  run = freshRun(level);
   resetClock();
   mailUI = freshView();
   render("round-title");
@@ -270,105 +263,14 @@ function playView(t) {
   return fragment;
 }
 function resultsView(t) {
-  const fragment = document.createDocumentFragment();
-  const counts = totals(run);
-  const timedOut = run.phase === "timed-out";
-  const heading = element(
-    "h2",
-    timedOut ? t.timedOut : run.phase === "ended" ? t.ended : t.complete,
-    "result-title",
-  );
-  heading.id = "round-title";
-  heading.tabIndex = -1;
-  const panel = element("section", undefined, "result-panel");
-  panel.append(
-    heading,
-    element(
-      "p",
-      `${t.totalScore.replace("{score}", String(counts.score)).replace("{max}", String(counts.maxScore))} · ${t.mistakes} ${counts.mistakes}`,
-      "result-score",
-    ),
-    element("p", `${t.ownCount} ${counts.found}/${counts.target}`, "result-count"),
-    element("p", `${t.reviewCount} ${counts.reviewed}/${counts.target}`),
-    element("p", `${t.timeouts} ${counts.timeouts}`),
-    element("p", t.coverage),
-    element("p", t.takeaway, "takeaway"),
-    element("p", t.caution),
-    element("p", t.resultsNote, "safety"),
-  );
-  if (timedOut) panel.append(element("p", t.timeoutReason));
-  const replay = button(
-    timedOut ? t.retry : t.again,
-    () => {
-      guideOpen.clear();
-      run = freshRun(run.startLevel);
-      resetClock();
-      mailUI = freshView();
-      render("round-title");
-    },
-    "primary",
-  );
-  replay.id = "again";
-  const actions = element("div", undefined, "result-actions");
-  actions.append(replay, createMailShareLink(lang, run, counts));
-  panel.append(actions);
-  const nextLevel = nextStartLevel(run);
-  if (nextLevel !== null) {
-    const continueButton = button(
-      t.next.replace("{level}", String(nextLevel)),
-      () => {
-        guideOpen.clear();
-        run = freshRun(nextLevel);
-        resetClock();
-        mailUI = freshView();
-        render("round-title");
-      },
-      "primary",
-    );
-    continueButton.id = "continue-level";
-    actions.append(continueButton);
-  }
-  if (run.startLevel > 1) {
-    const restart = button(
-      t.fromStart,
-      () => {
-        guideOpen.clear();
-        run = freshRun();
-        resetClock();
-        mailUI = freshView();
-        render("round-title");
-      },
-      "text-button",
-    );
-    restart.id = "restart-levels";
-    actions.append(restart);
-  }
-  const review = element("details", undefined, "result-review");
-  review.append(element("summary", t.expand));
-  for (let i = 0; i <= run.index; i++) {
-    const item = levelCase(run.startLevel + i, run.variants[run.startLevel + i]);
-    review.append(element("h3", item.title[lang]));
-    for (const field of item.rows.filter((entry) => entry.kind === "risk")) {
-      review.append(element("p", `${field.label[lang]}: ${field.reason[lang]}`));
-    }
-  }
-  if (timedOut) {
-    const missed = element("section", undefined, "missed-spots");
-    missed.append(element("h3", t.missed));
-    for (const row of currentCase(run).rows.filter(
-      (entry) => entry.kind === "risk" && !run.found[run.index].includes(entry.id),
-    )) {
-      missed.append(element("p", `${row.label[lang]}: ${row.reason[lang]}`));
-    }
-    panel.append(missed);
-  }
-  fragment.append(
-    panel,
-    review,
-    createReview(lang, guideOpen, currentLevel(run)),
-    createNextStep(lang),
-  );
-  return fragment;
+  return createResultsView({
+    t,
+    run,
+    lang,
+    guideOpen,
+    onReplay: () => restartRun(run.startLevel),
+    onRestart: () => restartRun(),
+  });
 }
 function render(focusId) {
   const t = COPY[lang];

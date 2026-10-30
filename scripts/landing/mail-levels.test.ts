@@ -14,7 +14,6 @@ import {
   end,
   expire,
   next,
-  nextStartLevel,
   reveal,
   risks,
   tap,
@@ -139,14 +138,14 @@ describe("five comparison lessons", () => {
     }
     expect(visited).toEqual([1, 2, 3, 4, 5]);
     expect(totals(run)).toMatchObject({ score: 0, maxScore: 100, timeouts: 5, target: 11 });
-    expect(nextStartLevel(run)).toBeNull();
+    expect(next(run)).toBe(run);
   });
   test.each([1, 2, 3, 4, 5])("terminal Lv%i shares only visited targets", (level) => {
     const run = createRun(() => 0, level),
       target = risks(run).length;
     const phaseRun = end(run);
     expect(totals(phaseRun).target).toBe(target);
-    expect(nextStartLevel(phaseRun)).toBeNull();
+    expect(next(phaseRun)).toBe(phaseRun);
     for (const lang of ["ja", "en"])
       expect(buildMailShare(phaseRun, totals(phaseRun), lang).text).toContain(`/${target}`);
     expect(buildMailShare(expire(run), totals(run), "ja")).toBeNull();
