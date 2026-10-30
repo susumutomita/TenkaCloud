@@ -22,20 +22,18 @@ function isTokenSet(value: unknown): value is TokenSet {
   );
 }
 
-export function saveLocalHostSession(
-  tokens: TokenSet,
-  storage: Pick<Storage, "setItem"> = sessionStorage,
-): void {
+export function saveLocalHostSession(tokens: TokenSet, storage?: Pick<Storage, "setItem">): void {
+  // `sessionStorage` の参照自体が SecurityError になる環境があるので、既定値も try の中で解決する。
   try {
-    storage.setItem(STORAGE_KEY, JSON.stringify(tokens));
+    (storage ?? sessionStorage).setItem(STORAGE_KEY, JSON.stringify(tokens));
   } catch {
     // 保存できない環境では従来どおり reload で主催者キーを入れ直す。
   }
 }
 
-export function clearLocalHostSession(storage: Pick<Storage, "removeItem"> = sessionStorage): void {
+export function clearLocalHostSession(storage?: Pick<Storage, "removeItem">): void {
   try {
-    storage.removeItem(STORAGE_KEY);
+    (storage ?? sessionStorage).removeItem(STORAGE_KEY);
   } catch {
     // 読めない storage には復元できる session も無い。
   }
@@ -44,11 +42,11 @@ export function clearLocalHostSession(storage: Pick<Storage, "removeItem"> = ses
 /** 期限内の控えだけを返す。壊れた・期限切れの控えは消す。 */
 export function loadLocalHostSession(
   now = Date.now(),
-  storage: Pick<Storage, "getItem" | "removeItem"> = sessionStorage,
+  storage?: Pick<Storage, "getItem" | "removeItem">,
 ): TokenSet | null {
   let raw: string | null;
   try {
-    raw = storage.getItem(STORAGE_KEY);
+    raw = (storage ?? sessionStorage).getItem(STORAGE_KEY);
   } catch {
     return null;
   }

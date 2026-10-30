@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import {
   clearLocalHostSession,
   loadLocalHostSession,
@@ -8,7 +8,10 @@ import {
 const key = "TenkaCloud.localHost.organizerSession";
 const tokens = { idToken: "a.e30.c", accessToken: "a.e30.c", refreshToken: "r", expiresAt: 2_000 };
 
-afterEach(() => sessionStorage.clear());
+afterEach(() => {
+  vi.restoreAllMocks();
+  sessionStorage.clear();
+});
 
 it("restores an unexpired session saved in this tab and forgets it on clear", () => {
   saveLocalHostSession(tokens);
@@ -43,4 +46,13 @@ it("keeps working when the browser refuses storage", () => {
   expect(() => saveLocalHostSession(tokens, refusing)).not.toThrow();
   expect(() => clearLocalHostSession(refusing)).not.toThrow();
   expect(loadLocalHostSession(1_000, refusing)).toBeNull();
+});
+
+it("keeps working when merely reading sessionStorage throws", () => {
+  vi.spyOn(window, "sessionStorage", "get").mockImplementation(() => {
+    throw new DOMException("denied", "SecurityError");
+  });
+  expect(() => saveLocalHostSession(tokens)).not.toThrow();
+  expect(() => clearLocalHostSession()).not.toThrow();
+  expect(loadLocalHostSession(1_000)).toBeNull();
 });
