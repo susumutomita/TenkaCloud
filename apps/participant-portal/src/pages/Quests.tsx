@@ -330,7 +330,7 @@ export function QuestsPage() {
         {t(isPublicDemo ? "foundation_games.page_title" : "quests.header")}
       </Header>
 
-      <FoundationGames />
+      <FoundationGames catalog={visibleCatalog} problems={visibleProblems} />
 
       {error && (
         <Alert type="error" header={t("app.fetch_status_failed")}>

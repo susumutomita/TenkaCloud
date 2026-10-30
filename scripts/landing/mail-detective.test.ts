@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { CASES } from "../../landing/mail-detective/cases.js";
+import { CASES, inspectionRow } from "../../landing/mail-detective/cases.js";
 import { COPY } from "../../landing/mail-detective/copy.js";
 import {
   advanceClock,
@@ -9,6 +9,7 @@ import {
   progress,
   ROUND_WINDOW_MS,
 } from "../../landing/mail-detective/deadline.js";
+import { LEVELS } from "../../landing/mail-detective/levels.js";
 import {
   asciiDomain,
   headerFacts,
@@ -34,7 +35,7 @@ describe("email difference game", () => {
     expect(run.phase).toBe("playing");
     expect(run.rounds).toHaveLength(2);
     expect(new Set(run.rounds).size).toBe(2);
-    expect(totals(run)).toEqual({ found: 0, reviewed: 0, target: 6 });
+    expect(totals(run)).toEqual({ found: 0, reviewed: 0, target: 1 });
     expect(next(run)).toBe(run);
     expect(tap(run, "unknown")).toBe(run);
   });
@@ -80,7 +81,7 @@ describe("email difference game", () => {
     expect(run.feedback.fresh).toBe(false);
     expect(run.checked[0]).toHaveLength(2);
   });
-  test("completion requires all three and no double next can skip a round", () => {
+  test("completion requires the actual targets and no double next can skip a round", () => {
     let run = createRun(() => 0.1);
     for (const row of risks(run)) run = tap(run, row.id);
     expect(run.phase).toBe("round-complete");
@@ -90,19 +91,19 @@ describe("email difference game", () => {
     for (const row of risks(run)) run = tap(run, row.id);
     run = next(run);
     expect(run.phase).toBe("results");
-    expect(totals(run)).toEqual({ found: 6, reviewed: 0, target: 6 });
+    expect(totals(run)).toEqual({ found: 3, reviewed: 0, target: 3 });
     expect(tap(run, risks(run)[0].id)).toBe(run);
   });
   test("showing answers is transparent and cannot turn reviewed spots into independent finds", () => {
-    let run = createRun(() => 0.2);
+    let run = createRun(() => 0.2, 3);
     run = tap(run, risks(run)[0].id);
     run = reveal(run);
     for (const row of risks(run)) run = tap(run, row.id);
-    expect(totals(run)).toEqual({ found: 1, reviewed: 2, target: 6 });
+    expect(totals(run)).toEqual({ found: 1, reviewed: 1, target: 2 });
     expect(reveal(run)).toBe(run);
     run = reveal(next(run));
     run = next(run);
-    expect(totals(run)).toEqual({ found: 1, reviewed: 5, target: 6 });
+    expect(totals(run)).toEqual({ found: 1, reviewed: 4, target: 5 });
   });
   test("finish early and fresh replay never pretend the learner completed unseen spots", () => {
     const run = end(createRun(() => 0.3));
@@ -112,19 +113,19 @@ describe("email difference game", () => {
     expect(reveal(run)).toBe(run);
     expect(createRun(() => 0.4).phase).toBe("playing");
   });
-  test("different random streams vary pairs and never repeat a pair within a play", () => {
+  test("different random streams vary coherent text without skipping the taught sequence", () => {
     const combinations = new Set();
     for (let n = 0; n < 1000; n++) {
-      let seed = n + 1;
+      let seed = ((n + 1) * 2654435761) >>> 0;
       const random = () => {
         seed = (1664525 * seed + 1013904223) >>> 0;
         return seed / 2 ** 32;
       };
       const run = createRun(random);
-      combinations.add(run.rounds.join(","));
-      expect(new Set(run.rounds).size).toBe(2);
+      combinations.add(JSON.stringify(run.variants));
+      expect(run.rounds).toEqual(["booking", "invoice"]);
     }
-    expect(combinations.size).toBe(4);
+    expect(combinations.size).toBe(9);
     for (const value of [NaN, -1, 1, Infinity]) expect(() => createRun(() => value)).toThrow();
   });
   test("normal sender/path/request differences prevent memorising one universal dangerous row", () => {
@@ -155,7 +156,7 @@ describe("email difference game", () => {
     expect(game).not.toMatch(
       /fetch\(|XMLHttpRequest|sendBeacon|innerHTML|localStorage|setInterval|setTimeout/,
     );
-    expect(game).toContain("let run = createRun()");
+    expect(game).toContain("let run = freshRun()");
     const css = readFileSync(
       join(import.meta.dir, "../../landing/mail-detective/game.css"),
       "utf8",
@@ -227,23 +228,19 @@ describe("natural email presentation", () => {
     );
     const languageCode = source.slice(source.indexOf("function language("));
     expect(languageCode).not.toContain("mailUI = freshView()");
-    expect(source).toContain("mailUI.address.received = true");
-    expect(source).toContain("mailUI.link.received = true");
+    expect(source).toContain("mailUI.address.received = risks(run).some");
+    expect(source).toContain("mailUI.link.received = risks(run).some");
     expect(source).toContain("mailUI = freshView()");
   });
 });
 
 describe("simulated mail authentication and IDN", () => {
-  test("a familiar pair precedes the look-alike pair without a lecture or a new scoring rule", () => {
-    for (let n = 1; n <= 40; n++) {
-      let seed = n;
-      const run = createRun(() => {
-        seed = (seed * 1664525 + 1013904223) >>> 0;
-        return seed / 2 ** 32;
-      });
-      expect(currentCase(run).advanced).not.toBe(true);
-      expect(run.rounds[1]).toBe("lookalike");
-      expect(totals(run).target).toBe(6);
+  test("simple attachments precede address/link work and the look-alike appears only at Lv5", () => {
+    for (const level of [1, 2, 3, 4, 5]) {
+      const run = createRun(() => 0, level);
+      expect(run.rounds).toEqual(LEVELS.slice(level - 1, level + 1).map((entry) => entry.id));
+      expect(currentCase(run).level).toBe(level);
+      expect(currentCase(run).advanced).toBe(level === 5);
     }
   });
   test("SPF failure with aligned DKIM can pass DMARC, while unaligned passes cannot", () => {
@@ -322,11 +319,11 @@ describe("automatic-processing deadline prototype", () => {
     expect(advanceClock(clock, 0, true).elapsed).toBe(600);
   });
   test("timeout preserves independent finds, reveals misses, blocks late input and is idempotent", () => {
-    let run = createRun(() => 0.4);
+    let run = createRun(() => 0.4, 4);
     run = tap(run, risks(run)[0].id);
     run = expire(run);
     expect(run.phase).toBe("timed-out");
-    expect(totals(run)).toEqual({ found: 1, reviewed: 2, target: 6 });
+    expect(totals(run)).toEqual({ found: 1, reviewed: 2, target: 3 });
     expect(expire(run)).toBe(run);
     expect(next(run)).toBe(run);
     expect(tap(run, risks(run)[1].id)).toBe(run);
@@ -403,7 +400,7 @@ describe("TenkaCloud shell and end-of-play mail review", () => {
       game.indexOf("function resultsView("),
     );
     expect(playCode).not.toContain("createReview");
-    expect(game).toContain("createReview(lang, guideOpen)");
+    expect(game).toContain("createReview(lang, guideOpen, currentLevel(run))");
     expect(game).toContain("guideOpen.clear()");
   });
   test("shell uses current LP tokens and font stack while keeping the separate email layout", () => {
@@ -426,5 +423,50 @@ describe("TenkaCloud shell and end-of-play mail review", () => {
     }
     expect(brand).toContain("border-radius:999px");
     expect(brand).not.toMatch(/@import|https?:|\.mail-body|\.message-header/);
+  });
+});
+
+describe("unscored content has the same inspection affordance", () => {
+  test.each(LEVELS.map((definition) => [definition.level, definition]))(
+    "all neutral content in %s is inspectable without scoring",
+    (level) => {
+      let run = createRun(() => 0, level);
+      const item = currentCase(run);
+      const neutralIds = [
+        ...item.mailRows.filter((entry) => entry.kind !== "risk").map((entry) => entry.id),
+        "greeting",
+        "opening",
+        "signature",
+        "display-name",
+        "to",
+      ];
+      for (const id of neutralIds) {
+        const row = inspectionRow(item, id);
+        expect(row).toBeDefined();
+        expect(row.kind).not.toBe("risk");
+        run = tap(run, id);
+        expect(run.feedback.id).toBe(id);
+        expect(run.feedback.fresh).toBe(false);
+        expect(run.phase).toBe("playing");
+        expect(totals(run)).toEqual({ found: 0, reviewed: 0, target: risks(run).length });
+        expect(run.found[0]).toHaveLength(0);
+      }
+      expect(inspectionRow(item, "unknown")).toBeUndefined();
+      for (const row of risks(run)) run = tap(run, row.id);
+      expect(run.phase).toBe("round-complete");
+      expect(totals(run).found).toBe(risks(run).length);
+    },
+  );
+  test("generic answer hover does not add a dotted underline; real link and focus remain visible", () => {
+    const css = readFileSync(
+      join(import.meta.dir, "../../landing/mail-detective/mail.css"),
+      "utf8",
+    );
+    const hover = css.match(/\.mail-spot:hover\{([^}]*)\}/)?.[1];
+    expect(hover).toContain("text-decoration:none");
+    expect(hover).not.toContain("text-decoration:underline");
+    expect(hover).not.toContain("dotted");
+    expect(css.match(/\.mail-link\{([^}]*)\}/)?.[1]).toContain("text-decoration:underline");
+    expect(css).toContain("button:focus-visible{outline:3px");
   });
 });

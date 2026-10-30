@@ -177,7 +177,7 @@ const node = (tag, text, className) => {
   if (className) result.className = className;
   return result;
 };
-export function createReview(lang, openItems) {
+export function createReview(lang, openItems, level = 5) {
   const t = REVIEW[lang],
     section = node("section", undefined, "mail-review");
   section.id = "mail-review";
@@ -185,7 +185,15 @@ export function createReview(lang, openItems) {
   heading.id = "mail-review-title";
   section.setAttribute("aria-labelledby", heading.id);
   section.append(heading, node("p", t.intro, "review-intro"));
-  for (const item of t.items) {
+  const minimumLevel = {
+    sender: 2,
+    destination: 3,
+    idn: 5,
+    request: 1,
+    authentication: 4,
+    independent: 1,
+  };
+  for (const item of t.items.filter((entry) => level >= minimumLevel[entry.id])) {
     const details = node("details", undefined, "review-topic");
     details.id = `review-${item.id}`;
     details.open = openItems.has(item.id);

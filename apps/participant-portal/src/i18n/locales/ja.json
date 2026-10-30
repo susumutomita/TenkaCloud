@@ -706,8 +706,8 @@
     "error": "提出に失敗しました。再送には同じ操作キーを使います。"
   },
   "foundation_games": {
-    "title": "すぐ遊べる基礎ゲーム",
-    "description": "ブラウザーで、AWS・登録不要。大会の得点には含まれません。",
+    "title": "テーマから、試して深める。",
+    "description": "短いゲームから実践問題へ。実行条件は問題ごとに確認できます。",
     "play": "{name}で遊ぶ",
     "mail-detective": {
       "title": "メールの間違いさがし",
@@ -718,8 +718,23 @@
       "description": "不審なAPIリクエストを見抜いて、タップで止める。"
     },
     "page_title": "ゲームと問題一覧",
-    "page_description": "まずはブラウザー基礎ゲームから。下には競技画面のデモもあります。",
-    "competition_title": "競技画面のデモ",
-    "competition_description": "実際の競技への参加は主催者の招待から。ローカル／クラウドは開催方式で、参加者がここで選ぶ必要はありません。"
+    "page_description": "同じテーマの基礎と実践を探す。競技のカードは公開デモです。",
+    "competition_title": "実践問題の一覧（競技デモ）",
+    "competition_description": "実際の競技への参加は主催者の招待から。ローカル／クラウドは開催方式で、参加者がここで選ぶ必要はありません。",
+    "themes": {
+      "social": "ソーシャルエンジニアリング",
+      "cloud": "クラウドの安全な運用",
+      "web": "Webアプリと情報の保護"
+    },
+    "browser": "ブラウザーだけ・AWS／登録不要。",
+    "no_ready_practice": "同テーマの実践問題は準備中です。",
+    "local_condition": "ローカル開催専用。主催者が Docker 環境を準備し、参加者は招待先から操作します。",
+    "cloud_condition": "クラウド開催専用。主催者の準備とチームの AWS アカウントが必要です。",
+    "view_practice": "問題を見る（デモ）",
+    "demo_only": "上は公開カタログの実践例です。説明は GitHub、開催手順は主催者ガイドへ。下のカードは入門操作の競技デモで、実在の大会への参加先ではありません。",
+    "participant_guide": "招待を受けて参加する",
+    "organizer_guide": "自分で試す・開催する",
+    "problem_description": "問題の説明（GitHub）",
+    "setup_practice": "この方式の開催手順"
   }
 }

@@ -451,3 +451,32 @@ export const CASES = authoredCases.map((item) => ({
   mailRows: item.rows,
   rows: item.rows.filter((entry) => entry.kind !== "same"),
 }));
+
+// Every visible incoming-message content area can be inspected. Neutral areas
+// use the same controls as scored differences, without adding score targets.
+const neutralLabels = {
+  greeting: text("あいさつ", "Greeting"),
+  opening: text("本文の案内", "Opening text"),
+  signature: text("署名の表示", "Displayed signature"),
+  "display-name": text("差出人の表示名", "Sender display name"),
+  to: text("宛先", "Recipient"),
+};
+export function inspectionRow(item, id) {
+  const authored = item.mailRows.find((entry) => entry.id === id);
+  if (authored) return authored;
+  const label = neutralLabels[id];
+  if (!label) return undefined;
+  return {
+    id,
+    label,
+    kind: "same",
+    reason: text(
+      "この表示だけでは、この場面の危険な違いとは判断できません。",
+      "This text alone is not a risky difference in this scene.",
+    ),
+    detail: text(
+      "あいさつ・表示名・署名や宛先だけでは本物と保証できません。実アドレス・行き先・依頼内容と照合し、迷ったら既知の経路で確認します。",
+      "A greeting, display name, signature or recipient does not prove legitimacy. Compare actual addresses, destinations and requests; verify through a known route if unsure.",
+    ),
+  };
+}

@@ -1,5 +1,5 @@
-import { loadCatalog } from "./api-catalog.js?v=5f7dd30ac3";
-import { CORRECT_PER_LEVEL, lessonForLevel } from "./curriculum.js?v=5f7dd30ac3";
+import { loadCatalog } from "./api-catalog.js?v=adcf6655c6";
+import { CORRECT_PER_LEVEL, lessonForLevel } from "./curriculum.js?v=adcf6655c6";
 import {
   collect,
   createGame,
@@ -13,18 +13,18 @@ import {
   showLesson,
   start,
   tickInput,
-} from "./engine.js?v=5f7dd30ac3";
-import { explanationCard } from "./explanation.js?v=5f7dd30ac3";
-import { decisionFact, reasonDuration, reviewEntries } from "./feedback.js?v=5f7dd30ac3";
-import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=5f7dd30ac3";
-import { CARD_GAP, fieldCapacity } from "./layout.js?v=5f7dd30ac3";
-import { flowPositions } from "./motion.js?v=5f7dd30ac3";
-import { lessonNotice } from "./notices.js?v=5f7dd30ac3";
-import { clearSlices, pulseCombo, sliceCard } from "./paper-cut.js?v=5f7dd30ac3";
-import { createPaperSound } from "./paper-sound.js?v=5f7dd30ac3";
-import { loadQuestionLocale, questionView } from "./question-locales.js?v=5f7dd30ac3";
-import { buildShare } from "./share.js?v=5f7dd30ac3";
-import { formatSurvival } from "./time.js?v=5f7dd30ac3";
+} from "./engine.js?v=adcf6655c6";
+import { explanationCard } from "./explanation.js?v=adcf6655c6";
+import { decisionFact, reasonDuration, reviewEntries } from "./feedback.js?v=adcf6655c6";
+import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=adcf6655c6";
+import { CARD_GAP, fieldCapacity } from "./layout.js?v=adcf6655c6";
+import { flowPositions } from "./motion.js?v=adcf6655c6";
+import { lessonNotice } from "./notices.js?v=adcf6655c6";
+import { clearSlices, pulseCombo, sliceCard } from "./paper-cut.js?v=adcf6655c6";
+import { createPaperSound } from "./paper-sound.js?v=adcf6655c6";
+import { loadQuestionLocale, questionView } from "./question-locales.js?v=adcf6655c6";
+import { buildShare } from "./share.js?v=adcf6655c6";
+import { formatSurvival } from "./time.js?v=adcf6655c6";
 
 const $ = (id) => document.getElementById(id);
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
@@ -618,6 +618,14 @@ function result() {
     button(tr("もう一回"), () => prepare(newSeed(), true)),
     button(tr("同じ流れで復習"), () => prepare(seed, true), false),
   );
+  const practice = document.createElement("a");
+  const practiceLang = document.documentElement.lang === "en" ? "en" : "ja";
+  practice.href = `../portal-demo/?demo=1&goto=${encodeURIComponent(`/problems?lang=${practiceLang}#cloud-practice`)}`;
+  practice.textContent =
+    practiceLang === "en"
+      ? "Put safe cloud operations into practice"
+      : "クラウドの安全な運用を実践する";
+  actions.append(practice);
   measurementResult();
   sharing();
   review();

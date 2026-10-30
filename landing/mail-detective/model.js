@@ -1,33 +1,43 @@
-import { CASES } from "./cases.js?v=d6ed1fef3f";
+import { inspectionRow } from "./cases.js?v=206ef8786a";
+import { chooseVariant, LEVELS, levelCase } from "./levels.js?v=206ef8786a";
 
-export function createRun(random = Math.random) {
-  const ids = CASES.map((item) => item.id);
-  for (let i = ids.length - 1; i > 0; i--) {
-    const sample = random();
-    if (!Number.isFinite(sample) || sample < 0 || sample >= 1)
-      throw new RangeError("Invalid random sample");
-    const j = Math.floor(sample * (i + 1));
-    [ids[i], ids[j]] = [ids[j], ids[i]];
+export function createRun(random = Math.random, startLevel = 1, previousVariants = {}) {
+  if (!Number.isInteger(startLevel) || startLevel < 1 || startLevel > LEVELS.length)
+    throw new RangeError("Invalid start level");
+  const rounds = LEVELS.slice(startLevel - 1, startLevel + 1).map((entry) => entry.id);
+  const variants = {};
+  for (let offset = 0; offset < rounds.length; offset++) {
+    const level = startLevel + offset;
+    variants[level] = chooseVariant(random, previousVariants[level]);
   }
   return {
     phase: "playing",
-    rounds: [ids.find((id) => !CASES.find((item) => item.id === id).advanced), "lookalike"],
+    startLevel,
+    rounds,
+    variants,
     index: 0,
-    found: [[], []],
-    revealed: [[], []],
-    checked: [[], []],
+    found: rounds.map(() => []),
+    revealed: rounds.map(() => []),
+    checked: rounds.map(() => []),
     feedback: null,
   };
 }
+export function currentLevel(run) {
+  return run.startLevel + run.index;
+}
 export function currentCase(run) {
-  return CASES.find((item) => item.id === run.rounds[run.index]);
+  return levelCase(currentLevel(run), run.variants[currentLevel(run)]);
+}
+export function nextStartLevel(run) {
+  const level = run.startLevel + run.rounds.length;
+  return run.phase === "results" && level <= LEVELS.length ? level : null;
 }
 export function risks(run) {
   return currentCase(run).rows.filter((item) => item.kind === "risk");
 }
 export function tap(run, id) {
   if (!["playing", "round-complete"].includes(run.phase)) return run;
-  const item = currentCase(run).rows.find((candidate) => candidate.id === id);
+  const item = inspectionRow(currentCase(run), id);
   if (!item) return run;
   const known = [...run.found[run.index], ...run.revealed[run.index]].includes(id);
   const found = run.found.map((list) => [...list]);
@@ -63,7 +73,14 @@ export function end(run) {
     : run;
 }
 export function totals(run) {
-  return { found: run.found.flat().length, reviewed: run.revealed.flat().length, target: 6 };
+  const target = Array.from(
+    { length: run.index + 1 },
+    (_, offset) =>
+      levelCase(run.startLevel + offset, run.variants[run.startLevel + offset]).rows.filter(
+        (row) => row.kind === "risk",
+      ).length,
+  ).reduce((sum, count) => sum + count, 0);
+  return { found: run.found.flat().length, reviewed: run.revealed.flat().length, target };
 }
 
 export function expire(run) {

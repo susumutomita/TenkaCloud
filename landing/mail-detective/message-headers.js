@@ -11,7 +11,7 @@ const copy = {
     unaligned:
       "届いたメールはSPF・DKIMとも別ドメインでpassですが、Fromと一致せずDMARCはfail。この結果だけで詐欺とは断定せず、本文の要求と既知の窓口も照合します。",
     lookalike:
-      "この似た別ドメインは自分のドメインで認証にpassしています。正規のみなもから届いた証明にはなりません。",
+      "この似た別ドメインは自分のドメインで認証にpassしています。確認済みのサービスから届いた証明にはなりません。",
     unicode: "Unicode表示",
     ascii: "ASCII / Punycode",
     note: "教材では両方を表示します。実際の表示はアプリや設定で異なります。国際化ドメイン自体は危険ではありません。",
@@ -27,7 +27,7 @@ const copy = {
     unaligned:
       "The incoming message passes SPF and DKIM for a different domain, but neither aligns with From, so DMARC fails. This alone is not proof of fraud; compare the request and an established contact too.",
     lookalike:
-      "This look-alike domain passes authentication for its own domain. That does not establish that the message comes from the verified Minamo service.",
+      "This look-alike domain passes authentication for its own domain. That does not establish that the message comes from the verified service.",
     unicode: "Unicode form",
     ascii: "ASCII / Punycode",
     note: "This exercise shows both forms. Actual display depends on the app and settings. Internationalized domains are not inherently dangerous.",

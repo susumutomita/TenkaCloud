@@ -1,6 +1,8 @@
-import { COPY } from "./copy.js?v=d6ed1fef3f";
+import { inspectionRow } from "./cases.js?v=206ef8786a";
+import { COPY } from "./copy.js?v=206ef8786a";
+import { createIdnExplanation } from "./idn-explanation.js?v=206ef8786a";
 
-import { createOriginal, domainInspection } from "./message-headers.js?v=d6ed1fef3f";
+import { createOriginal } from "./message-headers.js?v=206ef8786a";
 
 const node = (tag, text, className) => {
   const result = document.createElement(tag);
@@ -65,16 +67,22 @@ function spotControl(row, value, slot, run, t, handlers) {
   control.addEventListener("click", () => handlers.choose(row.id, control.id));
   return control;
 }
-function appendReason(group, content, row, slot, run, t, ui) {
+function appendReason(group, content, row, slot, run, t, ui, item, lang) {
   if (ui.lastTarget !== content.id && !run.revealed[run.index].includes(row.id)) return;
   const note = localReason(row, t, slot);
   content.setAttribute("aria-describedby", note.id);
+  if (
+    item.level === 5 &&
+    ["from", "link"].includes(row.id) &&
+    (run.found[run.index].includes(row.id) || run.revealed[run.index].includes(row.id))
+  )
+    note.append(createIdnExplanation(item, lang, content.id, ui.idnOpen));
   group.append(note);
 }
 export function createEmail(item, side, lang, run, ui, handlers) {
   const t = COPY[lang],
     reference = side === "reference",
-    view = presentations[item.id][lang];
+    view = item.presentation?.[lang] ?? presentations[item.id][lang];
   const card = node(
     "article",
     undefined,
@@ -86,10 +94,10 @@ export function createEmail(item, side, lang, run, ui, handlers) {
   card.setAttribute("aria-labelledby", label.id);
   if (reference) label.append(node("span", t.referencePause, "reference-clock-note"));
   card.append(label);
-  function field(id, slot, className, heading = false) {
-    const raw = emailValue(item, id, side, lang);
+  function field(id, slot, className, heading = false, displayValue) {
+    const raw = displayValue ?? emailValue(item, id, side, lang);
     const value = id === "from" ? address(raw) : raw;
-    const row = !reference && item.rows.find((entry) => entry.id === id);
+    const row = !reference && inspectionRow(item, id);
     const group = node("div", undefined, className);
     const content = row
       ? spotControl(row, value, slot, run, t, handlers)
@@ -108,6 +116,8 @@ export function createEmail(item, side, lang, run, ui, handlers) {
         run,
         t,
         ui,
+        item,
+        lang,
       );
     return group;
   }
@@ -116,7 +126,7 @@ export function createEmail(item, side, lang, run, ui, handlers) {
   const header = node("div", undefined, "message-header");
   header.append(node("span", view[0].slice(0, 1), "sender-avatar"));
   const identity = node("div", undefined, "sender-identity");
-  identity.append(node("strong", view[0], "sender-name"));
+  identity.append(field("display-name", "name", "sender-name", false, view[0]));
   const toggle = node("button", t.toMe, "address-toggle");
   toggle.type = "button";
   toggle.id = `details-${side}`;
@@ -139,15 +149,24 @@ export function createEmail(item, side, lang, run, ui, handlers) {
     const line = node("div", undefined, "header-line");
     line.append(node("span", t[key], "header-label"));
     line.append(
-      id === "to"
-        ? node("span", "learner@practice.example")
-        : field(id, `details-${side}`, "header-value"),
+      field(
+        id,
+        `details-${side}`,
+        "header-value",
+        false,
+        id === "to" ? "learner@practice.example" : undefined,
+      ),
     );
     headers.append(line);
   }
-  message.append(headers, createOriginal(item, side, lang, ui, handlers));
+  message.append(headers);
+  if ((item.level ?? 5) >= 4) message.append(createOriginal(item, side, lang, ui, handlers));
   const body = node("div", undefined, "mail-body");
-  body.append(node("p", t.greeting), node("p", view[1]), field("request", "body", "body-request"));
+  body.append(
+    field("greeting", "body", "body-greeting", false, t.greeting),
+    field("opening", "body", "body-opening", false, view[1]),
+    field("request", "body", "body-request"),
+  );
   const link = node("div", undefined, "link-inspector");
   const inspect = node("button", view[2], "mail-link");
   inspect.type = "button";
@@ -162,11 +181,9 @@ export function createEmail(item, side, lang, run, ui, handlers) {
   target.id = `target-${side}`;
   target.hidden = !ui.link[side];
   target.append(node("p", t.actualTarget, "target-label"), field("link", "target", "target-value"));
-  target.append(domainInspection(emailValue(item, "link", side, lang), lang));
-  if (!reference && item.rows.some((entry) => entry.id === "link"))
-    target.append(node("p", t.linkTap, "target-hint"));
+  if (!reference) target.append(node("p", t.linkTap, "target-hint"));
   link.append(inspect, preview, target);
-  body.append(link, node("p", view[0], "mail-signature"));
+  body.append(link, field("signature", "body", "mail-signature", false, view[0]));
   const attachment = emailValue(item, "attachment", side, lang);
   if (attachment && !["なし", "None"].includes(attachment)) {
     const files = node("div", undefined, "attachment-area");

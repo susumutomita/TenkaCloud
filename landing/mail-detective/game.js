@@ -1,18 +1,24 @@
-import { CASES } from "./cases.js?v=d6ed1fef3f";
-import { COPY } from "./copy.js?v=d6ed1fef3f";
-import { advanceClock, createClock, progress } from "./deadline.js?v=d6ed1fef3f";
-import { createEmail } from "./mail-view.js?v=d6ed1fef3f";
+import { inspectionRow } from "./cases.js?v=206ef8786a";
+import { COPY } from "./copy.js?v=206ef8786a";
+import { advanceClock, createClock, progress } from "./deadline.js?v=206ef8786a";
+import { updateIdnFonts } from "./idn-explanation.js?v=206ef8786a";
+import { levelCase } from "./levels.js?v=206ef8786a";
+import { createEmail } from "./mail-view.js?v=206ef8786a";
 import {
   createRun,
   currentCase,
+  currentLevel,
   end,
   expire,
   next,
+  nextStartLevel,
   reveal,
+  risks,
   tap,
   totals,
-} from "./model.js?v=d6ed1fef3f";
-import { createReview } from "./review.js?v=d6ed1fef3f";
+} from "./model.js?v=206ef8786a";
+import { createMailShareLink, createNextStep } from "./next-step.js?v=206ef8786a";
+import { createReview } from "./review.js?v=206ef8786a";
 
 const element = (tag, text, className) => {
   const node = document.createElement(tag);
@@ -22,11 +28,18 @@ const element = (tag, text, className) => {
 };
 const byId = (id) => document.getElementById(id);
 let lang = new URL(location.href).searchParams.get("lang") === "en" ? "en" : "ja";
-let run = createRun();
+const previousVariants = {};
+function freshRun(level = 1) {
+  const nextRun = createRun(Math.random, level, previousVariants);
+  Object.assign(previousVariants, nextRun.variants);
+  return nextRun;
+}
+let run = freshRun();
 const guideOpen = new Set();
 const freshView = () => ({
   active: "received",
   lastTarget: null,
+  idnOpen: {},
   address: { reference: false, received: false },
   link: { reference: false, received: false },
   original: { reference: false, received: false },
@@ -127,7 +140,7 @@ function choose(id, focusId) {
   mailUI.lastTarget = focusId;
   run = tap(run, id);
   render(focusId);
-  const item = currentCase(run).rows.find((entry) => entry.id === id);
+  const item = inspectionRow(currentCase(run), id);
   byId("live").textContent =
     `${item.kind === "risk" ? COPY[lang].statusRisk : COPY[lang].statusNormal} ${item.reason[lang]}`;
 }
@@ -143,8 +156,8 @@ function playView(t) {
   const checked = run.found[run.index].length + run.revealed[run.index].length;
   const hud = element("div", undefined, "round-bar");
   hud.append(
-    element("span", `${t.round} ${run.index + 1}/2`, "round-number"),
-    element("span", `${t.found} ${checked}/3`, "spot-count"),
+    element("span", `Lv${currentLevel(run)}`, "round-number"),
+    element("span", `${t.found} ${checked}/${risks(run).length}`, "spot-count"),
   );
   const heading = element("h2", item.title[lang]);
   heading.id = "round-title";
@@ -187,8 +200,16 @@ function playView(t) {
   board.querySelector("#email-received .message-source").append(deadline);
   const controls = element("div", undefined, "round-controls");
   if (run.phase === "round-complete") {
-    controls.append(element("p", t.roundDone, "done-text"));
-    const advanceButton = button(run.index === 0 ? t.next : t.finish, advance, "primary");
+    controls.append(
+      element("p", t.roundDone.replace("{count}", String(risks(run).length)), "done-text"),
+    );
+    const advanceButton = button(
+      run.index + 1 < run.rounds.length
+        ? t.next.replace("{level}", String(currentLevel(run) + 1))
+        : t.finish,
+      advance,
+      "primary",
+    );
     advanceButton.id = "next";
     controls.append(advanceButton);
   } else {
@@ -198,8 +219,8 @@ function playView(t) {
         if (!settleClock()) return;
         run = reveal(run);
         mailUI.active = "received";
-        mailUI.address.received = true;
-        mailUI.link.received = true;
+        mailUI.address.received = risks(run).some((row) => ["from", "reply"].includes(row.id));
+        mailUI.link.received = risks(run).some((row) => row.id === "link");
         render("next");
         byId("live").textContent = t.shownAnswers;
       },
@@ -225,8 +246,8 @@ function resultsView(t) {
   const panel = element("section", undefined, "result-panel");
   panel.append(
     heading,
-    element("p", `${t.ownCount} ${counts.found}/6`, "result-count"),
-    element("p", `${t.reviewCount} ${counts.reviewed}/6`),
+    element("p", `${t.ownCount} ${counts.found}/${counts.target}`, "result-count"),
+    element("p", `${t.reviewCount} ${counts.reviewed}/${counts.target}`),
     element("p", t.takeaway, "takeaway"),
     element("p", t.caution),
     element("p", t.resultsNote, "safety"),
@@ -236,7 +257,7 @@ function resultsView(t) {
     timedOut ? t.retry : t.again,
     () => {
       guideOpen.clear();
-      run = createRun();
+      run = freshRun(run.startLevel);
       resetClock();
       mailUI = freshView();
       render("round-title");
@@ -244,11 +265,42 @@ function resultsView(t) {
     "primary",
   );
   replay.id = "again";
-  panel.append(replay);
+  panel.append(replay, createMailShareLink(lang, run, counts));
+  const nextLevel = nextStartLevel(run);
+  if (nextLevel !== null) {
+    const continueButton = button(
+      t.next.replace("{level}", String(nextLevel)),
+      () => {
+        guideOpen.clear();
+        run = freshRun(nextLevel);
+        resetClock();
+        mailUI = freshView();
+        render("round-title");
+      },
+      "primary",
+    );
+    continueButton.id = "continue-level";
+    panel.append(continueButton);
+  }
+  if (run.startLevel > 1) {
+    const restart = button(
+      t.fromStart,
+      () => {
+        guideOpen.clear();
+        run = freshRun();
+        resetClock();
+        mailUI = freshView();
+        render("round-title");
+      },
+      "text-button",
+    );
+    restart.id = "restart-levels";
+    panel.append(restart);
+  }
   const review = element("details", undefined, "result-review");
   review.append(element("summary", t.expand));
   for (let i = 0; i <= run.index; i++) {
-    const item = CASES.find((entry) => entry.id === run.rounds[i]);
+    const item = levelCase(run.startLevel + i, run.variants[run.startLevel + i]);
     review.append(element("h3", item.title[lang]));
     for (const field of item.rows.filter((entry) => entry.kind === "risk")) {
       review.append(element("p", `${field.label[lang]}: ${field.reason[lang]}`));
@@ -264,7 +316,12 @@ function resultsView(t) {
     }
     panel.append(missed);
   }
-  fragment.append(panel, review, createReview(lang, guideOpen));
+  fragment.append(
+    panel,
+    review,
+    createReview(lang, guideOpen, currentLevel(run)),
+    createNextStep(lang),
+  );
   return fragment;
 }
 function render(focusId) {
@@ -288,6 +345,7 @@ function render(focusId) {
   byId("app").replaceChildren(
     ["results", "ended", "timed-out"].includes(run.phase) ? resultsView(t) : playView(t),
   );
+  updateIdnFonts();
   paintDeadline();
   if (focusId) byId(focusId)?.focus({ preventScroll: !["round-title", "next"].includes(focusId) });
 }
@@ -312,5 +370,6 @@ window.addEventListener("popstate", () => {
   render();
 });
 render();
+window.addEventListener("resize", updateIdnFonts);
 
 requestAnimationFrame(frame);

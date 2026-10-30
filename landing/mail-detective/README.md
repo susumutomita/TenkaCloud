@@ -1,65 +1,59 @@
-# Spot the risky difference / メールの間違いさがし
+# Mail Detective
 
-Static browser game at `/mail-detective/`, linked from the Japanese/English LP. Opens directly into play: no start screen, course, registration, event, Docker, AWS, external API, API key or analytics. Two rounds, designed for about1–2minutes; a prototype automatic-processing deadline with no numeric countdown or speed scoring. Human completion time and retention are not established.
+Static, play-first comparison of two fictional emails at `/mail-detective/`. No lecture, signup or pre-quiz. Each play contains at most two scenes, targeting 1–3 minutes before optional reading. Physical-device usability, human duration and learning effectiveness remain unmeasured.
 
-## Play
+## Lessons and variations
 
-Compare the notice verified in a fictional official app with a similar incoming email. Tap the incoming-email field that changes something consequential. Desktop shows two complete messages side by side. Narrow screens switch between full-width reference/incoming messages. Each has a subject, sender, recipient/time, normal body paragraphs, a link label and attachments. Sender/reply details open on demand; tapping a link label reveals its destination without navigating. The practice frame remains distinct from real email.
+| Level | Existing case | Risk targets |
+| --- | --- | --- |
+| 1 | Booking | One unexpected attachment |
+| 2 | Invoice | Different sender and code-reply request |
+| 3 | Shared file | Actual destination and app-running attachment |
+| 4 | Account | Protection-disable request, tool and reply contact |
+| 5 | Look-alike domain | Sender, destination and code request |
 
-Five authored pairs: a random choice of four familiar pairs, followed by the look-alike-domain pair. Each has three risk-related changes and two normal variations. Sender, URL path and request differences can be normal depending on the scene; spelling or a changed date alone is never a scored risk. Reference facts are shown as observations needed for the scene, not a lecture before play. No real person, brand, mail or character artwork.
+The five authored cases remain intact. A lesson projection changes unintroduced risky values back to their verified reference, not merely out of grading. Normal subject/time changes, registered senders and known paths remain valid differences. Level2 also includes the same expected statement PDF on both sides. A difference or an attachment is not inherently malicious.
 
-A tap shows a short local reason, with optional detail. Correct spots receive a brief tick reaction; reduced motion disables it. Mistakes do not block the next attempt or open a modal. Repeated taps do not add findings. Next-round action is explicit and never waits for an animation. Answer reveal completes review but is reported separately from independent finds. Finish early and replay are available; no best score, leaderboard or certification.
+Three coherent text variants per lesson change fictional brands, matching domains, requests, filenames and neutral opening text. Injected RNG makes them testable, excluding the immediately previous variant on replay. No AI generation or external API is used. Lesson order follows taught concepts.
 
-All email/link/attachment strings are plain text in buttons, never navigable links or files. The shared game list and LP links are active navigation. Optional end-of-play references open official sites in separate tabs; fictional message links remain inert. After the initial static assets load, play makes no requests and works without network access. There is no persistence or server-side hidden grading; reading source reveals answers by design.
+The first play is Levels1–2, with an optional next play of Levels3–4 and finally Level5. Replay starts at the same level with another variant. Results distinguish independently found and revealed targets, counting only visited scenes. Timeout and early stop cannot advance to later lessons.
 
-## Files and verification
+## Interaction and feedback
 
-- `cases.js`: bilingual fictional observations, three consequential changes plus two justified normal variations per pair.
-- `model.js`: pure bounded two-round state and transparent found/revealed accounting.
-- `mail-view.js`, `mail.css`: familiar message structure with address and safe link inspection; no copied inbox content or brand assets.
-- `copy.js`, `game.js`, `game.css`, `index.html`: immediate-play UI, native buttons/details, keyboard/touch, reduced motion and language changes preserving the run.
-- `scripts/landing/mail-detective.test.ts`: decisions, repeated input, variation, answer reveal, finish/replay, safety and complete module-graph versioning.
-- `docs/learning-path/`: future1–3minute/one-decision path; no later games are implemented.
+Desktop places emails side by side; mobile switches between full-width messages. Subject, sender, recipient, time, body, links and attachment retain a familiar Gmail-like reading structure. Safe and unchanged content use the same inspection controls as scored differences. There are no candidate-only dotted hover cues. Ordinary link underlines and visible keyboard focus remain; success marks appear only after answering or explicitly revealing.
 
-Run from repository root:
+A short reason follows judgment; details are optional. Attachment/tool details explain the method, the behavior requested, and the safe response: do not download or run unrequested software, verify through a known independent route rather than contacts in the message, and report it at work when relevant. An exe extension alone is not classified as malicious. Brief feedback respects reduced motion.
+
+End review starts with learned topics. Sender, destination and requests appear before authentication at Level4 and character-confusables at Level5. Beginners do not need DKIM knowledge.
+
+## Headers and character comparison
+
+From Level4, Show original opens a collapsed simulated header excerpt. It attributes Authentication-Results to the trusted fictional receiver mx.practice.example, never to browser DNS or cryptographic verification. From, Reply-To, `Return-Path`, SPF envelope domain, DKIM signing domain and DMARC From alignment are shown. Reply-To is not used for that alignment. Signature bytes are omitted; X-Practice-DKIM-Domain is an educational annotation, not a valid DKIM-Signature.
+
+Authored counterexamples cover forwarding with SPF fail but aligned DKIM pass, unaligned SPF/DKIM passes, and a look-alike domain passing for itself. Passing authentication proves neither good intent nor safe content; failure alone is not proof of fraud. An identically named header is not inherently trusted.
+
+Only after a Level5 finding or answer reveal, the game derives changed characters, positions and Punycode from the actual URL data. Current variants replace Latin a (U+0061) with Cyrillic а (U+0430): character4 in minаmo.example or character2 in nаgisa.example / hаrumi.example. Enlarged characters, Japanese/English names, highlighted positions and ASCII forms are shown.
+
+The glyph comparison copies the source email control's computed font-family, weight and style. The UI reports the requested stack and does not pretend to identify the actual device fallback. It distinguishes a different character from a different font rendering the same character. IDNs are not inherently unsafe.
+
+## Deadline and optional next steps
+
+Text stays still while the message-frame seams approach an automatic-processing outlet. No separate meter, numeric countdown or flashing. Each scene has 60 seconds of active presented time. Address/link/header/reason inspection and mobile reference reading pause it, with an explicit resume action. Blur, background time and suspended frames over one second are excluded. Input settles the old clock before scoring, so late input cannot score. Timeout explains misses and offers immediate replay. This is a fictional game event, not real email-processing behavior.
+
+An X compose link beside replay includes actual found/reviewed counts, visited levels, early-stop/timeout status and the production game URL. It does not post automatically, connect an account, reveal answers or claim certification. The user confirms any final post.
+
+Both games return to the same subject-based learning list. Ready practice links to real descriptions and the appropriate local/cloud organizer guide. Participant invitation guidance stays separate. Same-theme social-engineering practice is still draft, so it is not offered as ready. Standalone replay needs no account or hosting setup. Competition/authentication code and the separate LP PR remain unchanged.
+
+## Safety, validation and sources
+
+All message content, brands, addresses and attachments are fictional. Message targets are inert controls, not navigable links or downloadable files. Play sends no email, executes nothing, performs no AWS operations and needs no external API, key, signup, Docker or analytics. Answer data is intentionally client-readable learning material, not hidden grading or an ability certification. References, shared navigation and X compose are explicit user navigation.
 
 ```sh
-bun test scripts/landing/mail-detective.test.ts scripts/landing/landing-seo.test.ts scripts/landing/cloud-master-assets.test.ts
-bun run generate:landing-locales
+bun test scripts/landing/mail-detective.test.ts scripts/landing/mail-levels.test.ts scripts/landing/mail-next-step.test.ts
 bun run stamp:landing-assets
 python3 -m http.server 19980 --bind 127.0.0.1 --directory landing
 ```
 
-Open `http://127.0.0.1:19980/mail-detective/?lang=ja` or `?lang=en`. This loopback preview is for the host Mac only. No public deployment is performed by those commands. Stop the owned HTTP server to remove the preview; there is no backend state or cloud teardown.
+Open `http://127.0.0.1:19980/mail-detective/?lang=en` on that Mac; Japanese uses lang=ja. Reuse an existing server rather than binding its port twice. This is a local preview, not production publication.
 
-Local tests, type/format checks, browser QA and independent review are recorded separately. Headless desktop/mobile simulation is not physical-device or human-playtest evidence. Production publication requires a separate decision; existing competition exercises and LP PR3493 are preserved.
-
-## Source basis and limits
-
-[FTC phishing advice](https://consumer.ftc.gov/articles/how-recognize-avoid-phishing-scams) supports independently checking an incoming request through a contact you already know. Cases, wording, art-free layout and rules are original synthetic material. No third-party email screenshots or course questions are copied.
-
-A mismatch prompts checking; it is not universal proof of fraud. A matching sender/domain or all matching fields does not guarantee safety. Executable attachments are judged against this scene's verified notice, not categorically labelled malicious. Client results are practice feedback, not evidence of individual ability or learning effectiveness.
-
-Gmail UI behavior references: [message details](https://support.google.com/mail/answer/180707?hl=en) and [full-header documentation](https://support.google.com/mail/answer/29436?hl=en). This is an independent practice game, not Gmail or a real login/mail client.
-
-## Optional header inspection and look-alike domains
-
-Each play now starts with one randomly selected familiar pair and then the look-alike-domain pair. The two-round, six-spot result remains unchanged. The new pair uses a Cyrillic a (U+0430) in minаmo.example, distinct from the known minamo.example. Inspecting the destination displays both Unicode and ASCII/Punycode; no external URL opens. The game deliberately presents both, without promising how any real browser will render them. IDNs are not inherently unsafe.
-
-Show original opens an optional, initially collapsed simulated header excerpt. Authentication-Results is an authored observation attributed to the trusted fictional receiver mx.practice.example, not a browser cryptographic/DNS check and not a header to trust merely because its name matches. Signature bytes are omitted; X-Practice-DKIM-Domain is an explicitly educational annotation, not a DKIM-Signature. From, Reply-To, `Return-Path`, SPF envelope domain, DKIM signing domain/selector and DMARC From alignment are shown. Reply-To is not part of DMARC alignment. These results are not extra scored spots or a pass/fail safety classifier.
-
-Counterexamples: the verified shared-file reference simulates forwarding with SPF fail but aligned DKIM pass and therefore DMARC pass; the account message passes SPF and DKIM for another domain but has DMARC fail; the look-alike domain passes all three for itself yet is not the verified sender. All alignment examples use exact domain equality or wholly separate .example domains, avoiding assumptions about public-suffix/organizational-domain discovery.
-
-Sources: [RFC8601](https://www.rfc-editor.org/rfc/rfc8601) (trust boundary), [RFC9989](https://datatracker.ietf.org/doc/html/rfc9989) (current DMARC, replacing RFC 7489), [RFC5890](https://www.rfc-editor.org/rfc/rfc5890) (A-label/U-label), [UnicodeUTS39](https://www.unicode.org/reports/tr39/) (confusable characters). No text, signatures, accounts or personal data from real mail are used.
-
-## Automatic-processing prototype
-
-The incoming message has dashed side seams that become solid toward a labelled automatic-processing outlet. Its text never moves; there is no separate meter, numeric clock or flashing. An approaching status appears near the end. Each round currently has 60 seconds of active, presented foreground time, for an intended 1–3 minute play before optional inspection. This is a prototype value for user review, not a measured human completion time or final UX decision.
-
-Opening address details, the original header or the link target pauses the window; the latest local answer reason pauses it too. The message states that it is paused, and Close and continue closes inspection and resumes. Switching messages or languages preserves progress. On narrow screens, reading the full-width reference pauses the hidden incoming message deadline; a note explains that returning to the incoming message resumes it. Background/blurred time and suspended frames over 1 second are excluded. The clock uses a monotonic watermark and settles old state before input, so an input after the boundary cannot earn a finding. A timeout has its own result, preserves independent finds, explains the missed spots and offers immediate replay. The next round and replay reset the clock. This is a fictional game event, not how actual email systems automatically validate or act on messages.
-
-## Brand, review and shared entry
-
-The outer shell uses the LP color tokens, type stack, spacing and rounded actions. Fonts use local fallbacks rather than adding a font-service request. The email body retains its separate familiar reading layout. Finish, timeout or completion shows a short overview with six closed topics: sender/reply address, real destination, confusable domains, requests/attachments, authentication and independent verification. Each opens where-to-look, what-to-check and a safe-next-action explanation with official references. It is not a lecture before play.
-
-The LP has one shared game section. Its main action and both games’ return links open the existing public demo problem list through its explicit mock-only entry (`portal-demo/?demo=1&goto=...`). The browser-only games appear separately from the competition-interface demo and do not enter the competition catalog or event scores. Joining uses an organizer invitation; local/cloud are organizer hosting choices. Hosted/local real events and self-paced local views retain their existing behavior. There is no authentication or hosting-logic change, and direct game URLs remain valid.
+Official sources: [FTC](https://consumer.ftc.gov/articles/how-recognize-avoid-phishing-scams), [Gmail](https://support.google.com/mail/answer/180707), [RFC8601](https://www.rfc-editor.org/rfc/rfc8601), [RFC9989](https://datatracker.ietf.org/doc/html/rfc9989), [RFC5890](https://www.rfc-editor.org/rfc/rfc5890), [UnicodeUTS39](https://www.unicode.org/reports/tr39/) and [Unicode character data](https://www.unicode.org/Public/UCD/latest/ucd/UnicodeData.txt). Cases and UI are original synthetic material; no real mail, contacts, brand assets or third-party course questions are copied. Future curriculum is separate in [the learning path](../../docs/learning-path/README.ja.md).

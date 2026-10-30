@@ -706,8 +706,8 @@
     "error": "Submission failed. Retry retains the same operation key."
   },
   "foundation_games": {
-    "title": "Quick foundation games",
-    "description": "Play in your browser. No AWS account or registration. These do not count toward event scores.",
+    "title": "Explore a theme, then put it into practice.",
+    "description": "From short games to hands-on problems, with requirements shown for each practice.",
     "play": "Play {name}",
     "mail-detective": {
       "title": "Spot the risky email difference",
@@ -718,8 +718,23 @@
       "description": "Spot suspicious API requests and stop them with a tap."
     },
     "page_title": "Games and problems",
-    "page_description": "Start with browser foundation games, then explore the competition demo below.",
-    "competition_title": "Competition interface demo",
-    "competition_description": "Join a real event through your organizer’s invitation. Local and cloud are hosting choices; participants do not need to select them here."
+    "page_description": "Find foundations and practice by theme. Competition cards are a public demo.",
+    "competition_title": "Hands-on problems (competition demo)",
+    "competition_description": "Join a real event through your organizer’s invitation. Local and cloud are hosting choices; participants do not need to select them here.",
+    "themes": {
+      "social": "Social engineering",
+      "cloud": "Safe cloud operations",
+      "web": "Protecting web apps and information"
+    },
+    "browser": "Browser only; no AWS account or signup.",
+    "no_ready_practice": "Hands-on practice for this theme is in preparation.",
+    "local_condition": "Local hosting only. The organizer prepares Docker; participants use their invitation.",
+    "cloud_condition": "Cloud hosting only. Organizer setup and a team AWS account are required.",
+    "view_practice": "View problem (demo)",
+    "demo_only": "Above are examples from the public catalog, with GitHub descriptions and organizer setup guides. The cards below demonstrate introductory competition operations; they are not invitations to a live event.",
+    "participant_guide": "Join with an invitation",
+    "organizer_guide": "Try or host a practice",
+    "problem_description": "Problem description (GitHub)",
+    "setup_practice": "Hosting setup for this mode"
   }
 }
