@@ -1,5 +1,5 @@
-import { COPY } from "./copy.js?v=7b6c3e3ddd";
-import { choose, elapse, ROUND_MS, start } from "./model.js?v=7b6c3e3ddd";
+import { COPY } from "./copy.js?v=0408938f18";
+import { choose, elapse, ROUND_MS, start } from "./model.js?v=0408938f18";
 
 let lang = new URLSearchParams(location.search).get("lang") === "en" ? "en" : "ja",
   state = start(),
@@ -104,6 +104,7 @@ function header(t) {
   document.title = `${t.title} | TenkaCloud`;
   for (const id of ["title", "instruction", "safety", "games"]) $(id).textContent = t[id];
   $("exit").hidden = true;
+  $("instruction").hidden = !["dm", "invite"].includes(state.stage);
   $("games").href = `../portal-demo/?demo=1&goto=${encodeURIComponent(`/problems?lang=${lang}`)}`;
   for (const l of ["ja", "en"]) $(l).setAttribute("aria-pressed", String(lang === l));
 }
