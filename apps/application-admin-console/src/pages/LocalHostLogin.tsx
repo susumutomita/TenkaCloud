@@ -1,8 +1,9 @@
 import type { TokenSet } from "@tenkacloud/auth-client";
 import { ConsoleAuthShell, toErrorMessage } from "@tenkacloud/web-kit";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router";
 import { useAuth } from "../auth/AuthProvider";
+import { clearLocalHostSession, loadLocalHostSession } from "../auth/local-host-session";
 import { ArrowIcon, applicationConsoleCopy } from "../components/ProductLoginShell";
 import { type AppConfig, isLocalHost } from "../config";
 import { type LocaleCode, useI18n, useT } from "../i18n";
@@ -61,8 +62,34 @@ export function LocalHostLoginPage({
   const [key, setKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  // A reload keeps this tab's session; confirm it with the host before trusting it.
+  const [saved, setSaved] = useState(() => loadLocalHostSession());
+  const { tokens, setTokens } = auth;
+  useEffect(() => {
+    if (!saved || tokens) return;
+    let active = true;
+    void fetch(`${config.apiBaseUrl}/host/me`, {
+      headers: { authorization: `Bearer ${saved.idToken}` },
+    })
+      .then((response) => {
+        if (!active) return;
+        if (response.ok) {
+          setTokens(saved);
+          return;
+        }
+        clearLocalHostSession();
+        setSaved(null);
+      })
+      .catch(() => {
+        if (active) setSaved(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [config.apiBaseUrl, saved, setTokens, tokens]);
 
-  if (auth.tokens) return <Navigate to={returnPath ?? "/events"} replace />;
+  if (tokens) return <Navigate to={returnPath ?? "/events"} replace />;
+  if (saved) return null;
 
   const signIn = async (event: React.FormEvent) => {
     event.preventDefault();
