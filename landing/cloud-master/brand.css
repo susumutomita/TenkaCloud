@@ -1,0 +1,62 @@
+/* Same LP palette and typography as Mail Detective. Geometry and motion stay in game.css. */
+body.cloud-brand {
+  --ink: #07111f;
+  --ink-2: #263241;
+  --muted: #5d6877;
+  --blue: #0969da;
+  --line: #d9dee8;
+  --paper: #fff;
+  --font-sans: "Inter", "Noto Sans JP", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-family: var(--font-sans);
+  background: radial-gradient(circle at 50% 0%, rgba(243,246,251,.92), rgba(255,255,255,0) 360px), var(--paper);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+.cloud-brand .top { border-bottom: 1px solid #edf0f5; }
+.cloud-brand .brand { font-size: 20px; font-weight: 800; letter-spacing: -.03em; }
+.cloud-brand .top h1 { color: var(--muted); font-size: 12px; }
+body.cloud-brand:not(.active-game) .top { display: flex; min-height: 56px; height: auto; }
+body.cloud-brand:not(.active-game) .top h1,
+body.cloud-brand:not(.active-game) .top #pause { display: none; }
+.cloud-brand .start-card { background: #fbfcfe; border-color: var(--line); border-radius: 12px; box-shadow: none; }
+.cloud-brand .start-card h2 { color: var(--ink); font-family: var(--font-sans); font-size: clamp(28px,6vw,40px); font-weight: 800; letter-spacing: -.04em; }
+.cloud-brand .start-role,
+.cloud-brand .start-closing,
+.cloud-brand .start-rules { color: var(--muted); font-family: var(--font-sans); }
+.cloud-brand .start-action { color: var(--ink-2); font-family: var(--font-sans); }
+.cloud-brand .glass { background: #fbfcfe; border-color: var(--line); box-shadow: none; backdrop-filter: none; }
+.cloud-brand .hud { border-radius: 12px; }
+.cloud-brand .field { background: #f5f7fb; box-shadow: none; }
+.cloud-brand .request { box-shadow: 0 3px 12px #07111f14; }
+.cloud-brand .primary { background: var(--ink); color: #fff; border-radius: 999px; box-shadow: none; }
+.cloud-brand .primary:hover { background: var(--ink-2); }
+.cloud-brand .secondary,
+.cloud-brand .language-switch { color: var(--ink-2); background: var(--paper); border-color: var(--line); border-radius: 999px; box-shadow: none; }
+.cloud-brand .overlay { border-radius: 12px; }
+.cloud-brand .overlay h2 { color: var(--ink); font-family: var(--font-sans); font-weight: 800; letter-spacing: -.04em; }
+.cloud-brand .overlay p { color: var(--muted); }
+.cloud-brand .overlay .score-result,
+.cloud-brand .start-best { color: #006d43; }
+.cloud-brand .overlay .actions,
+.cloud-brand .share-actions { gap: 12px; }
+.cloud-brand .overlay .actions > *,
+.cloud-brand .share-actions > * { min-height: 44px; max-width: 100%; min-width: 0; white-space: normal; overflow-wrap: anywhere; text-align: center; font-size: 14px; line-height: 1.5; }
+.cloud-brand .share-actions .secondary { padding: 12px 20px; }
+.cloud-brand .overlay a.secondary:hover { text-decoration: none; background: #f5f7fb; }
+.cloud-brand .message-bar { background: #f5f7fb; color: var(--ink-2); }
+body.cloud-brand:not(.active-game) footer { display: block; color: var(--muted); font-family: var(--font-sans); }
+.cloud-brand #language-home { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px 12px; }
+.cloud-brand footer details { margin-top: 8px; }
+.cloud-brand button:focus-visible,
+.cloud-brand a:focus-visible,
+.cloud-brand summary:focus-visible { outline-color: var(--blue); }
+@media(max-width:650px) {
+  .cloud-brand .overlay .actions > *,
+  .cloud-brand .share-actions > * { flex: 1 1 100%; }
+}
+.cloud-brand .brand { display: inline-flex; align-items: center; gap: 8px; }
+.cloud-brand .brand span { display: inline; font-size: 20px; margin-left: 0; }
+.cloud-brand .overlay .actions { align-items: stretch; }
+.cloud-brand .overlay .actions > a { display: inline-flex; align-items: center; justify-content: center; padding: 12px 20px; border: 1px solid var(--line); border-radius: 999px; color: var(--ink-2); background: var(--paper); text-decoration: none; }
+.cloud-brand .actions .language-switch { margin-top: 0; }
+.cloud-brand footer summary { min-height: 44px; font-size: 12px; }

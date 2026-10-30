@@ -126,6 +126,7 @@
   var I18N = {
     ja: {
       "nav.product": "プロダクト",
+      "nav.games": "ゲームで学ぶ",
       "nav.useCases": "活用例",
       "nav.problems": "問題",
       "nav.extend": "問題を作る",
@@ -141,7 +142,7 @@
       "hero.sub":
         "TenkaCloudは、短い回答問題から実際のクラウドを使う演習まで、学ぶ人に合わせて作り、開催できるプラットフォーム。問題選択・チーム運営・採点・結果確認を支えます。",
       "hero.vibe":
-        "<strong>まずは、同じ PC で。</strong> ローカル開催は SQLite を使い、AWS アカウントは不要です。Docker 問題には Docker Engine と Compose が必要です。",
+        "<strong>開催する方へ。</strong> ローカル開催は SQLite を使い、AWS アカウントは不要です。Docker 問題には Docker Engine と Compose が必要です。",
       "hero.quest_meta": "TenkaCloud ブラウザ体験版 · 登録不要",
       "hero.quest_badge": "ブラウザ体験版",
       "hero.quest_diff": "インストール不要",
@@ -275,6 +276,17 @@
         "ローカル開催は SQLite で動き、AWS アカウントは不要です。LAN や Tailscale 越しに別の端末から参加できます。接続条件と Docker 問題の利用条件は起動ガイドで確認してください。",
       "uc.e.more": "起動ガイド",
       "uc.e.moreHref": "/docs/getting-started/#local-start",
+      "mailGame.roles":
+        "競技への参加は主催者の招待から。ローカル／クラウドは主催者が選ぶ開催方式です。",
+      "mailGame.join": "競技に参加する →",
+      "mailGame.joinHref": "./docs/manual/participant/",
+      "mailGame.host": "競技を開催する →",
+      "mailGame.hostHref": "./docs/manual/organizer/",
+      "mailGame.h": "ゲームで学ぶ。",
+      "mailGame.p":
+        "まず遊んで、気づいたらもう一度。ブラウザーで試せる基礎ゲームを集めました。AWS・登録不要です。",
+      "mailGame.cta": "ゲーム一覧へ →",
+      "mailGame.href": "./portal-demo/?demo=1&goto=%2Fproblems%3Flang%3Dja",
       "uc.f.role": "定着の確認",
       "uc.f.h": "繰り返して、定着を確かめる。",
       "uc.f.p":
@@ -420,6 +432,7 @@
     },
     en: {
       "nav.product": "Product",
+      "nav.games": "Learn through games",
       "nav.useCases": "Use cases",
       "nav.problems": "Problems",
       "nav.extend": "Author problems",
@@ -435,7 +448,7 @@
       "hero.sub":
         "TenkaCloud lets you create and host exercises for your learners, from short answer problems to tasks using real cloud environments. It supports problem selection, teams, scoring and result review.",
       "hero.vibe":
-        "<strong>Start on one PC.</strong> Local hosting uses SQLite and needs no AWS account. Docker exercises require Docker Engine and Compose.",
+        "<strong>For organizers.</strong> Local hosting uses SQLite and needs no AWS account. Docker exercises require Docker Engine and Compose.",
       "hero.quest_meta": "TenkaCloud browser walkthrough · No signup",
       "hero.quest_badge": "Browser walkthrough",
       "hero.quest_diff": "No installation",
@@ -569,6 +582,17 @@
         "Local hosting runs on SQLite and needs no AWS account. Participants can join from other devices over the LAN or Tailscale. Check the startup guide for connection and Docker problem requirements.",
       "uc.e.more": "Startup guide",
       "uc.e.moreHref": "/docs/getting-started/index.en.html#local-start",
+      "mailGame.roles":
+        "Join a competition through your organizer's invitation. Local and cloud are hosting choices made by the organizer.",
+      "mailGame.join": "Join a competition →",
+      "mailGame.joinHref": "./docs/manual/participant/index.en.html",
+      "mailGame.host": "Host a competition →",
+      "mailGame.hostHref": "./docs/manual/organizer/index.en.html",
+      "mailGame.h": "Learn through games.",
+      "mailGame.p":
+        "Play, notice something, and try again. Explore browser-based foundation games. No AWS account or registration.",
+      "mailGame.cta": "Browse games →",
+      "mailGame.href": "./portal-demo/?demo=1&goto=%2Fproblems%3Flang%3Den",
       "uc.f.role": "Checking retention",
       "uc.f.h": "Repeat rounds to check retention.",
       "uc.f.p":

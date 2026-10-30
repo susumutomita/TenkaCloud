@@ -40,7 +40,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Check out workflow dependencies
-        uses: actions/checkout@v4.3.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
       - name: Install pinned lockfile verifier
@@ -55,7 +55,7 @@ jobs:
     steps:
       - name: Check out the code
         # actions/checkout v4.3.1
-        uses: actions/checkout@v4.3.1
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
 
@@ -112,7 +112,7 @@ jobs:
     steps:
       - name: Check out the code
         # actions/checkout v4.3.1
-        uses: actions/checkout@v4.3.1
+        uses: actions/checkout@v7.0.1
 
       - uses: $/.github/actions/bun-install
 
@@ -127,7 +127,7 @@ jobs:
     steps:
       - name: Check out the code
         # actions/checkout v4.3.1
-        uses: actions/checkout@v4.3.1
+        uses: actions/checkout@v7.0.1
 
       - uses: $/.github/actions/bun-install
 
@@ -144,7 +144,7 @@ jobs:
     steps:
       - name: Check out the code
         # actions/checkout v4.3.1
-        uses: actions/checkout@v4.3.1
+        uses: actions/checkout@v7.0.1
 
       - uses: $/.github/actions/bun-install
 
@@ -183,7 +183,7 @@ jobs:
     steps:
       - name: Check out the code
         # actions/checkout v4.3.1
-        uses: actions/checkout@v4.3.1
+        uses: actions/checkout@v7.0.1
 
       - uses: $/.github/actions/bun-install
 
@@ -211,7 +211,7 @@ jobs:
       # leg ごとに分けて upload しても (PR / main push いずれでも) 最終的な report は分割前と
       # 同じ全体像になる。 base report が欠けることもない。
       - name: Upload coverage reports to Codecov (${{ matrix.shard }} ${{ matrix.part }}/${{ matrix.parts }})
-        uses: codecov/codecov-action@v5.5.4
+        uses: codecov/codecov-action@v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           # Codecov 側 outage で CI 全体を落とさない。 coverage 計測は補助、 必須でない。
@@ -244,7 +244,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Check out the code
-        uses: actions/checkout@v4.3.1
+        uses: actions/checkout@v7.0.1
       - uses: $/.github/actions/bun-install
       - name: Verify source preparation with the system Bash
         working-directory: infrastructure

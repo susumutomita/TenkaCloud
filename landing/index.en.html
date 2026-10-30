@@ -140,6 +140,7 @@
     <div class="nav-links">
       <a href="#modes" data-i18n="nav.product">Product</a>
       <a href="#use-cases" data-i18n="nav.useCases">Use cases</a>
+      <a href="./portal-demo/?demo=1&goto=%2Fproblems%3Flang%3Den" data-i18n-href="mailGame.href" data-i18n="nav.games">Learn through games</a>
       <a href="./docs/index.en.html" data-i18n="nav.docs">Docs</a>
       <a href="#pricing" data-i18n="nav.pricing">Pricing</a>
       <a href="./presentations/" data-i18n="nav.presentations">Presentations</a>
@@ -166,7 +167,7 @@
         <span data-i18n="hero.h1a">From everyday decisions </span><em data-i18n="hero.h1b">to hands-on cloud exercises.</em>
       </h1>
       <p class="sub" data-i18n="hero.sub">TenkaCloud lets you create and host exercises for your learners, from short answer problems to tasks using real cloud environments. It supports problem selection, teams, scoring and result review.</p>
-      <p class="hero-vibe" data-i18n="hero.vibe"><strong>Start on one PC.</strong> Local hosting uses SQLite and needs no AWS account. Docker exercises require Docker Engine and Compose.</p>
+      <p class="hero-vibe" data-i18n="hero.vibe"><strong>For organizers.</strong> Local hosting uses SQLite and needs no AWS account. Docker exercises require Docker Engine and Compose.</p>
       <a class="hero-quest-card" href="/portal-demo/?demo=1&amp;goto=start" data-cta="start-drill">
         <span class="hero-quest-meta" data-i18n="hero.quest_meta">TenkaCloud browser walkthrough · No signup</span>
         <span class="hero-quest-title" data-i18n="hero.quest_title">Try the exercise flow.</span>
@@ -174,6 +175,7 @@
         <span class="hero-quest-cta"><span data-i18n="hero.quest_cta">Try TenkaCloud</span> →</span>
       </a>
       <p class="hero-secondary">
+        <a href="./portal-demo/?demo=1&goto=%2Fproblems%3Flang%3Den" data-i18n-href="mailGame.href" data-i18n="nav.games">Learn through games</a> ·
         <a href="/docs/getting-started/index.en.html#local-start" data-i18n-href="hero.startHref" data-cta="local-start"><span data-i18n="hero.cta_demo">Start on your computer</span></a>
         ·
         <a href="/videos/lp/tenkacloud-30s.mp4" target="_blank" rel="noopener noreferrer" data-cta="watch-30s"><span data-i18n="hero.cta_video">▶ Watch the 30-second tour</span></a>
@@ -431,12 +433,13 @@
   </div>
 </section>
 
-<section class="alt" id="cloud-foundations" lang="ja">
+<section id="security-minigames">
   <div class="wrap">
-    <div class="eyebrow">CLOUD FOUNDATIONS</div>
-    <h2>目指せクラウドマスター。</h2>
-    <p class="lead">本番AWSを守る「APIの番人。」。リクエストの引数と状況から異変を見抜き、どこまで生き残れるか挑戦。3ライフと見逃し解説で学べます。</p>
-    <a class="more" href="./cloud-master/">APIの番人。で遊ぶ →</a>
+    <h2 data-i18n="mailGame.h">Learn through games.</h2>
+    <p class="lead" data-i18n="mailGame.p">Play, notice something, and try again. Explore browser-based foundation games. No AWS account or registration.</p>
+    <a class="more" href="./portal-demo/?demo=1&goto=%2Fproblems%3Flang%3Den" data-i18n-href="mailGame.href"><span data-i18n="mailGame.cta">Browse games →</span></a>
+    <p class="lead" data-i18n="mailGame.roles">Join a competition through your organizer's invitation. Local and cloud are hosting choices made by the organizer.</p>
+    <p><a class="more" href="./docs/manual/participant/index.en.html" data-i18n-href="mailGame.joinHref" data-i18n="mailGame.join">Join a competition →</a> · <a class="more" href="./docs/manual/organizer/index.en.html" data-i18n-href="mailGame.hostHref" data-i18n="mailGame.host">Host a competition →</a></p>
   </div>
 </section>
 
@@ -653,7 +656,7 @@
 </footer>
 
 <script src="./ink-bg.js" defer></script>
-<script src="./app.js?v=b287ebb502" defer></script>
+<script src="./app.js?v=b9f4da0af6" defer></script>
 
 </body>
 </html>
