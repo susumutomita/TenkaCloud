@@ -1,10 +1,15 @@
-import { inspectionRow } from "./cases.js?v=ed7388be74";
-import { chooseVariant, LEVELS, levelCase } from "./levels.js?v=ed7388be74";
+import { inspectionRow } from "./cases.js?v=cdd5f39e7b";
+import { chooseVariant, LEVELS, levelCase } from "./levels.js?v=cdd5f39e7b";
 
-export function createRun(random = Math.random, startLevel = 1, previousVariants = {}) {
+export function createRun(
+  random = Math.random,
+  startLevel = 1,
+  previousVariants = {},
+  initialLocale = "ja",
+) {
   if (!Number.isInteger(startLevel) || startLevel < 1 || startLevel > LEVELS.length)
     throw new RangeError("Invalid start level");
-  const rounds = LEVELS.slice(startLevel - 1, startLevel + 1).map((entry) => entry.id);
+  const rounds = LEVELS.slice(startLevel - 1).map((entry) => entry.id);
   const variants = {};
   for (let offset = 0; offset < rounds.length; offset++) {
     const level = startLevel + offset;
@@ -15,6 +20,10 @@ export function createRun(random = Math.random, startLevel = 1, previousVariants
     startLevel,
     rounds,
     variants,
+    emailLanguages: rounds.map((_, offset) =>
+      offset % 2 === 0 ? initialLocale : initialLocale === "en" ? "ja" : "en",
+    ),
+    timedOut: rounds.map(() => false),
     index: 0,
     found: rounds.map(() => []),
     revealed: rounds.map(() => []),
@@ -37,7 +46,7 @@ export function risks(run) {
   return currentCase(run).rows.filter((item) => item.kind === "risk");
 }
 export function tap(run, id) {
-  if (!["playing", "round-complete"].includes(run.phase)) return run;
+  if (run.phase !== "playing") return run;
   const item = inspectionRow(currentCase(run), id);
   if (!item) return run;
   const known = [...run.found[run.index], ...run.revealed[run.index]].includes(id);
@@ -94,10 +103,34 @@ export function totals(run) {
   ).reduce((sum, count) => sum + count, 0);
   const found = run.found.flat().length,
     mistakes = run.mistakes.flat().length;
-  return { found, reviewed: run.revealed.flat().length, target, mistakes, score: found - mistakes };
+  const score = Array.from({ length: run.index + 1 }, (_, index) => roundScore(run, index)).reduce(
+    (sum, points) => sum + points,
+    0,
+  );
+  return {
+    found,
+    reviewed: run.revealed.flat().length,
+    target,
+    mistakes,
+    score,
+    maxScore: run.rounds.length * 20,
+    timeouts: run.timedOut.filter(Boolean).length,
+  };
 }
 
+export function roundScore(run, index = run.index) {
+  const level = run.startLevel + index;
+  const target = levelCase(level, run.variants[level]).rows.filter(
+    (row) => row.kind === "risk",
+  ).length;
+  return Math.max(
+    0,
+    Math.floor((20 * run.found[index].length) / target) - 5 * run.mistakes[index].length,
+  );
+}
 export function expire(run) {
   if (run.phase !== "playing") return run;
-  return { ...reveal(run), phase: "timed-out", feedback: null };
+  const timedOut = [...run.timedOut];
+  timedOut[run.index] = true;
+  return { ...reveal(run), timedOut, feedback: null };
 }

@@ -30,12 +30,20 @@ import { REVIEW } from "../../landing/mail-detective/review.js";
 import { cloudMasterFiles, cloudMasterVersion, stampCloudMasterFile } from "./stamp-asset-versions";
 
 describe("email difference game", () => {
-  test("starts playing directly with two different pairs and bounded progress", () => {
+  test("starts playing directly with five ordered pairs and bounded progress", () => {
     const run = createRun(() => 0.5);
     expect(run.phase).toBe("playing");
-    expect(run.rounds).toHaveLength(2);
-    expect(new Set(run.rounds).size).toBe(2);
-    expect(totals(run)).toEqual({ found: 0, reviewed: 0, target: 1, mistakes: 0, score: 0 });
+    expect(run.rounds).toHaveLength(5);
+    expect(new Set(run.rounds).size).toBe(5);
+    expect(totals(run)).toEqual({
+      found: 0,
+      reviewed: 0,
+      target: 1,
+      mistakes: 0,
+      score: 0,
+      maxScore: 100,
+      timeouts: 0,
+    });
     expect(next(run)).toBe(run);
     expect(tap(run, "unknown")).toBe(run);
   });
@@ -65,7 +73,7 @@ describe("email difference game", () => {
     }
     expect(patterns.size).toBe(4);
   });
-  test("normal variations cost one point without blocking the next attempt; repeated taps never double count", () => {
+  test("normal variations cost five points without blocking the next attempt; repeated taps never double count", () => {
     let run = createRun(() => 0);
     const benign = currentCase(run).rows.find((row) => row.kind === "benign");
     const initial = JSON.stringify(run);
@@ -76,24 +84,32 @@ describe("email difference game", () => {
     expect(totals(run).found).toBe(0);
     expect(run.feedback.kind).toBe("benign");
     expect(totals(run).mistakes).toBe(1);
-    expect(totals(run).score).toBe(-1);
+    expect(totals(run).score).toBe(0);
     const id = risks(run)[0].id;
     for (let n = 0; n < 500; n++) run = tap(run, id);
     expect(totals(run).found).toBe(1);
-    expect(run.feedback.fresh).toBe(false);
+    expect(totals(run).score).toBe(15);
     expect(run.checked[0]).toHaveLength(2);
   });
-  test("completion requires the actual targets and no double next can skip a round", () => {
+  test("completion requires all five rounds and no double next can skip a round", () => {
     let run = createRun(() => 0.1);
-    for (const row of risks(run)) run = tap(run, row.id);
-    expect(run.phase).toBe("round-complete");
-    run = next(run);
-    expect(run.index).toBe(1);
-    expect(next(run)).toBe(run);
-    for (const row of risks(run)) run = tap(run, row.id);
-    run = next(run);
+    for (let index = 0; index < 5; index++) {
+      expect(run.index).toBe(index);
+      expect(next(run)).toBe(run);
+      for (const row of risks(run)) run = tap(run, row.id);
+      expect(run.phase).toBe("round-complete");
+      run = next(run);
+    }
     expect(run.phase).toBe("results");
-    expect(totals(run)).toEqual({ found: 3, reviewed: 0, target: 3, mistakes: 0, score: 3 });
+    expect(totals(run)).toEqual({
+      found: 11,
+      reviewed: 0,
+      target: 11,
+      mistakes: 0,
+      score: 100,
+      maxScore: 100,
+      timeouts: 0,
+    });
     expect(tap(run, risks(run)[0].id)).toBe(run);
   });
   test("showing answers is transparent and cannot turn reviewed spots into independent finds", () => {
@@ -101,11 +117,11 @@ describe("email difference game", () => {
     run = tap(run, risks(run)[0].id);
     run = reveal(run);
     for (const row of risks(run)) run = tap(run, row.id);
-    expect(totals(run)).toEqual({ found: 1, reviewed: 1, target: 2, mistakes: 0, score: 1 });
+    expect(totals(run)).toMatchObject({ found: 1, reviewed: 1, target: 2, mistakes: 0, score: 10 });
     expect(reveal(run)).toBe(run);
     run = reveal(next(run));
     run = next(run);
-    expect(totals(run)).toEqual({ found: 1, reviewed: 4, target: 5, mistakes: 0, score: 1 });
+    expect(totals(run)).toMatchObject({ found: 1, reviewed: 4, target: 8, mistakes: 0, score: 10 });
   });
   test("finish early and fresh replay never pretend the learner completed unseen spots", () => {
     const run = end(createRun(() => 0.3));
@@ -125,9 +141,9 @@ describe("email difference game", () => {
       };
       const run = createRun(random);
       combinations.add(JSON.stringify(run.variants));
-      expect(run.rounds).toEqual(["booking", "invoice"]);
+      expect(run.rounds).toEqual(LEVELS.map((entry) => entry.id));
     }
-    expect(combinations.size).toBe(9);
+    expect(combinations.size).toBeGreaterThan(100);
     for (const value of [NaN, -1, 1, Infinity]) expect(() => createRun(() => value)).toThrow();
   });
   test("normal sender/path/request differences prevent memorising one universal dangerous row", () => {
@@ -240,7 +256,7 @@ describe("simulated mail authentication and IDN", () => {
   test("simple attachments precede address/link work and the look-alike appears only at Lv5", () => {
     for (const level of [1, 2, 3, 4, 5]) {
       const run = createRun(() => 0, level);
-      expect(run.rounds).toEqual(LEVELS.slice(level - 1, level + 1).map((entry) => entry.id));
+      expect(run.rounds).toEqual(LEVELS.slice(level - 1).map((entry) => entry.id));
       expect(currentCase(run).level).toBe(level);
       expect(currentCase(run).advanced).toBe(level === 5);
     }
@@ -303,6 +319,7 @@ describe("simulated mail authentication and IDN", () => {
 
 describe("automatic-processing deadline prototype", () => {
   test("active presented frames reach the boundary once, without a numeric countdown", () => {
+    expect(ROUND_WINDOW_MS).toBe(30_000);
     let clock = createClock(0);
     for (let now = 100; now <= ROUND_WINDOW_MS; now += 100) clock = advanceClock(clock, now, true);
     expect(progress(clock)).toBe(1);
@@ -324,10 +341,18 @@ describe("automatic-processing deadline prototype", () => {
     let run = createRun(() => 0.4, 4);
     run = tap(run, risks(run)[0].id);
     run = expire(run);
-    expect(run.phase).toBe("timed-out");
-    expect(totals(run)).toEqual({ found: 1, reviewed: 2, target: 3, mistakes: 0, score: 1 });
+    expect(run.phase).toBe("round-complete");
+    expect(run.timedOut[run.index]).toBe(true);
+    expect(totals(run)).toMatchObject({
+      found: 1,
+      reviewed: 2,
+      target: 3,
+      mistakes: 0,
+      score: 6,
+      timeouts: 1,
+    });
     expect(expire(run)).toBe(run);
-    expect(next(run)).toBe(run);
+    expect(next(run).index).toBe(run.index + 1);
     expect(tap(run, risks(run)[1].id)).toBe(run);
     expect(reveal(run)).toBe(run);
     let completed = createRun(() => 0.5);
@@ -430,7 +455,7 @@ describe("TenkaCloud shell and end-of-play mail review", () => {
 
 describe("all answer controls have neutral affordances", () => {
   test.each(LEVELS.map((definition) => [definition.level, definition]))(
-    "flagging neutral content in %s costs one point per distinct answer",
+    "flagging neutral content in %s costs five points per distinct answer",
     (level) => {
       let run = createRun(() => 0, level);
       const item = currentCase(run);
@@ -456,7 +481,9 @@ describe("all answer controls have neutral affordances", () => {
           reviewed: 0,
           target: risks(run).length,
           mistakes,
-          score: -mistakes,
+          score: 0,
+          maxScore: (6 - level) * 20,
+          timeouts: 0,
         });
         const repeat = tap(run, id);
         expect(totals(repeat)).toEqual(totals(run));

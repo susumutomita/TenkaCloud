@@ -6,7 +6,7 @@ describe("optional mail result sharing", () => {
     for (const phase of ["results", "ended", "timed-out"]) {
       const result = buildMailShare(
         { phase, startLevel: 4, index: 1 },
-        { found: 2, reviewed: 4, target: 6, mistakes: 3 },
+        { found: 2, reviewed: 4, target: 6, mistakes: 3, score: 25, maxScore: 100, timeouts: 1 },
         lang,
       );
       expect(result).not.toBeNull();
@@ -17,7 +17,9 @@ describe("optional mail result sharing", () => {
         `https://tenkacloud.com/mail-detective/?lang=${lang}`,
       );
       expect(result.text).toContain("2/6");
-      expect(result.text).toContain(lang === "ja" ? "得点 -1・ミス 3" : "Score: -1 · Mistakes: 3");
+      expect(result.text).toContain(
+        lang === "ja" ? "得点 25/100・ミス 3" : "Score: 25/100 · Mistakes: 3",
+      );
       expect(result.text).toContain("4/6");
       if (phase === "timed-out")
         expect(result.text).toContain(lang === "ja" ? "時間切れ" : "Time expired");

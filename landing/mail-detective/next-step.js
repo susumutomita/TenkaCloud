@@ -14,7 +14,13 @@ export function buildMailShare(run, counts, lang) {
   const mistakes = Number.isFinite(counts.mistakes)
     ? Math.max(0, Math.min(Number.MAX_SAFE_INTEGER, Math.floor(counts.mistakes)))
     : 0;
-  const score = found - mistakes;
+  const maxScore = Number.isFinite(counts.maxScore)
+    ? Math.max(0, Math.floor(counts.maxScore))
+    : 100;
+  const score = Number.isFinite(counts.score)
+    ? Math.max(0, Math.min(maxScore, Math.floor(counts.score)))
+    : 0;
+  const timeouts = Number.isFinite(counts.timeouts) ? Math.max(0, Math.floor(counts.timeouts)) : 0;
   const lastLevel = run.startLevel + run.index;
   const levelText = `Lv${run.startLevel}${lastLevel === run.startLevel ? "" : `–${lastLevel}`}`;
   const status =
@@ -23,8 +29,8 @@ export function buildMailShare(run, counts, lang) {
       : { results: "終了", ended: "途中終了", "timed-out": "時間切れ" }[run.phase];
   const text =
     lang === "en"
-      ? `Mail Detective | ${status} · ${levelText}\nScore: ${score} · Mistakes: ${mistakes}\nFound myself: ${found}/${target} · Reviewed: ${reviewed}/${target}\nA fictional email practice, not a certification.`
-      : `メールの間違いさがし｜${status}・${levelText}\n得点 ${score}・ミス ${mistakes}\n自分で発見 ${found}/${target}・答えを見て確認 ${reviewed}/${target}\n架空メールでの練習記録です。`;
+      ? `Mail Detective | ${status} · ${levelText}\nScore: ${score}/${maxScore} · Mistakes: ${mistakes} · Timed-out rounds: ${timeouts}\nFound myself: ${found}/${target} · Reviewed: ${reviewed}/${target}\nA fictional email practice, not a certification.`
+      : `メールの間違いさがし｜${status}・${levelText}\n得点 ${score}/${maxScore}・ミス ${mistakes}・時間切れ ${timeouts}\n自分で発見 ${found}/${target}・答えを見て確認 ${reviewed}/${target}\n架空メールでの練習記録です。`;
   const url = `https://tenkacloud.com/mail-detective/?lang=${lang === "en" ? "en" : "ja"}`;
   const intent = new URL("https://x.com/intent/tweet");
   intent.searchParams.set("text", text);

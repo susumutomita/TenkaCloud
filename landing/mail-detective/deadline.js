@@ -1,5 +1,5 @@
 // Foreground, presented-play time only. A suspended/delayed frame never consumes a deadline.
-export const ROUND_WINDOW_MS = 60_000;
+export const ROUND_WINDOW_MS = 30_000;
 export function createClock(now = 0) {
   return { elapsed: 0, last: Number.isFinite(now) ? now : 0 };
 }

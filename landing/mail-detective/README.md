@@ -1,6 +1,6 @@
 # Mail Detective
 
-Static, play-first comparison of two fictional emails at `/mail-detective/`. No lecture, signup or pre-quiz. Each play contains at most two scenes, targeting 1–3 minutes before optional reading. Physical-device usability, human duration and learning effectiveness remain unmeasured.
+Static, play-first comparison of two fictional emails at `/mail-detective/`. No lecture, signup or pre-quiz. Each game has five rounds of 30 active seconds, up to 2 minutes 30 seconds before optional inspection/review pauses. Physical-device usability, human duration and learning effectiveness remain unmeasured.
 
 ## Lessons and variations
 
@@ -16,11 +16,11 @@ The five authored cases remain intact. A lesson projection changes unintroduced 
 
 Three coherent text variants per lesson change fictional brands, matching domains, requests, filenames and neutral opening text. Injected RNG makes them testable, excluding the immediately previous variant on replay. No AI generation or external API is used. Lesson order follows taught concepts.
 
-The first play is Levels1–2, with an optional next play of Levels3–4 and finally Level5. Replay starts at the same level with another variant. Results distinguish independently found and revealed targets, counting only visited scenes. Timeout and early stop cannot advance to later lessons.
+One game follows Levels1–5. Replay starts a new five-round game with different variants. Results distinguish independently found and revealed targets; early-stop counts include only visited scenes. A timed-out round reveals missed risks and offers the next round; only an explicit early stop ends the game before round5.
 
 ## Interaction and feedback
 
-Desktop places emails side by side; mobile switches between full-width messages. Subject, sender, recipient, time, body, links and attachment retain a familiar Gmail-like reading structure. Safe and unchanged content use the same inspection controls as scored differences. There are no candidate-only dotted hover cues. Ordinary link underlines and visible keyboard focus remain; success marks appear only after answering or explicitly revealing.
+Desktop places emails side by side; mobile switches between full-width messages. Subject, sender, recipient, time, body, links and attachment retain a familiar Gmail-like reading structure. All answer fields have the same neutral affordances. Flagging a normal/unchanged field is a false alarm; opening details is separate investigation. There are no candidate-only dotted hover cues. Ordinary link underlines and visible keyboard focus remain; success marks appear only after answering or explicitly revealing.
 
 A short reason follows judgment; details are optional. Attachment/tool details explain the method, the behavior requested, and the safe response: do not download or run unrequested software, verify through a known independent route rather than contacts in the message, and report it at work when relevant. An exe extension alone is not classified as malicious. Brief feedback respects reduced motion.
 
@@ -38,7 +38,7 @@ The glyph comparison copies the source email control's computed font-family, wei
 
 ## Deadline and optional next steps
 
-Text stays still while the message-frame seams approach an automatic-processing outlet. No separate meter, numeric countdown or flashing. Each scene has 60 seconds of active presented time. Address/link/header/reason inspection and mobile reference reading pause it, with an explicit resume action. Blur, background time and suspended frames over one second are excluded. Input settles the old clock before scoring, so late input cannot score. Timeout explains misses and offers immediate replay. This is a fictional game event, not real email-processing behavior.
+Text stays still while the message-frame seams approach an automatic-processing outlet. No separate meter, numeric countdown or flashing. Each scene has 30 seconds of active presented time. Address/link/header/reason inspection and mobile reference reading pause it, with an explicit resume action. Blur, background time and suspended frames over one second are excluded. Input settles the old clock before scoring, so late input cannot score. Timeout explains misses and offers the next round; final results offer replay. This is a fictional game event, not real email-processing behavior.
 
 An X compose link beside replay includes actual found/reviewed counts, visited levels, early-stop/timeout status and the production game URL. It does not post automatically, connect an account, reveal answers or claim certification. The user confirms any final post.
 
@@ -58,4 +58,6 @@ Open `http://127.0.0.1:19980/mail-detective/?lang=en` on that Mac; Japanese uses
 
 Official sources: [FTC](https://consumer.ftc.gov/articles/how-recognize-avoid-phishing-scams), [Gmail](https://support.google.com/mail/answer/180707), [RFC8601](https://www.rfc-editor.org/rfc/rfc8601), [RFC9989](https://datatracker.ietf.org/doc/html/rfc9989), [RFC5890](https://www.rfc-editor.org/rfc/rfc5890), [UnicodeUTS39](https://www.unicode.org/reports/tr39/) and [Unicode character data](https://www.unicode.org/Public/UCD/latest/ucd/UnicodeData.txt). Cases and UI are original synthetic material; no real mail, contacts, brand assets or third-party course questions are copied. Future curriculum is separate in [the learning path](../../docs/learning-path/README.ja.md).
 
-Scoring: flag a risky field to earn +1; flag a normal or unchanged field and lose 1 point. Each field is scored once. Opening sender/header/link details, switching comparison tabs and keyboard navigation are investigation, not answers, and never cost points. Results and optional X text include actual points and false alarms; reviewing answers earns no points.
+Scoring: flag a risky field to earn a proportional share of 20 points; flag a normal or unchanged field and lose 5 points. Each field is scored once. Opening sender/header/link details, switching comparison tabs and keyboard navigation are investigation, not answers, and never cost points. Results and optional X text include actual points and false alarms; reviewing answers earns no points.
+
+One game has five rounds of 30 active seconds (up to 150 seconds; inspection/review pauses are separate). Timeout finalizes the round and reveals missed risks, then the player continues to the next round. Per-round points are `max(0, floor(20 × found / targets) − 5 × falseAlarms)`, summed to a 100-point maximum. Each run alternates Japanese and English email pairs, starting in the initial UI language. Later UI switches translate instructions/explanations without changing the email pair, progress, mistakes or clock. These are five representative email scenarios, not all social engineering techniques; phone/SMS/in-person approaches are outside this game.

@@ -1,8 +1,8 @@
-import { inspectionRow } from "./cases.js?v=ed7388be74";
-import { COPY } from "./copy.js?v=ed7388be74";
-import { createIdnExplanation } from "./idn-explanation.js?v=ed7388be74";
+import { inspectionRow } from "./cases.js?v=cdd5f39e7b";
+import { COPY } from "./copy.js?v=cdd5f39e7b";
+import { createIdnExplanation } from "./idn-explanation.js?v=cdd5f39e7b";
 
-import { createOriginal } from "./message-headers.js?v=ed7388be74";
+import { createOriginal } from "./message-headers.js?v=cdd5f39e7b";
 
 const node = (tag, text, className) => {
   const result = document.createElement(tag);
@@ -55,17 +55,23 @@ function spotControl(row, value, slot, run, t, handlers) {
   const control = node("button", value, "mail-spot");
   control.type = "button";
   control.id = `spot-${row.id}-${slot}`;
-  control.setAttribute("aria-label", `${row.label[document.documentElement.lang]}: ${value}`);
+  control.setAttribute("aria-label", `${row.label[run.emailLanguages[run.index]]}: ${value}`);
   const found = run.found[run.index].includes(row.id),
     shown = run.revealed[run.index].includes(row.id);
   control.setAttribute("aria-pressed", String(found || shown));
   if (found || shown) {
     control.classList.add("correct");
-    control.append(node("span", `✓ ${shown ? t.reviewed : t.spotted}`, "stamp"));
+    control.append(
+      Object.assign(node("span", `✓ ${shown ? t.reviewed : t.spotted}`, "stamp"), {
+        lang: document.documentElement.lang,
+      }),
+    );
   }
   if (run.mistakes[run.index].includes(row.id)) {
     control.classList.add("incorrect");
-    control.append(node("span", `✕ ${t.wrong}`, "stamp"));
+    control.append(
+      Object.assign(node("span", `✕ ${t.wrong}`, "stamp"), { lang: document.documentElement.lang }),
+    );
   }
   if (run.feedback?.id === row.id && run.feedback.fresh) control.classList.add("fresh");
   control.addEventListener("click", () => handlers.choose(row.id, control.id));
@@ -86,7 +92,8 @@ function appendReason(group, content, row, slot, run, t, ui, item, lang) {
 export function createEmail(item, side, lang, run, ui, handlers) {
   const t = COPY[lang],
     reference = side === "reference",
-    view = item.presentation?.[lang] ?? presentations[item.id][lang];
+    mailLang = run.emailLanguages[run.index],
+    view = item.presentation?.[mailLang] ?? presentations[item.id][mailLang];
   const card = node(
     "article",
     undefined,
@@ -99,13 +106,14 @@ export function createEmail(item, side, lang, run, ui, handlers) {
   if (reference) label.append(node("span", t.referencePause, "reference-clock-note"));
   card.append(label);
   function field(id, slot, className, heading = false, displayValue) {
-    const raw = displayValue ?? emailValue(item, id, side, lang);
+    const raw = displayValue ?? emailValue(item, id, side, mailLang);
     const value = id === "from" ? address(raw) : raw;
     const row = !reference && inspectionRow(item, id);
     const group = node("div", undefined, className);
     const content = row
       ? spotControl(row, value, slot, run, t, handlers)
       : node("span", value, "mail-text");
+    content.lang = mailLang;
     if (heading) {
       const title = node("h3");
       title.append(content);
@@ -126,6 +134,7 @@ export function createEmail(item, side, lang, run, ui, handlers) {
     return group;
   }
   const message = node("div", undefined, "email-message");
+  message.lang = lang;
   message.append(field("subject", "subject", "mail-subject", true));
   const header = node("div", undefined, "message-header");
   header.append(node("span", view[0].slice(0, 1), "sender-avatar"));
@@ -164,22 +173,24 @@ export function createEmail(item, side, lang, run, ui, handlers) {
     headers.append(line);
   }
   message.append(headers);
-  if ((item.level ?? 5) >= 4) message.append(createOriginal(item, side, lang, ui, handlers));
+  if ((item.level ?? 5) >= 4)
+    message.append(createOriginal(item, side, lang, ui, handlers, mailLang));
   const body = node("div", undefined, "mail-body");
   body.append(
-    field("greeting", "body", "body-greeting", false, t.greeting),
+    field("greeting", "body", "body-greeting", false, COPY[mailLang].greeting),
     field("opening", "body", "body-opening", false, view[1]),
     field("request", "body", "body-request"),
   );
   const link = node("div", undefined, "link-inspector");
   const inspect = node("button", view[2], "mail-link");
   inspect.type = "button";
+  inspect.lang = mailLang;
   inspect.id = `link-${side}`;
-  inspect.setAttribute("aria-label", `${view[2]} · ${t.linkInspect}`);
+  inspect.setAttribute("aria-label", `${view[2]} · ${COPY[mailLang].linkInspect}`);
   inspect.setAttribute("aria-expanded", String(ui.link[side]));
   inspect.setAttribute("aria-controls", `target-${side}`);
   inspect.addEventListener("click", () => handlers.toggle("link", side, inspect.id));
-  const preview = node("span", emailValue(item, "link", side, lang), "link-preview");
+  const preview = node("span", emailValue(item, "link", side, mailLang), "link-preview");
   preview.setAttribute("aria-hidden", "true");
   const target = node("div", undefined, "link-target");
   target.id = `target-${side}`;
@@ -188,7 +199,7 @@ export function createEmail(item, side, lang, run, ui, handlers) {
   if (!reference) target.append(node("p", t.linkTap, "target-hint"));
   link.append(inspect, preview, target);
   body.append(link, field("signature", "body", "mail-signature", false, view[0]));
-  const attachment = emailValue(item, "attachment", side, lang);
+  const attachment = emailValue(item, "attachment", side, mailLang);
   if (attachment && !["なし", "None"].includes(attachment)) {
     const files = node("div", undefined, "attachment-area");
     files.append(

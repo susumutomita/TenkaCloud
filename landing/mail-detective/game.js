@@ -1,9 +1,9 @@
-import { inspectionRow } from "./cases.js?v=ed7388be74";
-import { COPY } from "./copy.js?v=ed7388be74";
-import { advanceClock, createClock, progress } from "./deadline.js?v=ed7388be74";
-import { updateIdnFonts } from "./idn-explanation.js?v=ed7388be74";
-import { levelCase } from "./levels.js?v=ed7388be74";
-import { createEmail } from "./mail-view.js?v=ed7388be74";
+import { inspectionRow } from "./cases.js?v=cdd5f39e7b";
+import { COPY } from "./copy.js?v=cdd5f39e7b";
+import { advanceClock, createClock, progress } from "./deadline.js?v=cdd5f39e7b";
+import { updateIdnFonts } from "./idn-explanation.js?v=cdd5f39e7b";
+import { levelCase } from "./levels.js?v=cdd5f39e7b";
+import { createEmail } from "./mail-view.js?v=cdd5f39e7b";
 import {
   createRun,
   currentCase,
@@ -14,11 +14,12 @@ import {
   nextStartLevel,
   reveal,
   risks,
+  roundScore,
   tap,
   totals,
-} from "./model.js?v=ed7388be74";
-import { createMailShareLink, createNextStep } from "./next-step.js?v=ed7388be74";
-import { createReview } from "./review.js?v=ed7388be74";
+} from "./model.js?v=cdd5f39e7b";
+import { createMailShareLink, createNextStep } from "./next-step.js?v=cdd5f39e7b";
+import { createReview } from "./review.js?v=cdd5f39e7b";
 
 const element = (tag, text, className) => {
   const node = document.createElement(tag);
@@ -30,7 +31,7 @@ const byId = (id) => document.getElementById(id);
 let lang = new URL(location.href).searchParams.get("lang") === "en" ? "en" : "ja";
 const previousVariants = {};
 function freshRun(level = 1) {
-  const nextRun = createRun(Math.random, level, previousVariants);
+  const nextRun = createRun(Math.random, level, previousVariants, lang);
   Object.assign(previousVariants, nextRun.variants);
   return nextRun;
 }
@@ -92,7 +93,7 @@ function paintDeadline() {
   card.style.setProperty("--process", `${marker}%`);
   card.dataset.processing = stage;
   const label = byId("deadline-state");
-  if (label) label.textContent = stageLabel(stage, t);
+  if (label) label.textContent = run.timedOut[run.index] ? t.timedOut : stageLabel(stage, t);
   const resume = byId("deadline-resume");
   if (resume) resume.hidden = !paused || complete;
   if (stage !== deadlineStage && stage === "soon") byId("live").textContent = t.soon;
@@ -106,6 +107,9 @@ function settleClock(now = performance.now()) {
   );
   if (run.phase === "playing" && progress(clock) >= 1) {
     run = expire(run);
+    mailUI.active = "received";
+    mailUI.address.received = risks(run).some((row) => ["from", "reply"].includes(row.id));
+    mailUI.link.received = risks(run).some((row) => row.id === "link");
     render("round-title");
     byId("live").textContent = COPY[lang].timedOut;
     return false;
@@ -136,7 +140,7 @@ const button = (label, action, className) => {
   return node;
 };
 function choose(id, focusId) {
-  if (!["playing", "round-complete"].includes(run.phase) || !settleClock()) return;
+  if (run.phase !== "playing" || !settleClock()) return;
   mailUI.lastTarget = focusId;
   run = tap(run, id);
   render(focusId);
@@ -156,10 +160,19 @@ function playView(t) {
   const checked = run.found[run.index].length + run.revealed[run.index].length;
   const hud = element("div", undefined, "round-bar");
   hud.append(
-    element("span", `Lv${currentLevel(run)}`, "round-number"),
     element(
       "span",
-      `${t.found} ${checked}/${risks(run).length} · ${t.mistakes} ${run.mistakes[run.index].length}`,
+      `Lv${currentLevel(run)} · ${run.index + 1}/${run.rounds.length}`,
+      "round-number",
+    ),
+    element(
+      "span",
+      run.emailLanguages[run.index] === "en" ? "English email" : "日本語メール",
+      "email-language",
+    ),
+    element(
+      "span",
+      `${t.found} ${checked}/${risks(run).length} · ${t.score} ${roundScore(run)}/20 · ${t.mistakes} ${run.mistakes[run.index].length}`,
       "spot-count",
     ),
   );
@@ -204,6 +217,8 @@ function playView(t) {
   board.querySelector("#email-received .message-source").append(deadline);
   const controls = element("div", undefined, "round-controls");
   if (run.phase === "round-complete") {
+    if (run.timedOut[run.index])
+      controls.append(element("p", `${t.timedOut} ${t.timeoutReason}`, "round-timeout"));
     controls.append(
       element("p", t.roundDone.replace("{count}", String(risks(run).length)), "done-text"),
     );
@@ -250,9 +265,15 @@ function resultsView(t) {
   const panel = element("section", undefined, "result-panel");
   panel.append(
     heading,
-    element("p", `${t.score} ${counts.score} · ${t.mistakes} ${counts.mistakes}`, "result-score"),
+    element(
+      "p",
+      `${t.score} ${counts.score}/${counts.maxScore} · ${t.mistakes} ${counts.mistakes}`,
+      "result-score",
+    ),
     element("p", `${t.ownCount} ${counts.found}/${counts.target}`, "result-count"),
     element("p", `${t.reviewCount} ${counts.reviewed}/${counts.target}`),
+    element("p", `${t.timeouts} ${counts.timeouts}`),
+    element("p", t.coverage),
     element("p", t.takeaway, "takeaway"),
     element("p", t.caution),
     element("p", t.resultsNote, "safety"),

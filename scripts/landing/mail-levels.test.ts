@@ -34,22 +34,6 @@ function checkBilingualRow(row) {
   }
 }
 
-function completeLesson(run) {
-  const initial = totals(run);
-  expect(initial.target).toBeGreaterThan(0);
-  for (const row of currentCase(run).mailRows.filter((candidate) => candidate.kind !== "risk")) {
-    run = tap(run, row.id);
-    expect(totals(run).found).toBe(initial.found);
-  }
-  for (const row of risks(run)) {
-    run = tap(run, row.id);
-    const found = totals(run).found;
-    run = tap(run, row.id);
-    expect(totals(run).found).toBe(found);
-  }
-  return next(run);
-}
-
 function assertShareScore(run, mistakes) {
   expect(totals(run).mistakes).toBe(mistakes);
   for (const lang of ["ja", "en"]) {
@@ -142,33 +126,30 @@ describe("five comparison lessons", () => {
         expect(() => createRun(() => 0.1, invalid)).toThrow();
     },
   );
-  test("short sessions reach all five lessons, with only visited targets in results and no later-level jump on timeout", () => {
-    const visited = [],
-      targets = [];
-    for (const start of [1, 3, 5]) {
-      let run = createRun(() => 0, start);
-      expect(run.rounds.length).toBeLessThanOrEqual(2);
-      expect(nextStartLevel(run)).toBeNull();
-      while (run.phase !== "results") {
-        visited.push(currentLevel(run));
-        targets.push(risks(run).length);
-        run = completeLesson(run);
-      }
-      expect(nextStartLevel(run)).toBe(start === 5 ? null : start + 2);
-      expect(totals(run).found).toBe(totals(run).target);
+  test("one game traverses five lessons and timeouts never end the game early", () => {
+    let run = createRun(() => 0);
+    const visited = [];
+    while (run.phase !== "results") {
+      visited.push(currentLevel(run));
+      const snapshot = expire(run);
+      expect(snapshot.phase).toBe("round-complete");
+      expect(expire(snapshot)).toBe(snapshot);
+      expect(tap(snapshot, risks(snapshot)[0].id)).toBe(snapshot);
+      run = next(snapshot);
     }
     expect(visited).toEqual([1, 2, 3, 4, 5]);
-    expect(targets).toEqual([1, 2, 2, 3, 3]);
+    expect(totals(run)).toMatchObject({ score: 0, maxScore: 100, timeouts: 5, target: 11 });
+    expect(nextStartLevel(run)).toBeNull();
   });
   test.each([1, 2, 3, 4, 5])("terminal Lv%i shares only visited targets", (level) => {
     const run = createRun(() => 0, level),
       target = risks(run).length;
-    for (const phaseRun of [end(run), expire(run)]) {
-      expect(totals(phaseRun).target).toBe(target);
-      expect(nextStartLevel(phaseRun)).toBeNull();
-      for (const lang of ["ja", "en"])
-        expect(buildMailShare(phaseRun, totals(phaseRun), lang).text).toContain(`/${target}`);
-    }
+    const phaseRun = end(run);
+    expect(totals(phaseRun).target).toBe(target);
+    expect(nextStartLevel(phaseRun)).toBeNull();
+    for (const lang of ["ja", "en"])
+      expect(buildMailShare(phaseRun, totals(phaseRun), lang).text).toContain(`/${target}`);
+    expect(buildMailShare(expire(run), totals(run), "ja")).toBeNull();
     const reviewed = next(reveal(run));
     expect(totals(reviewed).found).toBe(0);
   });
@@ -192,7 +173,7 @@ describe("five comparison lessons", () => {
         for (let n = 0; n < 100; n++) brute = tap(brute, id);
         expect(totals(brute)).toEqual(snapshot);
       }
-      assertShareScore(expire(brute), normal.length);
+      assertShareScore(end(expire(brute)), normal.length);
       for (const row of risks(clean)) {
         clean = tap(clean, row.id);
         brute = tap(brute, row.id);
@@ -200,7 +181,7 @@ describe("five comparison lessons", () => {
         brute = tap(brute, row.id);
         expect(totals(brute)).toEqual(snapshot);
       }
-      expect(totals(clean).score).toBe(risks(clean).length);
+      expect(totals(clean).score).toBe(20);
       expect(totals(clean).mistakes).toBe(0);
       expect(totals(brute).mistakes).toBe(normal.length);
       expect(totals(brute).score).toBeLessThan(totals(clean).score);
@@ -208,6 +189,33 @@ describe("five comparison lessons", () => {
       expect(totals(createRun(() => 0, level)).mistakes).toBe(0);
     },
   );
+  test("twenty-point round scoring floors fractions, deducts five once, and freezes after completion", () => {
+    let run = createRun(() => 0, 5);
+    const answers = risks(run).map((row) => row.id);
+    run = tap(run, answers[0]);
+    expect(totals(run).score).toBe(6);
+    run = tap(run, "greeting");
+    expect(totals(run).score).toBe(1);
+    expect(totals(tap(run, "greeting"))).toEqual(totals(run));
+    run = tap(run, answers[1]);
+    expect(totals(run).score).toBe(8);
+    run = tap(run, answers[2]);
+    expect(totals(run).score).toBe(15);
+    expect(tap(run, "subject")).toBe(run);
+    expect(totals(next(run))).toMatchObject({ score: 15, maxScore: 20, mistakes: 1 });
+  });
+  test("mixed email languages are fixed per run and independent of later UI locale changes", () => {
+    for (const locale of ["ja", "en"]) {
+      const run = createRun(() => 0, 1, {}, locale);
+      expect(run.emailLanguages).toEqual(
+        locale === "ja" ? ["ja", "en", "ja", "en", "ja"] : ["en", "ja", "en", "ja", "en"],
+      );
+      const languages = [...run.emailLanguages];
+      const changed = next(expire(tap(run, "greeting")));
+      expect(changed.emailLanguages).toEqual(languages);
+      expect(totals(changed)).toMatchObject({ mistakes: 1, score: 0, timeouts: 1, maxScore: 100 });
+    }
+  });
   test("IDN comparison inspects actual characters, positions and Punycode in all variants", () => {
     const expected = ["xn--minmo-6ve.example", "xn--ngisa-4ve.example", "xn--hrumi-4ve.example"];
     for (let variant = 0; variant < 3; variant++) {

@@ -96,7 +96,7 @@ export function domainInspection(url, lang) {
   );
   return box;
 }
-export function createOriginal(item, side, lang, ui, handlers) {
+export function createOriginal(item, side, lang, ui, handlers, mailLang = lang) {
   const t = copy[lang],
     f = headerFacts(item, side);
   const group = node("section", undefined, "original-message");
@@ -111,7 +111,7 @@ export function createOriginal(item, side, lang, ui, handlers) {
   panel.hidden = !ui.original[side];
   panel.append(
     node("p", t.trust),
-    node("pre", originalHeaders(item, side, lang)),
+    Object.assign(node("pre", originalHeaders(item, side, mailLang)), { lang: mailLang }),
     node("p", t.caution),
   );
   if (f.forwarded) panel.append(node("p", t.forwarded));
