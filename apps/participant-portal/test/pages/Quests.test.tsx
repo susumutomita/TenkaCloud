@@ -9,15 +9,23 @@ import type { ProblemCatalogEntry } from "../../src/data/problems";
  * category・difficulty badge + Link navigate) を pin する。 共有 hook と findProblemMetadata は
  * mock、 categoryOf (lib/category) は実物。
  */
-const { mockTeamView, mockNav, mockIsMock, mockAppConfig, mockFindMeta, mockListCatalog } =
-  vi.hoisted(() => ({
-    mockTeamView: vi.fn(),
-    mockNav: vi.fn(),
-    mockIsMock: vi.fn(),
-    mockAppConfig: vi.fn(),
-    mockFindMeta: vi.fn(),
-    mockListCatalog: vi.fn(),
-  }));
+const {
+  mockTeamView,
+  mockNav,
+  mockIsMock,
+  mockAppConfig,
+  mockFindMeta,
+  mockListCatalog,
+  mockSetLocale,
+} = vi.hoisted(() => ({
+  mockTeamView: vi.fn(),
+  mockNav: vi.fn(),
+  mockIsMock: vi.fn(),
+  mockAppConfig: vi.fn(),
+  mockFindMeta: vi.fn(),
+  mockListCatalog: vi.fn(),
+  mockSetLocale: vi.fn(),
+}));
 
 vi.mock("react-router", () => ({ useNavigate: () => mockNav }));
 vi.mock("../../src/auth/TeamViewProvider", () => ({ useTeamView: mockTeamView }));
@@ -30,7 +38,7 @@ vi.mock("../../src/i18n", () => ({
     params ? `${key}|${JSON.stringify(params)}` : key,
   // [#2928] The hero and the quest guidance resolve a problem's display name, which is
   // locale-aware, so the stub must expose the locale too.
-  useI18n: () => ({ locale: "ja", setLocale: vi.fn() }),
+  useI18n: () => ({ locale: "ja", setLocale: mockSetLocale }),
 }));
 // Partial mock: only the catalog lookups are faked (this suite controls their fixtures
 // directly); `resolveLocalizedNarrative` is the real implementation, so the en/ja name
@@ -1120,4 +1128,85 @@ it("keeps the real event heading and catalog without the public game/demo sectio
   expect(screen.getByRole("link", { name: "Invited competition problem" })).toBeInTheDocument();
   expect(screen.queryByTestId("foundation-games")).not.toBeInTheDocument();
   expect(screen.queryByText("foundation_games.competition_title")).not.toBeInTheDocument();
+});
+
+it.each([
+  ["ja", "social-practice"],
+  ["en", "cloud-practice"],
+  ["en", "web-practice"],
+])("keeps %s legacy return #%s in the unified list and cleans up its listener", (lang, anchor) => {
+  const previous = window.location.href;
+  const descriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollIntoView");
+  const scrolled: string[] = [];
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+    configurable: true,
+    value: function (this: HTMLElement) {
+      scrolled.push(this.id);
+    },
+  });
+  const add = vi.spyOn(window, "addEventListener"),
+    remove = vi.spyOn(window, "removeEventListener");
+  window.history.replaceState(null, "", `/portal-demo/problems?lang=${lang}#${anchor}`);
+  mockAppConfig.mockReturnValue({ mode: "dev-mock", cloudMode: "mock" });
+  mockTeamView.mockReturnValue({
+    view: { problems: [problem({ jobId: "retained-job", name: "Retained problem" })] },
+    error: null,
+  });
+  const rendered = render(<QuestsPage />);
+  try {
+    expect(mockSetLocale).toHaveBeenCalledWith(lang);
+    expect(scrolled).toEqual(["competition-problems"]);
+    expect(screen.getByRole("link", { name: "Retained problem" })).toBeInTheDocument();
+    window.history.replaceState(null, "", "/portal-demo/problems#unrelated");
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    expect(scrolled).toHaveLength(1);
+    window.history.replaceState(null, "", `/portal-demo/problems#${anchor}`);
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    expect(scrolled).toEqual(["competition-problems", "competition-problems"]);
+    const handler = add.mock.calls.find(([name]) => name === "hashchange")?.[1];
+    expect(handler).toBeTypeOf("function");
+    rendered.unmount();
+    expect(remove).toHaveBeenCalledWith("hashchange", handler);
+  } finally {
+    rendered.unmount();
+    add.mockRestore();
+    remove.mockRestore();
+    if (descriptor) Object.defineProperty(HTMLElement.prototype, "scrollIntoView", descriptor);
+    else Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
+    window.history.replaceState(null, "", previous);
+  }
+});
+
+it("does not adopt an unsupported list URL language", () => {
+  const previous = window.location.href;
+  window.history.replaceState(null, "", "/portal-demo/problems?lang=unsupported");
+  mockAppConfig.mockReturnValue({ mode: "dev-mock", cloudMode: "mock" });
+  mockTeamView.mockReturnValue({ view: { problems: [] }, error: null });
+  const rendered = render(<QuestsPage />);
+  try {
+    expect(mockSetLocale).not.toHaveBeenCalled();
+    expect(screen.getByRole("link", { name: "メールの間違いさがし。" })).toBeInTheDocument();
+  } finally {
+    rendered.unmount();
+    window.history.replaceState(null, "", previous);
+  }
+});
+
+it("does not apply public-list URL language or browser entries to a real event", () => {
+  const previous = window.location.href;
+  window.history.replaceState(null, "", "/problems?lang=en#cloud-practice");
+  mockAppConfig.mockReturnValue({ mode: "backend", cloudMode: "real" });
+  mockTeamView.mockReturnValue({
+    view: { problems: [problem({ name: "Invited event" })] },
+    error: null,
+  });
+  const rendered = render(<QuestsPage />);
+  try {
+    expect(mockSetLocale).not.toHaveBeenCalled();
+    expect(screen.queryByRole("link", { name: "メールの間違いさがし。" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Invited event" })).toBeInTheDocument();
+  } finally {
+    rendered.unmount();
+    window.history.replaceState(null, "", previous);
+  }
 });
