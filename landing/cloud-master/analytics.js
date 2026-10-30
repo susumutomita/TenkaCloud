@@ -1,4 +1,4 @@
-import { tr } from "./i18n.js?v=649cc787a2";
+import { tr } from "./i18n.js?v=adcf6655c6";
 
 // Same destination and automatic-measurement scope as the top LP. Keep analytics
 // independent of game startup; the existing locale supplies the standard title.

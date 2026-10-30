@@ -1,5 +1,5 @@
-import { loadCatalog } from "./api-catalog.js?v=649cc787a2";
-import { CORRECT_PER_LEVEL, lessonForLevel } from "./curriculum.js?v=649cc787a2";
+import { loadCatalog } from "./api-catalog.js?v=adcf6655c6";
+import { CORRECT_PER_LEVEL, lessonForLevel } from "./curriculum.js?v=adcf6655c6";
 import {
   collect,
   createGame,
@@ -13,18 +13,18 @@ import {
   showLesson,
   start,
   tickInput,
-} from "./engine.js?v=649cc787a2";
-import { explanationCard } from "./explanation.js?v=649cc787a2";
-import { decisionFact, reasonDuration, reviewEntries } from "./feedback.js?v=649cc787a2";
-import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=649cc787a2";
-import { CARD_GAP, fieldCapacity } from "./layout.js?v=649cc787a2";
-import { flowPositions } from "./motion.js?v=649cc787a2";
-import { lessonNotice } from "./notices.js?v=649cc787a2";
-import { clearSlices, pulseCombo, sliceCard } from "./paper-cut.js?v=649cc787a2";
-import { createPaperSound } from "./paper-sound.js?v=649cc787a2";
-import { loadQuestionLocale, questionView } from "./question-locales.js?v=649cc787a2";
-import { buildShare } from "./share.js?v=649cc787a2";
-import { formatSurvival } from "./time.js?v=649cc787a2";
+} from "./engine.js?v=adcf6655c6";
+import { explanationCard } from "./explanation.js?v=adcf6655c6";
+import { decisionFact, reasonDuration, reviewEntries } from "./feedback.js?v=adcf6655c6";
+import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=adcf6655c6";
+import { CARD_GAP, fieldCapacity } from "./layout.js?v=adcf6655c6";
+import { flowPositions } from "./motion.js?v=adcf6655c6";
+import { lessonNotice } from "./notices.js?v=adcf6655c6";
+import { clearSlices, pulseCombo, sliceCard } from "./paper-cut.js?v=adcf6655c6";
+import { createPaperSound } from "./paper-sound.js?v=adcf6655c6";
+import { loadQuestionLocale, questionView } from "./question-locales.js?v=adcf6655c6";
+import { buildShare } from "./share.js?v=adcf6655c6";
+import { formatSurvival } from "./time.js?v=adcf6655c6";
 
 const $ = (id) => document.getElementById(id);
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
@@ -618,6 +618,14 @@ function result() {
     button(tr("もう一回"), () => prepare(newSeed(), true)),
     button(tr("同じ流れで復習"), () => prepare(seed, true), false),
   );
+  const practice = document.createElement("a");
+  const practiceLang = document.documentElement.lang === "en" ? "en" : "ja";
+  practice.href = `../portal-demo/?demo=1&goto=${encodeURIComponent(`/problems?lang=${practiceLang}#cloud-practice`)}`;
+  practice.textContent =
+    practiceLang === "en"
+      ? "Put safe cloud operations into practice"
+      : "クラウドの安全な運用を実践する";
+  actions.append(practice);
   measurementResult();
   sharing();
   review();
@@ -631,7 +639,7 @@ function result() {
   );
 }
 function phaseContent() {
-  $("language-home").append(languageButton, soundButton);
+  $("language-home").append(languageButton, soundButton, $("games-link"));
   $("overlay").hidden = true;
   $("overlay").classList.remove("miss-card");
   $("overlay").replaceChildren();
@@ -689,7 +697,8 @@ function phaseContent() {
   if (state.phase === "feedback") explanation();
   if (state.phase === "finished") result();
   if (["paused", "finished"].includes(state.phase))
-    $("overlay").querySelector(".actions").append(languageButton, soundButton);
+    $("overlay").querySelector(".actions").append(languageButton, soundButton, $("games-link"));
+  if (state.phase === "feedback") $("overlay").querySelector(".actions").append($("games-link"));
   if (["feedback", "paused", "finished"].includes(state.phase))
     $("overlay").querySelector("button")?.focus({ preventScroll: true });
 }
@@ -1014,6 +1023,12 @@ for (let node = walker.nextNode(); node; node = walker.nextNode()) {
 function applyStaticLocale() {
   const locale = getLocale();
   document.documentElement.lang = locale;
+  attribute(
+    $("games-link"),
+    "href",
+    `../portal-demo/?demo=1&goto=${encodeURIComponent(`/problems?lang=${locale}`)}`,
+  );
+  attribute($("games-link"), "aria-label", tr("ゲーム一覧へ戻る"));
   attribute($("privacy-link"), "href", locale === "en" ? "../privacy.en.html" : "../privacy.html");
   document.title = tr("APIの番人。 | 目指せクラウドマスター");
   document.querySelector('meta[name="description"]').content = tr(

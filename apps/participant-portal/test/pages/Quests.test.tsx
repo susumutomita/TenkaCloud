@@ -1056,3 +1056,50 @@ it("uses the matching catalog credit for legacy AWS cards and ignores other auth
   expect(screen.getByText(/AWS問題の作者/)).toBeInTheDocument();
   expect(screen.queryByText(/別問題の作者/)).not.toBeInTheDocument();
 });
+
+it("separates immediate browser games from the public competition sample without replacing its catalog", () => {
+  mockAppConfig.mockReturnValue({ mode: "dev-mock", cloudMode: "mock" });
+  mockIsMock.mockReturnValue(true);
+  mockTeamView.mockReturnValue({
+    view: {
+      problems: [
+        problem({
+          jobId: "job-existing",
+          problemId: "existing-event",
+          name: "Existing event problem",
+        }),
+      ],
+    },
+    error: null,
+  });
+  render(<QuestsPage />);
+  expect(screen.getByRole("heading", { name: "foundation_games.page_title" })).toBeInTheDocument();
+  expect(screen.getByTestId("foundation-games")).toBeInTheDocument();
+  expect(
+    screen.getByRole("heading", { name: "foundation_games.competition_title" }),
+  ).toBeInTheDocument();
+  expect(screen.getByText("foundation_games.competition_description")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Existing event problem" })).toBeInTheDocument();
+  expect(screen.getAllByText(/quests\.filter_all \(1\)/).length).toBeGreaterThan(0);
+});
+
+it("keeps the real event heading and catalog without the public game/demo sections", () => {
+  mockAppConfig.mockReturnValue({ mode: "backend", cloudMode: "real" });
+  mockTeamView.mockReturnValue({
+    view: {
+      problems: [
+        problem({
+          jobId: "job-real",
+          problemId: "real-event",
+          name: "Invited competition problem",
+        }),
+      ],
+    },
+    error: null,
+  });
+  render(<QuestsPage />);
+  expect(screen.getByRole("heading", { name: "quests.header" })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Invited competition problem" })).toBeInTheDocument();
+  expect(screen.queryByTestId("foundation-games")).not.toBeInTheDocument();
+  expect(screen.queryByText("foundation_games.competition_title")).not.toBeInTheDocument();
+});

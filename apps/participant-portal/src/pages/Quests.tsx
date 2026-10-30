@@ -59,6 +59,7 @@ import {
   type QuestDifficultyFilter,
   type QuestSearchMetadata,
 } from "./Quests.filters";
+import { FoundationGames } from "./Quests.foundation-games";
 import { LocalStartGuidance } from "./Quests.local-start";
 import { renderSubmissionState } from "./Quests.submission-state";
 
@@ -81,6 +82,7 @@ export function QuestsPage() {
   const { locale } = useI18n();
   const isMock = useIsMock();
   const config = useAppConfig();
+  const isPublicDemo = config.mode === "dev-mock" && config.cloudMode === "mock";
   const [filter, setFilter] = useState<QuestCategoryFilter>("all");
   const [query, setQuery] = useState("");
   const [difficulty, setDifficulty] = useState<QuestDifficultyFilter>("all");
@@ -327,9 +329,20 @@ export function QuestsPage() {
 
   return (
     <SpaceBetween size="l">
-      <Header variant="h1" description={t("quests.header_description")}>
-        {t("quests.header")}
+      <Header
+        variant="h1"
+        description={t(
+          isPublicDemo ? "foundation_games.page_description" : "quests.header_description",
+        )}
+      >
+        {t(isPublicDemo ? "foundation_games.page_title" : "quests.header")}
       </Header>
+
+      <FoundationGames
+        catalog={visibleCatalog}
+        problems={visibleProblems}
+        competitionCount={catalogProblems.length}
+      />
 
       {error && (
         <Alert type="error" header={t("app.fetch_status_failed")}>
@@ -356,6 +369,14 @@ export function QuestsPage() {
           </Header>
         </SpaceBetween>
       ) : null}
+
+      {isPublicDemo && (
+        <Header variant="h2" description={t("foundation_games.competition_description")}>
+          <span id="competition-problems" tabIndex={-1} style={{ scrollMarginTop: "5rem" }}>
+            {t("foundation_games.competition_title")}
+          </span>
+        </Header>
+      )}
 
       <SpaceBetween size="s">
         <SegmentedControl
