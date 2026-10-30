@@ -104,6 +104,7 @@ function main() {
   // Version the entire module graph, not just its entry: cached dependencies can otherwise
   // mix incompatible releases. Normalize generated versions before hashing to stay idempotent.
   stampCloudMaster(join(landing, "cloud-master"));
+  stampCloudMaster(join(landing, "mail-detective"));
   const versions = currentVersions();
   const targets = readdirSync(landing).filter((name) => name.endsWith(".html"));
   for (const name of targets) {
