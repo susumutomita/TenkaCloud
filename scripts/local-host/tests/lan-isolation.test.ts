@@ -450,7 +450,9 @@ for (const [label, args] of [
         expect(job.networkIsolationVersion).toBeUndefined();
         expect(dockerCalls().filter((line) => line.includes(" up "))).toHaveLength(1);
         await engine.resume(job);
-        expect(dockerCalls().filter((line) => line.endsWith(" restart"))).toHaveLength(1);
+        expect(dockerCalls().filter((line) => line.endsWith(" up -d --no-recreate"))).toHaveLength(
+          1,
+        );
         await expect(engine.recover(job)).rejects.toThrow(
           "The recorded problem environment is not running.",
         );

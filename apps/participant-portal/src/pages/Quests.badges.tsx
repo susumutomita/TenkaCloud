@@ -1,4 +1,5 @@
 import Badge from "@cloudscape-design/components/badge";
+import type { ProblemCatalogEntry } from "@tenkacloud/portal-contracts";
 import type * as React from "react";
 import type { ParticipantProblemView, ParticipantScoringInfo } from "../api/portal-client";
 import { findProblemMetadata, resolveLocalizedNarrative } from "../data/problems";
@@ -88,4 +89,20 @@ export function studyReportBadge(problem: ParticipantProblemView, t: TFn) {
   return problem.submission?.kind === "self-report" ? (
     <Badge color="grey">{t("study.self_report")}</Badge>
   ) : null;
+}
+
+/**
+ * 開発者が toggle で表示した draft を見分ける印。exempt (進行中等) の draft にも付く。
+ *
+ * draft を隠す規則がある local play (`hidesDraftProblems`) でだけ出す。大会の一覧は運営が
+ * このチームへ deploy した問題なので、catalog 上は draft でも参加者には出題中の問題であり、
+ * 「ドラフト」と表示すると未完成・対象外に見えてしまう。
+ */
+export function draftBadge(
+  status: ProblemCatalogEntry["status"] | undefined,
+  hidesDrafts: boolean,
+  t: TFn,
+): React.ReactElement | null {
+  if (!hidesDrafts || status !== "draft") return null;
+  return <Badge color="grey">{t("quests.draft_badge")}</Badge>;
 }

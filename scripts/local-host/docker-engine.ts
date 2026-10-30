@@ -112,14 +112,17 @@ function composeCommandArgs(
       action,
       unit.projectDirectory,
     );
-  // `stop` keeps containers and volumes; `restart` starts stopped or running ones in place.
+  // `stop` keeps containers and volumes. Resuming (`restart`) runs `up -d --no-recreate`: stopped
+  // containers start in place with their state, and containers that no longer exist (pruned, or a
+  // Docker reset) are created again. `compose restart` silently skips missing containers, so the
+  // environment never came back and its verifier timed out.
   const args = [
     "-f",
     unit.composePath,
     "-p",
     unit.composeProjectName,
     ...(unit.projectDirectory ? ["--project-directory", unit.projectDirectory] : []),
-    action,
+    ...(action === "restart" ? ["up", "-d", "--no-recreate"] : [action]),
   ];
   return cli.command === "docker-compose" ? args : ["compose", ...args];
 }

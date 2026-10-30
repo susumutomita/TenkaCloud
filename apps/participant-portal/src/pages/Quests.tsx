@@ -47,6 +47,7 @@ import {
   awsOnlyBadge,
   categoryBadge,
   difficultyBadge,
+  draftBadge,
   questCardTitle,
   studyReportBadge,
 } from "./Quests.badges";
@@ -274,10 +275,7 @@ export function QuestsPage() {
               {studyReportBadge(problem, t)}
               {difficultyBadge(problem.problemId, t, problem.runtimeKind)}
               {awsOnlyBadge(problem.problemId, t, problem.runtimeKind)}
-              {/* 開発者が toggle で表示した draft を見分ける印。exempt (進行中等) の draft にも付く。 */}
-              {metadataByProblemId.get(problem.problemId)?.status === "draft" && (
-                <Badge color="grey">{t("quests.draft_badge")}</Badge>
-              )}
+              {draftBadge(metadataByProblemId.get(problem.problemId)?.status, canHideDrafts, t)}
               {gatePending && <Badge color="green">{t("quests.gate_start_here")}</Badge>}
               {bonusPending && progression && (
                 <Badge color="blue">
@@ -305,7 +303,17 @@ export function QuestsPage() {
       },
       sections: [],
     }),
-    [navigate, t, progression, gateName, metadataByProblemId, locale, catalog, config],
+    [
+      navigate,
+      t,
+      progression,
+      gateName,
+      metadataByProblemId,
+      locale,
+      catalog,
+      config,
+      canHideDrafts,
+    ],
   );
 
   const emptyUnsolved = (
