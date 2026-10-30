@@ -1,5 +1,5 @@
-import { COPY } from "./copy.js?v=0408938f18";
-import { choose, elapse, ROUND_MS, start } from "./model.js?v=0408938f18";
+import { COPY } from "./copy.js?v=7fa972761a";
+import { choose, elapse, ROUND_MS, start } from "./model.js?v=7fa972761a";
 
 let lang = new URLSearchParams(location.search).get("lang") === "en" ? "en" : "ja",
   state = start(),
@@ -15,6 +15,10 @@ function node(tag, text = "", cls = "") {
 function focusView() {
   const e = $("panel-title") || $("screen-title") || $("result-title");
   e?.focus({ preventScroll: true });
+  if (!state.panel && state.stage === "invite") {
+    const screen = document.querySelector(".screen");
+    if (screen) screen.scrollTop = screen.scrollHeight;
+  }
 }
 function dispatch(action) {
   clock(performance.now());
@@ -113,11 +117,18 @@ function dmScreen(content, t) {
   profile.append(node("span", "KO", "avatar"), node("strong", t.person), node("small", t.role));
   const title =
     state.stage === "dm" ? { ja: "新しいDM", en: "New DM" } : { ja: "メッセージ", en: "Messages" };
-  content.append(profile, heading(title[lang]), node("p", t.incoming, "bubble"));
+  content.append(
+    profile,
+    heading(title[lang]),
+    node("p", t.introduction, "bubble"),
+    node("p", t.incoming, "bubble"),
+    node("p", t.offer, "bubble"),
+  );
   if (state.stage === "dm") content.append(button("discuss", t.discuss, "discuss", "reply"));
   else
     content.append(
       node("p", t.reply, "bubble self"),
+      node("p", t.jobDetail, "bubble"),
       node("p", t.invitation, "bubble"),
       button("visit", `${t.visit} ↗`, "visit", "site-link"),
     );
@@ -126,9 +137,7 @@ function siteScreen(content, t) {
   content.append(
     node(
       "div",
-      state.variant === "install"
-        ? "assessment.komorebi-skills.example"
-        : "careers.komorebi.example",
+      state.variant === "install" ? "assessment.aoba-skills.example" : "careers.aoba.example",
       "address",
     ),
   );
