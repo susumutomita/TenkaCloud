@@ -57,3 +57,5 @@ python3 -m http.server 19980 --bind 127.0.0.1 --directory landing
 同じ Mac だけで `http://127.0.0.1:19980/mail-detective/?lang=ja` を開きます。英語は lang=en。既存サーバーが起動中なら重複起動しません。本番公開とは別です。
 
 公式根拠は [FTC](https://consumer.ftc.gov/articles/how-recognize-avoid-phishing-scams)、[Gmail](https://support.google.com/mail/answer/180707)、[RFC8601](https://www.rfc-editor.org/rfc/rfc8601)、[RFC9989](https://datatracker.ietf.org/doc/html/rfc9989)、[RFC5890](https://www.rfc-editor.org/rfc/rfc5890)、[UnicodeUTS39](https://www.unicode.org/reports/tr39/)、[Unicode文字データ](https://www.unicode.org/Public/UCD/latest/ucd/UnicodeData.txt)。ケースと UI は独自の架空教材です。今後の体系は[学習経路](../../docs/learning-path/README.ja.md)を参照します。
+
+採点：怪しい箇所を回答して正解なら＋1、正常・変更なしの箇所を怪しいと回答すると−1。各箇所は一度だけ計上します。差出人・ヘッダー・リンク先の開閉、比較タブ切替、キーボード移動は調査なので減点しません。結果と任意の X 共有には実得点とミス数を示し、答えを見る操作では加点しません。

@@ -1,9 +1,9 @@
-import { inspectionRow } from "./cases.js?v=206ef8786a";
-import { COPY } from "./copy.js?v=206ef8786a";
-import { advanceClock, createClock, progress } from "./deadline.js?v=206ef8786a";
-import { updateIdnFonts } from "./idn-explanation.js?v=206ef8786a";
-import { levelCase } from "./levels.js?v=206ef8786a";
-import { createEmail } from "./mail-view.js?v=206ef8786a";
+import { inspectionRow } from "./cases.js?v=a6c3955e99";
+import { COPY } from "./copy.js?v=a6c3955e99";
+import { advanceClock, createClock, progress } from "./deadline.js?v=a6c3955e99";
+import { updateIdnFonts } from "./idn-explanation.js?v=a6c3955e99";
+import { levelCase } from "./levels.js?v=a6c3955e99";
+import { createEmail } from "./mail-view.js?v=a6c3955e99";
 import {
   createRun,
   currentCase,
@@ -16,9 +16,9 @@ import {
   risks,
   tap,
   totals,
-} from "./model.js?v=206ef8786a";
-import { createMailShareLink, createNextStep } from "./next-step.js?v=206ef8786a";
-import { createReview } from "./review.js?v=206ef8786a";
+} from "./model.js?v=a6c3955e99";
+import { createMailShareLink, createNextStep } from "./next-step.js?v=a6c3955e99";
+import { createReview } from "./review.js?v=a6c3955e99";
 
 const element = (tag, text, className) => {
   const node = document.createElement(tag);
@@ -142,7 +142,7 @@ function choose(id, focusId) {
   render(focusId);
   const item = inspectionRow(currentCase(run), id);
   byId("live").textContent =
-    `${item.kind === "risk" ? COPY[lang].statusRisk : COPY[lang].statusNormal} ${item.reason[lang]}`;
+    `${run.feedback.delta < 0 ? COPY[lang].wrong : item.kind === "risk" ? COPY[lang].statusRisk : COPY[lang].statusNormal} ${item.reason[lang]}`;
 }
 function advance() {
   run = next(run);
@@ -157,7 +157,11 @@ function playView(t) {
   const hud = element("div", undefined, "round-bar");
   hud.append(
     element("span", `Lv${currentLevel(run)}`, "round-number"),
-    element("span", `${t.found} ${checked}/${risks(run).length}`, "spot-count"),
+    element(
+      "span",
+      `${t.found} ${checked}/${risks(run).length} · ${t.mistakes} ${run.mistakes[run.index].length}`,
+      "spot-count",
+    ),
   );
   const heading = element("h2", item.title[lang]);
   heading.id = "round-title";
@@ -246,6 +250,7 @@ function resultsView(t) {
   const panel = element("section", undefined, "result-panel");
   panel.append(
     heading,
+    element("p", `${t.score} ${counts.score} · ${t.mistakes} ${counts.mistakes}`, "result-score"),
     element("p", `${t.ownCount} ${counts.found}/${counts.target}`, "result-count"),
     element("p", `${t.reviewCount} ${counts.reviewed}/${counts.target}`),
     element("p", t.takeaway, "takeaway"),

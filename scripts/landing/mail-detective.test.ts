@@ -35,7 +35,7 @@ describe("email difference game", () => {
     expect(run.phase).toBe("playing");
     expect(run.rounds).toHaveLength(2);
     expect(new Set(run.rounds).size).toBe(2);
-    expect(totals(run)).toEqual({ found: 0, reviewed: 0, target: 1 });
+    expect(totals(run)).toEqual({ found: 0, reviewed: 0, target: 1, mistakes: 0, score: 0 });
     expect(next(run)).toBe(run);
     expect(tap(run, "unknown")).toBe(run);
   });
@@ -65,7 +65,7 @@ describe("email difference game", () => {
     }
     expect(patterns.size).toBe(4);
   });
-  test("normal variations do not score or block the next attempt; repeated taps never double count", () => {
+  test("normal variations cost one point without blocking the next attempt; repeated taps never double count", () => {
     let run = createRun(() => 0);
     const benign = currentCase(run).rows.find((row) => row.kind === "benign");
     const initial = JSON.stringify(run);
@@ -75,6 +75,8 @@ describe("email difference game", () => {
     expect(run.phase).toBe("playing");
     expect(totals(run).found).toBe(0);
     expect(run.feedback.kind).toBe("benign");
+    expect(totals(run).mistakes).toBe(1);
+    expect(totals(run).score).toBe(-1);
     const id = risks(run)[0].id;
     for (let n = 0; n < 500; n++) run = tap(run, id);
     expect(totals(run).found).toBe(1);
@@ -91,7 +93,7 @@ describe("email difference game", () => {
     for (const row of risks(run)) run = tap(run, row.id);
     run = next(run);
     expect(run.phase).toBe("results");
-    expect(totals(run)).toEqual({ found: 3, reviewed: 0, target: 3 });
+    expect(totals(run)).toEqual({ found: 3, reviewed: 0, target: 3, mistakes: 0, score: 3 });
     expect(tap(run, risks(run)[0].id)).toBe(run);
   });
   test("showing answers is transparent and cannot turn reviewed spots into independent finds", () => {
@@ -99,11 +101,11 @@ describe("email difference game", () => {
     run = tap(run, risks(run)[0].id);
     run = reveal(run);
     for (const row of risks(run)) run = tap(run, row.id);
-    expect(totals(run)).toEqual({ found: 1, reviewed: 1, target: 2 });
+    expect(totals(run)).toEqual({ found: 1, reviewed: 1, target: 2, mistakes: 0, score: 1 });
     expect(reveal(run)).toBe(run);
     run = reveal(next(run));
     run = next(run);
-    expect(totals(run)).toEqual({ found: 1, reviewed: 4, target: 5 });
+    expect(totals(run)).toEqual({ found: 1, reviewed: 4, target: 5, mistakes: 0, score: 1 });
   });
   test("finish early and fresh replay never pretend the learner completed unseen spots", () => {
     const run = end(createRun(() => 0.3));
@@ -323,7 +325,7 @@ describe("automatic-processing deadline prototype", () => {
     run = tap(run, risks(run)[0].id);
     run = expire(run);
     expect(run.phase).toBe("timed-out");
-    expect(totals(run)).toEqual({ found: 1, reviewed: 2, target: 3 });
+    expect(totals(run)).toEqual({ found: 1, reviewed: 2, target: 3, mistakes: 0, score: 1 });
     expect(expire(run)).toBe(run);
     expect(next(run)).toBe(run);
     expect(tap(run, risks(run)[1].id)).toBe(run);
@@ -426,9 +428,9 @@ describe("TenkaCloud shell and end-of-play mail review", () => {
   });
 });
 
-describe("unscored content has the same inspection affordance", () => {
+describe("all answer controls have neutral affordances", () => {
   test.each(LEVELS.map((definition) => [definition.level, definition]))(
-    "all neutral content in %s is inspectable without scoring",
+    "flagging neutral content in %s costs one point per distinct answer",
     (level) => {
       let run = createRun(() => 0, level);
       const item = currentCase(run);
@@ -448,7 +450,17 @@ describe("unscored content has the same inspection affordance", () => {
         expect(run.feedback.id).toBe(id);
         expect(run.feedback.fresh).toBe(false);
         expect(run.phase).toBe("playing");
-        expect(totals(run)).toEqual({ found: 0, reviewed: 0, target: risks(run).length });
+        const mistakes = run.checked[0].length;
+        expect(totals(run)).toEqual({
+          found: 0,
+          reviewed: 0,
+          target: risks(run).length,
+          mistakes,
+          score: -mistakes,
+        });
+        const repeat = tap(run, id);
+        expect(totals(repeat)).toEqual(totals(run));
+        expect(repeat.feedback.delta).toBe(0);
         expect(run.found[0]).toHaveLength(0);
       }
       expect(inspectionRow(item, "unknown")).toBeUndefined();

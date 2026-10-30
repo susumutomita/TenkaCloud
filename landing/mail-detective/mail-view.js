@@ -1,8 +1,8 @@
-import { inspectionRow } from "./cases.js?v=206ef8786a";
-import { COPY } from "./copy.js?v=206ef8786a";
-import { createIdnExplanation } from "./idn-explanation.js?v=206ef8786a";
+import { inspectionRow } from "./cases.js?v=a6c3955e99";
+import { COPY } from "./copy.js?v=a6c3955e99";
+import { createIdnExplanation } from "./idn-explanation.js?v=a6c3955e99";
 
-import { createOriginal } from "./message-headers.js?v=206ef8786a";
+import { createOriginal } from "./message-headers.js?v=a6c3955e99";
 
 const node = (tag, text, className) => {
   const result = document.createElement(tag);
@@ -62,6 +62,10 @@ function spotControl(row, value, slot, run, t, handlers) {
   if (found || shown) {
     control.classList.add("correct");
     control.append(node("span", `✓ ${shown ? t.reviewed : t.spotted}`, "stamp"));
+  }
+  if (run.mistakes[run.index].includes(row.id)) {
+    control.classList.add("incorrect");
+    control.append(node("span", `✕ ${t.wrong}`, "stamp"));
   }
   if (run.feedback?.id === row.id && run.feedback.fresh) control.classList.add("fresh");
   control.addEventListener("click", () => handlers.choose(row.id, control.id));

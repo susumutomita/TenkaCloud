@@ -1,5 +1,5 @@
-import { inspectionRow } from "./cases.js?v=206ef8786a";
-import { chooseVariant, LEVELS, levelCase } from "./levels.js?v=206ef8786a";
+import { inspectionRow } from "./cases.js?v=a6c3955e99";
+import { chooseVariant, LEVELS, levelCase } from "./levels.js?v=a6c3955e99";
 
 export function createRun(random = Math.random, startLevel = 1, previousVariants = {}) {
   if (!Number.isInteger(startLevel) || startLevel < 1 || startLevel > LEVELS.length)
@@ -19,6 +19,7 @@ export function createRun(random = Math.random, startLevel = 1, previousVariants
     found: rounds.map(() => []),
     revealed: rounds.map(() => []),
     checked: rounds.map(() => []),
+    mistakes: rounds.map(() => []),
     feedback: null,
   };
 }
@@ -42,15 +43,26 @@ export function tap(run, id) {
   const known = [...run.found[run.index], ...run.revealed[run.index]].includes(id);
   const found = run.found.map((list) => [...list]);
   const checked = run.checked.map((list) => [...list]);
-  if (!checked[run.index].includes(id)) checked[run.index].push(id);
+  const firstAnswer = !checked[run.index].includes(id);
+  const mistakes = run.mistakes.map((list) => [...list]);
+  if (firstAnswer) {
+    checked[run.index].push(id);
+    if (item.kind !== "risk") mistakes[run.index].push(id);
+  }
   if (item.kind === "risk" && !known) found[run.index].push(id);
   const complete = found[run.index].length + run.revealed[run.index].length === risks(run).length;
   return {
     ...run,
     found,
     checked,
+    mistakes,
     phase: complete ? "round-complete" : "playing",
-    feedback: { id, kind: item.kind, fresh: item.kind === "risk" && !known },
+    feedback: {
+      id,
+      kind: item.kind,
+      fresh: item.kind === "risk" && !known,
+      delta: item.kind === "risk" ? (known ? 0 : 1) : firstAnswer ? -1 : 0,
+    },
   };
 }
 export function reveal(run) {
@@ -80,7 +92,9 @@ export function totals(run) {
         (row) => row.kind === "risk",
       ).length,
   ).reduce((sum, count) => sum + count, 0);
-  return { found: run.found.flat().length, reviewed: run.revealed.flat().length, target };
+  const found = run.found.flat().length,
+    mistakes = run.mistakes.flat().length;
+  return { found, reviewed: run.revealed.flat().length, target, mistakes, score: found - mistakes };
 }
 
 export function expire(run) {

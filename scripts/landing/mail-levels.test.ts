@@ -50,6 +50,15 @@ function completeLesson(run) {
   return next(run);
 }
 
+function assertShareScore(run, mistakes) {
+  expect(totals(run).mistakes).toBe(mistakes);
+  for (const lang of ["ja", "en"]) {
+    const text = buildMailShare(run, totals(run), lang).text;
+    expect(text).toContain(`${lang === "ja" ? "ミス" : "Mistakes:"} ${mistakes}`);
+    expect(text).toContain(`${lang === "ja" ? "得点" : "Score:"} ${totals(run).score}`);
+  }
+}
+
 const original = JSON.stringify(CASES);
 describe("five comparison lessons", () => {
   test.each(
@@ -163,6 +172,42 @@ describe("five comparison lessons", () => {
     const reviewed = next(reveal(run));
     expect(totals(reviewed).found).toBe(0);
   });
+  test.each([1, 2, 3, 4, 5])(
+    "Lv%i brute force cannot equal a clean run, and retry resets mistakes",
+    (level) => {
+      let clean = createRun(() => 0, level),
+        brute = createRun(() => 0, level);
+      const item = currentCase(brute);
+      const normal = [
+        ...item.mailRows.filter((row) => row.kind !== "risk").map((row) => row.id),
+        "greeting",
+        "opening",
+        "signature",
+        "display-name",
+        "to",
+      ];
+      for (const id of normal) {
+        brute = tap(brute, id);
+        const snapshot = totals(brute);
+        for (let n = 0; n < 100; n++) brute = tap(brute, id);
+        expect(totals(brute)).toEqual(snapshot);
+      }
+      assertShareScore(expire(brute), normal.length);
+      for (const row of risks(clean)) {
+        clean = tap(clean, row.id);
+        brute = tap(brute, row.id);
+        const snapshot = totals(brute);
+        brute = tap(brute, row.id);
+        expect(totals(brute)).toEqual(snapshot);
+      }
+      expect(totals(clean).score).toBe(risks(clean).length);
+      expect(totals(clean).mistakes).toBe(0);
+      expect(totals(brute).mistakes).toBe(normal.length);
+      expect(totals(brute).score).toBeLessThan(totals(clean).score);
+      assertShareScore(end(brute), normal.length);
+      expect(totals(createRun(() => 0, level)).mistakes).toBe(0);
+    },
+  );
   test("IDN comparison inspects actual characters, positions and Punycode in all variants", () => {
     const expected = ["xn--minmo-6ve.example", "xn--ngisa-4ve.example", "xn--hrumi-4ve.example"];
     for (let variant = 0; variant < 3; variant++) {
