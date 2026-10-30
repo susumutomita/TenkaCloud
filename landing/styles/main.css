@@ -834,3 +834,7 @@ footer .footer-legal-links { display: inline-flex; flex-wrap: wrap; gap: 0 6px; 
   /* nav 右側を縮める (= ロゴと言語切替が干渉しない) */
   .nav-right .lang { padding: 0 8px; font-size: 11px; }
 }
+
+.exercise-idea {max-width:760px;margin:20px auto;font-size:14px;line-height:1.8;color:var(--ink-2);}
+
+.learning-loop {margin:18px 0 12px;font-size:clamp(18px,2vw,24px);font-weight:700;color:var(--blue);line-height:1.6;}

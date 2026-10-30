@@ -60,7 +60,7 @@ describe("landing page SEO", () => {
     expect(english).toContain(
       '<link rel="canonical" href="https://tenkacloud.com/index.en.html" />',
     );
-    expect(english).toContain("The cloud engineer's");
+    expect(english).toContain("to hands-on cloud exercises.");
     expect(english).toContain("Build cloud capability across the org.");
   });
 
@@ -205,7 +205,7 @@ describe("landing interactive onboarding entry", () => {
     );
     expect(hero).not.toContain('href="/portal-demo/start');
     expect(hero).toContain('data-cta="start-drill"');
-    expect(hero).toContain("ヒントと回答提出、得点を6つのステップ");
+    expect(hero).toContain("回答を提出。ヒントと採点");
     expect(hero).not.toContain("旧版");
   });
 
@@ -238,7 +238,7 @@ describe("landing interactive onboarding entry", () => {
     expect(hero).toContain('data-cta="start-drill"');
     expect(hero).toContain('href="/docs/getting-started/index.en.html#local-start"');
     expect(hero).toContain('data-cta="local-start"');
-    expect(hero).toContain("submit answers and earn points in six steps");
+    expect(hero).toContain("including hints and scoring");
     expect(hero).not.toContain("Earlier introductory demo");
   });
 });
@@ -503,5 +503,31 @@ describe("catalog documentation entry points", () => {
       "operate/use-existing-pack/page.ja.mdx#catalog-source-schema",
     );
     expect(read("CLAUDE.md")).toContain("@AGENTS.md");
+  });
+});
+
+describe("saved enterprise copy integrated onto the current LP", () => {
+  it("keeps the six enterprise uses and private inquiry route without restoring removed sections", () => {
+    for (const file of ["landing/index.html", "landing/index.en.html"]) {
+      const html = read(file);
+      const uses = html.match(/<section[^>]*id="use-cases"[\s\S]*?<\/section>/)?.[0];
+      expect(uses).toBeDefined();
+      for (const key of ["a", "b", "c", "d", "e", "f"]) {
+        expect(uses).toContain(`data-i18n="uc.${key}.h"`);
+      }
+      expect(html).toContain('href="#use-cases"');
+      expect(uses).toContain('data-i18n="uc.loop"');
+      expect(html).not.toContain('id="onboard"');
+      expect(html).not.toContain('id="trust-bullets"');
+      expect(html).not.toContain('class="future-learning"');
+      const contact = html.match(/<section id="contact">[\s\S]*?<\/section>/)?.[0];
+      expect(contact).toContain('href="https://forms.gle/djVprYmq3hFgJA7P9"');
+      expect(contact).not.toContain("/discussions");
+      expect(contact).toContain(
+        file.endsWith("index.en.html") ? "Google sign-in" : "Googleログイン",
+      );
+      expect(html).toContain('href="/portal-demo/?demo=1&amp;goto=start"');
+      expect(html).toContain('data-i18n="extend.idea"');
+    }
   });
 });

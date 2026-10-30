@@ -1,8 +1,9 @@
 import "@cloudscape-design/global-styles/index.css";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router";
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import { DemoSessionBootstrap } from "./auth/demo-session";
+import { clearLocalHostSession, saveLocalHostSession } from "./auth/local-host-session";
 import { buildLoginReturnPath, readLoginReturnPathState } from "./auth/login-return-path";
 import { ShellLayout } from "./components/AppLayout";
 import { type AppConfig, isCloudHost, isLocalHost } from "./config";
@@ -58,7 +59,7 @@ function guarded(element: React.ReactNode, config: AppConfig) {
 function LoginRoute({ config }: { config: AppConfig }) {
   const location = useLocation();
   const returnPath = readLoginReturnPathState(location.state);
-  // Local hosting exchanges the organizer key for a memory-only session.
+  // Local hosting exchanges the organizer key for a session kept only in this tab.
   return isLocalHost(config) ? (
     <LocalHostLoginPage config={config} returnPath={returnPath} />
   ) : (
@@ -83,12 +84,28 @@ function LocalHostSessionExpiry() {
   return null;
 }
 
+/**
+ * Keeps the local host session for a reload of this tab (`LocalHostLoginPage` restores it).
+ * Logout, idle logout and expiry all clear the tokens, and with them the saved copy.
+ */
+function LocalHostSessionReload() {
+  const { tokens } = useAuth();
+  const signedIn = useRef(false);
+  useEffect(() => {
+    if (tokens) saveLocalHostSession(tokens);
+    else if (signedIn.current) clearLocalHostSession();
+    signedIn.current = tokens !== null;
+  }, [tokens]);
+  return null;
+}
+
 export function App({ config }: { config: AppConfig }) {
   return (
     <AuthProvider config={config}>
       {/* Issue #1954: demo mode は Cognito をスキップして mock session を注入する。 */}
       <DemoSessionBootstrap config={config} />
       {isLocalHost(config) && <LocalHostSessionExpiry />}
+      {isLocalHost(config) && <LocalHostSessionReload />}
       <AppRoutes baseConfig={config} />
     </AuthProvider>
   );
