@@ -6,8 +6,8 @@
     "title": "TenkaCloud Participant Portal",
     "loading": "Loading…",
     "no_session": "No active session. Please sign in again.",
-    "mock_cloud_header": "Browser demo",
-    "mock_cloud_body": "This demo runs entirely in your browser. It creates no real AWS resources or charges.",
+    "mock_cloud_header": "Problems you can play in your browser",
+    "mock_cloud_body": "These problems run entirely in your browser. They create no real AWS resources or charges.",
     "local_cloud_header": "Local cloud mode",
     "local_cloud_body": "This event runs a local Docker problem container. No real AWS resources are used.",
     "fetch_status_failed": "Failed to fetch status"
@@ -704,5 +704,20 @@
     "wrong": "The answer or check report did not meet the conditions.",
     "check": "Check result: {name}",
     "error": "Submission failed. Retry retains the same operation key."
+  },
+  "foundation_games": {
+    "mail-detective": {
+      "title": "Spot the risky email difference",
+      "description": "Compare two emails and find differences that bring a risk."
+    },
+    "cloud-master": {
+      "title": "API Guardian (Cloud Master)",
+      "description": "Spot suspicious API requests and stop them with a tap."
+    },
+    "page_title": "Problems",
+    "page_description": "Find problems to play in your browser and exercises to put into practice.",
+    "competition_title": "Hands-on problems",
+    "competition_description": "Play browser problems directly. Join competitions through an organizer’s invitation.",
+    "browser_attribute": "Browser only · no AWS/signup"
   }
 }

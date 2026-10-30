@@ -1469,3 +1469,6 @@ body.active-game #level-progress {margin-left:4px;white-space:nowrap;font-weight
 .impact.pass {font-size:20px;color:#276047;animation:pass-points 650ms ease-out both;}
 @keyframes pass-points {from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-14px)}}
 @media(prefers-reduced-motion:reduce){.paper-fragment,.paper-stroke,.impact.pass{animation:none;}}
+
+/* Shared game-list navigation only; card timing and field behavior are unchanged. */
+.games-link{font-size:12px;min-height:44px;padding:4px 8px;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;text-decoration:underline;text-underline-offset:3px}
