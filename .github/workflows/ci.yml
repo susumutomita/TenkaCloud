@@ -1,7 +1,7 @@
 name: ci
 
 # Supply Chain Security:
-# - All actions pinned to full SHA for immutable references
+# - Direct and transitive actions pinned in actions.lock; verify is a required gate
 # - Safe Chain runs before dependency installation
 # - Lifecycle scripts disabled during install
 # - Minimal permissions following principle of least privilege
@@ -32,6 +32,22 @@ concurrency:
 # Coverage parts are defined in scripts/workspace/run-coverage.ts. Independent jobs run
 # concurrently; the final ci job requires every surviving gate to succeed.
 jobs:
+  actions-lock:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out workflow dependencies
+        uses: actions/checkout@v4.3.1
+        with:
+          persist-credentials: false
+      - name: Install pinned lockfile verifier
+        run: gh extension install github/gh-actions-lock --pin v0.2.0
+      - name: Verify workflow dependency lockfile (read-only)
+        run: gh actions-lock --verify --no-interactive
+
   # Cheap contract gates: dependency lifecycle audit, dead code,
   # prose, formatting, and the repo-root script tests. Together ~25s, so they share one leg.
   gates:
@@ -39,11 +55,11 @@ jobs:
     steps:
       - name: Check out the code
         # actions/checkout v4.3.1
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        uses: actions/checkout@v4.3.1
         with:
           fetch-depth: 0
 
-      - uses: ./.github/actions/bun-install
+      - uses: $/.github/actions/bun-install
 
       - name: Prepare offline platform catalog fixtures
         run: bun run scripts/problem-pack/test/prepare-ci-catalog.ts
@@ -96,9 +112,9 @@ jobs:
     steps:
       - name: Check out the code
         # actions/checkout v4.3.1
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        uses: actions/checkout@v4.3.1
 
-      - uses: ./.github/actions/bun-install
+      - uses: $/.github/actions/bun-install
 
       - name: Prepare offline platform catalog fixtures
         run: bun run scripts/problem-pack/test/prepare-ci-catalog.ts
@@ -111,9 +127,9 @@ jobs:
     steps:
       - name: Check out the code
         # actions/checkout v4.3.1
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        uses: actions/checkout@v4.3.1
 
-      - uses: ./.github/actions/bun-install
+      - uses: $/.github/actions/bun-install
 
       - name: Prepare offline platform catalog fixtures
         run: bun run scripts/problem-pack/test/prepare-ci-catalog.ts
@@ -128,9 +144,9 @@ jobs:
     steps:
       - name: Check out the code
         # actions/checkout v4.3.1
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        uses: actions/checkout@v4.3.1
 
-      - uses: ./.github/actions/bun-install
+      - uses: $/.github/actions/bun-install
 
       - name: Prepare offline platform catalog fixtures
         run: bun run scripts/problem-pack/test/prepare-ci-catalog.ts
@@ -167,9 +183,9 @@ jobs:
     steps:
       - name: Check out the code
         # actions/checkout v4.3.1
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        uses: actions/checkout@v4.3.1
 
-      - uses: ./.github/actions/bun-install
+      - uses: $/.github/actions/bun-install
 
       - name: Prepare offline platform catalog fixtures
         run: bun run scripts/problem-pack/test/prepare-ci-catalog.ts
@@ -190,13 +206,12 @@ jobs:
         run: |
           echo "files=$(bun run scripts/workspace/run-coverage.ts --shard ${{ matrix.shard }} --print-lcov-paths)" >> "$GITHUB_OUTPUT"
 
-      # 3rd-party action は tag (mutable) ではなく commit SHA (immutable) で pin する
-      # (= supply-chain attack 防御、 maintainer / attacker が tag を移動できなくする)。 v5.5.4 SHA。
+      # 3rd-party action は actions.lock の immutable commit で固定し、実行前に検証する。
       # Codecov は同一 commit に対する複数 upload を 1 つの commit report へマージするため、
       # leg ごとに分けて upload しても (PR / main push いずれでも) 最終的な report は分割前と
       # 同じ全体像になる。 base report が欠けることもない。
       - name: Upload coverage reports to Codecov (${{ matrix.shard }} ${{ matrix.part }}/${{ matrix.parts }})
-        uses: codecov/codecov-action@aa56896cf108bd10b5eb883cd1d24196da57f695 # v5.5.4
+        uses: codecov/codecov-action@v5.5.4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           # Codecov 側 outage で CI 全体を落とさない。 coverage 計測は補助、 必須でない。
@@ -229,8 +244,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Check out the code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-      - uses: ./.github/actions/bun-install
+        uses: actions/checkout@v4.3.1
+      - uses: $/.github/actions/bun-install
       - name: Verify source preparation with the system Bash
         working-directory: infrastructure
         env:
@@ -244,7 +259,7 @@ jobs:
 
   # Stable required check: fail when any surviving gate fails or is skipped.
   ci:
-    needs: [gates, lint-ts, typecheck, build, coverage, source-bundle-macos]
+    needs: [gates, lint-ts, typecheck, build, coverage, source-bundle-macos, actions-lock]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -257,7 +272,8 @@ jobs:
             "typecheck:${{ needs.typecheck.result }}" \
             "build:${{ needs.build.result }}" \
             "coverage:${{ needs.coverage.result }}" \
-            "source-bundle-macos:${{ needs.source-bundle-macos.result }}"; do
+            "source-bundle-macos:${{ needs.source-bundle-macos.result }}" \
+            "actions-lock:${{ needs.actions-lock.result }}"; do
             if [ "${entry#*:}" != "success" ]; then
               failed="$failed ${entry%%:*}(${entry#*:})"
             fi
