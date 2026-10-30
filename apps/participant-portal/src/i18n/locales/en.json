@@ -6,8 +6,8 @@
     "title": "TenkaCloud Participant Portal",
     "loading": "Loading…",
     "no_session": "No active session. Please sign in again.",
-    "mock_cloud_header": "Browser demo",
-    "mock_cloud_body": "This demo runs entirely in your browser. It creates no real AWS resources or charges.",
+    "mock_cloud_header": "Problems you can play in your browser",
+    "mock_cloud_body": "These problems run entirely in your browser. They create no real AWS resources or charges.",
     "local_cloud_header": "Local cloud mode",
     "local_cloud_body": "This event runs a local Docker problem container. No real AWS resources are used.",
     "fetch_status_failed": "Failed to fetch status"
@@ -706,9 +706,6 @@
     "error": "Submission failed. Retry retains the same operation key."
   },
   "foundation_games": {
-    "title": "Explore a theme, then put it into practice.",
-    "description": "From short games to hands-on problems, with requirements shown for each practice.",
-    "play": "Play {name}",
     "mail-detective": {
       "title": "Spot the risky email difference",
       "description": "Compare two emails and find differences that bring a risk."
@@ -717,26 +714,10 @@
       "title": "API Guardian (Cloud Master)",
       "description": "Spot suspicious API requests and stop them with a tap."
     },
-    "page_title": "Games and problems",
-    "page_description": "Find foundations and practice by theme. Competition cards are a public demo.",
-    "competition_title": "Hands-on problems (competition demo)",
-    "competition_description": "Join a real event through your organizer’s invitation. Local and cloud are hosting choices; participants do not need to select them here.",
-    "themes": {
-      "social": "Social engineering",
-      "cloud": "Safe cloud operations",
-      "web": "Protecting web apps and information"
-    },
-    "browser": "Browser only; no AWS account or signup.",
-    "no_ready_practice": "Hands-on practice for this theme is in preparation.",
-    "local_condition": "Local hosting only. The organizer prepares Docker; participants use their invitation.",
-    "cloud_condition": "Cloud hosting only. Organizer setup and a team AWS account are required.",
-    "view_practice": "View problem (demo)",
-    "demo_only": "Above are examples from the public catalog, with GitHub descriptions and organizer setup guides. The cards below demonstrate introductory competition operations; they are not invitations to a live event.",
-    "participant_guide": "Join with an invitation",
-    "organizer_guide": "Try or host a practice",
-    "problem_description": "Problem description (GitHub)",
-    "setup_practice": "Hosting setup for this mode",
-    "competition_jump": "Competition demo problems ({count})",
-    "practice_count": "Hands-on exercises ({count})"
+    "page_title": "Problems",
+    "page_description": "Find problems to play in your browser and exercises to put into practice.",
+    "competition_title": "Hands-on problems",
+    "competition_description": "Play browser problems directly. Join competitions through an organizer’s invitation.",
+    "browser_attribute": "Browser only · no AWS/signup"
   }
 }

@@ -16,6 +16,7 @@ describe("optional mail result sharing", () => {
       expect(intent.searchParams.get("url")).toBe(
         `https://tenkacloud.com/mail-detective/?lang=${lang}`,
       );
+      if (lang === "ja") expect(result.text.startsWith("メールの間違いさがし。｜")).toBe(true);
       expect(result.text).toContain("2/6");
       expect(result.text).toContain(
         lang === "ja" ? "得点 25/100・ミス 3" : "Score: 25/100 · Mistakes: 3",

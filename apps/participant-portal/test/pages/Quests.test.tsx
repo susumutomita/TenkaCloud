@@ -30,7 +30,7 @@ vi.mock("../../src/i18n", () => ({
     params ? `${key}|${JSON.stringify(params)}` : key,
   // [#2928] The hero and the quest guidance resolve a problem's display name, which is
   // locale-aware, so the stub must expose the locale too.
-  useI18n: () => ({ locale: "ja" }),
+  useI18n: () => ({ locale: "ja", setLocale: vi.fn() }),
 }));
 // Partial mock: only the catalog lookups are faked (this suite controls their fixtures
 // directly); `resolveLocalizedNarrative` is the real implementation, so the en/ja name
@@ -1057,7 +1057,7 @@ it("uses the matching catalog credit for legacy AWS cards and ignores other auth
   expect(screen.queryByText(/別問題の作者/)).not.toBeInTheDocument();
 });
 
-it("separates immediate browser games from the public competition sample without replacing its catalog", () => {
+it("integrates browser games into the existing filtered cards without replacing its catalog", () => {
   mockAppConfig.mockReturnValue({ mode: "dev-mock", cloudMode: "mock" });
   mockIsMock.mockReturnValue(true);
   mockTeamView.mockReturnValue({
@@ -1074,13 +1074,31 @@ it("separates immediate browser games from the public competition sample without
   });
   render(<QuestsPage />);
   expect(screen.getByRole("heading", { name: "foundation_games.page_title" })).toBeInTheDocument();
-  expect(screen.getByTestId("foundation-games")).toBeInTheDocument();
+  expect(screen.queryByTestId("foundation-games")).not.toBeInTheDocument();
+  expect(screen.queryByTestId("practice-catalog")).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "メールの間違いさがし。" })).toHaveAttribute(
+    "href",
+    "/mail-detective/?lang=ja",
+  );
+  expect(screen.getByRole("link", { name: "APIの番人（Cloud Master）" })).toHaveAttribute(
+    "href",
+    "/cloud-master/?lang=ja",
+  );
   expect(
     screen.getByRole("heading", { name: "foundation_games.competition_title" }),
   ).toBeInTheDocument();
   expect(screen.getByText("foundation_games.competition_description")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Existing event problem" })).toBeInTheDocument();
-  expect(screen.getAllByText(/quests\.filter_all \(1\)/).length).toBeGreaterThan(0);
+  expect(screen.getAllByText(/quests\.filter_all \(3\)/).length).toBeGreaterThan(0);
+  fireEvent.change(screen.getByLabelText("quests.search_label"), { target: { value: "email" } });
+  expect(screen.getByRole("link", { name: "メールの間違いさがし。" })).toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "APIの番人（Cloud Master）" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "Existing event problem" })).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("quests.search_label"), {
+    target: { value: "Existing event" },
+  });
+  expect(screen.getByRole("link", { name: "Existing event problem" })).toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "メールの間違いさがし。" })).not.toBeInTheDocument();
 });
 
 it("keeps the real event heading and catalog without the public game/demo sections", () => {

@@ -14,7 +14,7 @@ import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import TextFilter from "@cloudscape-design/components/text-filter";
 import Toggle from "@cloudscape-design/components/toggle";
 import { ProblemAuthors } from "@tenkacloud/web-kit";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import type { ParticipantProblemView } from "../api/portal-client";
 import { useTeamView } from "../auth/TeamViewProvider";
@@ -59,7 +59,11 @@ import {
   type QuestDifficultyFilter,
   type QuestSearchMetadata,
 } from "./Quests.filters";
-import { FoundationGames } from "./Quests.foundation-games";
+import {
+  type BrowserProblem,
+  browserProblems,
+  filterBrowserProblems,
+} from "./Quests.foundation-games";
 import { LocalStartGuidance } from "./Quests.local-start";
 import { renderSubmissionState } from "./Quests.submission-state";
 
@@ -75,14 +79,36 @@ import { renderSubmissionState } from "./Quests.submission-state";
  * 「section 分け」 で並列表示する。 未解決 section は常時 expand、 解決済み section は
  * ExpandableSection (= 初期 collapsed)、 ひと目で残タスクと既獲得を区別できる。
  */
+type QuestCardProblem = ParticipantProblemView | BrowserProblem;
+
 export function QuestsPage() {
   const { view, error } = useTeamView();
   const navigate = useNavigate();
   const t = useT();
-  const { locale } = useI18n();
+  const { locale, setLocale } = useI18n();
   const isMock = useIsMock();
   const config = useAppConfig();
   const isPublicDemo = config.mode === "dev-mock" && config.cloudMode === "mock";
+  useEffect(() => {
+    if (!isPublicDemo) return;
+    const requested = new URLSearchParams(window.location.search).get("lang");
+    if (requested === "ja" || requested === "en") setLocale(requested);
+    const followLegacyAnchor = () => {
+      if (
+        ["social-practice", "cloud-practice", "web-practice"].includes(
+          window.location.hash.slice(1),
+        )
+      )
+        document.getElementById("competition-problems")?.scrollIntoView?.({ block: "start" });
+    };
+    followLegacyAnchor();
+    window.addEventListener("hashchange", followLegacyAnchor);
+    return () => window.removeEventListener("hashchange", followLegacyAnchor);
+  }, [isPublicDemo, setLocale]);
+  const browserEntries = useMemo(
+    () => (isPublicDemo ? browserProblems(import.meta.env.BASE_URL, locale) : []),
+    [isPublicDemo, locale],
+  );
   const [filter, setFilter] = useState<QuestCategoryFilter>("all");
   const [query, setQuery] = useState("");
   const [difficulty, setDifficulty] = useState<QuestDifficultyFilter>("all");
@@ -181,11 +207,12 @@ export function QuestsPage() {
           : metadataByProblemId.get(p.problemId)?.category,
       );
     return {
-      all: catalogProblems.length,
+      all: catalogProblems.length + browserEntries.length,
       battle: catalogProblems.filter((p) => category(p) === "battle").length,
-      challenge: catalogProblems.filter((p) => category(p) === "challenge").length,
+      challenge:
+        catalogProblems.filter((p) => category(p) === "challenge").length + browserEntries.length,
     };
-  }, [catalogProblems, metadataByProblemId]);
+  }, [catalogProblems, metadataByProblemId, browserEntries]);
 
   const filteredProblems = useMemo(
     () =>
@@ -196,18 +223,23 @@ export function QuestsPage() {
       ),
     [answerStatus, catalogProblems, difficulty, filter, metadataByProblemId, query],
   );
+  const filteredBrowser = useMemo(
+    () =>
+      filterBrowserProblems(browserEntries, { category: filter, query, difficulty, answerStatus }),
+    [browserEntries, filter, query, difficulty, answerStatus],
+  );
   const hasActiveFilters =
     filter !== "all" || query.trim().length > 0 || difficulty !== "all" || answerStatus !== "all";
 
   const { unsolved, cleared } = useMemo(() => {
-    const u: ParticipantProblemView[] = [];
+    const u: QuestCardProblem[] = [...filteredBrowser];
     const c: ParticipantProblemView[] = [];
     for (const p of filteredProblems) {
       if (isQuestCleared(p)) c.push(p);
       else u.push(p);
     }
     return { unsolved: u, cleared: c };
-  }, [filteredProblems]);
+  }, [filteredProblems, filteredBrowser]);
 
   const difficultyOptions = [
     { value: "all", label: t("quests.difficulty_filter_all") },
@@ -239,7 +271,22 @@ export function QuestsPage() {
 
   const renderCard = useMemo(
     () => ({
-      header: (problem: ParticipantProblemView) => {
+      header: (problem: QuestCardProblem) => {
+        if ("browserGame" in problem)
+          return (
+            <SpaceBetween size="xxs">
+              <SpaceBetween size="xs" direction="horizontal" alignItems="center">
+                <Link fontSize="heading-m" href={problem.href}>
+                  {problem.name}
+                </Link>
+                <Badge color="blue">Challenge</Badge>
+                <Badge color="grey">{t("foundation_games.browser_attribute")}</Badge>
+                <Badge color="grey">
+                  {t("quests.difficulty_label", { label: t("quests.difficulty_1") })}
+                </Badge>
+              </SpaceBetween>
+            </SpaceBetween>
+          );
         const s = renderSubmissionState(problem, t);
         // Issue #2283: Progression Gate の出し分け。 locked 問題は隠さず「ロック中」 badge +
         // 解放条件を出し、 Gate 問題 (未完了時) には 「最初にここから」 を目立たせる。
@@ -338,12 +385,6 @@ export function QuestsPage() {
         {t(isPublicDemo ? "foundation_games.page_title" : "quests.header")}
       </Header>
 
-      <FoundationGames
-        catalog={visibleCatalog}
-        problems={visibleProblems}
-        competitionCount={catalogProblems.length}
-      />
-
       {error && (
         <Alert type="error" header={t("app.fetch_status_failed")}>
           {error}
@@ -373,6 +414,9 @@ export function QuestsPage() {
       {isPublicDemo && (
         <Header variant="h2" description={t("foundation_games.competition_description")}>
           <span id="competition-problems" tabIndex={-1} style={{ scrollMarginTop: "5rem" }}>
+            <span id="social-practice" />
+            <span id="cloud-practice" />
+            <span id="web-practice" />
             {t("foundation_games.competition_title")}
           </span>
         </Header>
@@ -394,7 +438,9 @@ export function QuestsPage() {
           onChange={({ detail }) => setQuery(detail.filteringText)}
           filteringAriaLabel={t("quests.search_label")}
           filteringPlaceholder={t("quests.search_placeholder")}
-          countText={t("quests.filter_results", { count: filteredProblems.length })}
+          countText={t("quests.filter_results", {
+            count: filteredProblems.length + filteredBrowser.length,
+          })}
         />
         <ColumnLayout columns={2}>
           <Select
@@ -437,7 +483,7 @@ export function QuestsPage() {
         )}
       </SpaceBetween>
 
-      {view && hasActiveFilters && filteredProblems.length === 0 ? (
+      {view && hasActiveFilters && filteredProblems.length + filteredBrowser.length === 0 ? (
         <Container>
           <Box textAlign="center" padding="l">
             <Box variant="strong">{t("quests.filter_empty_header")}</Box>
@@ -456,7 +502,7 @@ export function QuestsPage() {
               <Header counter={`(${unsolved.length})`}>{t("quests.section_unsolved")}</Header>
             }
           >
-            <Cards<ParticipantProblemView>
+            <Cards<QuestCardProblem>
               items={unsolved}
               loading={!isMock && !view && !error}
               loadingText={t("quests.loading_text")}
@@ -472,7 +518,7 @@ export function QuestsPage() {
             variant="container"
             defaultExpanded={false}
           >
-            <Cards<ParticipantProblemView>
+            <Cards<QuestCardProblem>
               items={cleared}
               cardDefinition={renderCard}
               cardsPerRow={[{ cards: 1 }, { minWidth: 600, cards: 2 }]}

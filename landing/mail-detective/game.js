@@ -1,9 +1,9 @@
-import { inspectionRow } from "./cases.js?v=3fb492a390";
-import { COPY } from "./copy.js?v=3fb492a390";
-import { advanceClock, createClock, progress } from "./deadline.js?v=3fb492a390";
-import { updateIdnFonts } from "./idn-explanation.js?v=3fb492a390";
-import { levelCase } from "./levels.js?v=3fb492a390";
-import { createEmail } from "./mail-view.js?v=3fb492a390";
+import { inspectionRow } from "./cases.js?v=5a1c9cc930";
+import { COPY } from "./copy.js?v=5a1c9cc930";
+import { advanceClock, createClock, progress } from "./deadline.js?v=5a1c9cc930";
+import { updateIdnFonts } from "./idn-explanation.js?v=5a1c9cc930";
+import { levelCase } from "./levels.js?v=5a1c9cc930";
+import { createEmail } from "./mail-view.js?v=5a1c9cc930";
 import {
   createRun,
   currentCase,
@@ -17,9 +17,9 @@ import {
   roundScore,
   tap,
   totals,
-} from "./model.js?v=3fb492a390";
-import { createMailShareLink, createNextStep } from "./next-step.js?v=3fb492a390";
-import { createReview } from "./review.js?v=3fb492a390";
+} from "./model.js?v=5a1c9cc930";
+import { createMailShareLink, createNextStep } from "./next-step.js?v=5a1c9cc930";
+import { createReview } from "./review.js?v=5a1c9cc930";
 
 const element = (tag, text, className) => {
   const node = document.createElement(tag);
