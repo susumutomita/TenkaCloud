@@ -6,8 +6,10 @@ import { COPY } from "../../landing/mail-detective/copy.js";
 import {
   advanceClock,
   createClock,
+  inspectionOpen,
   progress,
   ROUND_WINDOW_MS,
+  viewAfterAnswer,
 } from "../../landing/mail-detective/deadline.js";
 import { LEVELS } from "../../landing/mail-detective/levels.js";
 import {
@@ -507,5 +509,88 @@ describe("all answer controls have neutral affordances", () => {
     expect(hover).not.toContain("dotted");
     expect(css.match(/\.mail-link\{([^}]*)\}/)?.[1]).toContain("text-decoration:underline");
     expect(css).toContain("button:focus-visible{outline:3px");
+  });
+});
+
+describe("answer feedback and inspection clock boundaries", () => {
+  const view = () => ({
+    active: "received",
+    lastTarget: null,
+    idnOpen: {},
+    address: { reference: false, received: false },
+    link: { reference: false, received: false },
+    original: { reference: false, received: false },
+  });
+  test("a selected correct or incorrect answer never creates an inspection pause", () => {
+    for (const id of ["spot-attachment-file", "spot-greeting-body"]) {
+      const before = {
+        ...view(),
+        address: { reference: true, received: true },
+        link: { reference: true, received: true },
+      };
+      expect(inspectionOpen(before, true)).toBe(true);
+      const answered = viewAfterAnswer(before, id);
+      expect(answered.lastTarget).toBe(id);
+      expect(inspectionOpen(answered, true)).toBe(false);
+      expect(before.address.received).toBe(true);
+      let clock = advanceClock(createClock(), 500, true);
+      clock = advanceClock(clock, 900, !inspectionOpen(before, true));
+      expect(clock.elapsed).toBe(500);
+      clock = advanceClock(clock, 1000, !inspectionOpen(answered, true));
+      expect(clock.elapsed).toBe(600);
+    }
+  });
+  test("only explicit details/reference viewing pauses and closing them resumes", () => {
+    const base = view();
+    expect(inspectionOpen(base, true)).toBe(false);
+    expect(inspectionOpen({ ...base, active: "reference" }, true)).toBe(true);
+    expect(inspectionOpen({ ...base, active: "reference" }, false)).toBe(false);
+    for (const key of ["address", "link", "original"])
+      expect(inspectionOpen({ ...base, [key]: { reference: false, received: true } }, false)).toBe(
+        true,
+      );
+    expect(inspectionOpen(base, false, true)).toBe(true);
+    expect(inspectionOpen(base, false, false)).toBe(false);
+  });
+  test("partial finds survive timeout while shown answers and repeated expiry earn nothing", () => {
+    let run = createRun(() => 0);
+    run = tap(run, risks(run)[0].id);
+    expect(totals(run).score).toBe(20);
+    expect(expire(run)).toBe(run);
+    run = next(run);
+    run = tap(run, risks(run)[0].id);
+    expect(totals(run).score).toBe(30);
+    run = expire(run);
+    expect(totals(run)).toMatchObject({
+      score: 30,
+      maxScore: 100,
+      found: 2,
+      reviewed: 1,
+      timeouts: 1,
+    });
+    expect(expire(run)).toBe(run);
+    expect(tap(run, risks(run)[1].id)).toBe(run);
+    while (run.phase !== "results") {
+      run = next(run);
+      if (run.phase === "playing") run = expire(run);
+    }
+    expect(totals(run)).toMatchObject({ score: 30, maxScore: 100, found: 2, timeouts: 4 });
+  });
+  test("five unanswered rounds finish at zero even though every missed spot is shown", () => {
+    let run = createRun(() => 0);
+    while (run.phase !== "results") {
+      run = expire(run);
+      expect(totals(run).found).toBe(0);
+      expect(totals(run).score).toBe(0);
+      for (const row of risks(run)) expect(tap(run, row.id)).toBe(run);
+      run = next(run);
+    }
+    expect(totals(run)).toMatchObject({
+      score: 0,
+      maxScore: 100,
+      found: 0,
+      reviewed: 11,
+      timeouts: 5,
+    });
   });
 });

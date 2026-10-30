@@ -15,3 +15,25 @@ export function advanceClock(clock, now, running) {
 export function progress(clock) {
   return Math.max(0, Math.min(1, clock.elapsed / ROUND_WINDOW_MS));
 }
+
+// A selected answer is feedback, not an explicit inspection pause.
+export function inspectionOpen(view, compact, explanationOpen = false) {
+  return (
+    (compact && view.active === "reference") ||
+    Object.values(view.address).some(Boolean) ||
+    Object.values(view.link).some(Boolean) ||
+    Object.values(view.original).some(Boolean) ||
+    explanationOpen
+  );
+}
+export function viewAfterAnswer(view, target) {
+  return {
+    ...view,
+    active: "received",
+    lastTarget: target,
+    idnOpen: {},
+    address: { reference: false, received: false },
+    link: { reference: false, received: false },
+    original: { reference: false, received: false },
+  };
+}

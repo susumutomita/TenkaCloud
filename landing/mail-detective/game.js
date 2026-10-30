@@ -1,9 +1,15 @@
-import { inspectionRow } from "./cases.js?v=5a1c9cc930";
-import { COPY } from "./copy.js?v=5a1c9cc930";
-import { advanceClock, createClock, progress } from "./deadline.js?v=5a1c9cc930";
-import { updateIdnFonts } from "./idn-explanation.js?v=5a1c9cc930";
-import { levelCase } from "./levels.js?v=5a1c9cc930";
-import { createEmail } from "./mail-view.js?v=5a1c9cc930";
+import { inspectionRow } from "./cases.js?v=cf1e358cad";
+import { COPY } from "./copy.js?v=cf1e358cad";
+import {
+  advanceClock,
+  createClock,
+  inspectionOpen,
+  progress,
+  viewAfterAnswer,
+} from "./deadline.js?v=cf1e358cad";
+import { updateIdnFonts } from "./idn-explanation.js?v=cf1e358cad";
+import { levelCase } from "./levels.js?v=cf1e358cad";
+import { createEmail } from "./mail-view.js?v=cf1e358cad";
 import {
   createRun,
   currentCase,
@@ -17,9 +23,9 @@ import {
   roundScore,
   tap,
   totals,
-} from "./model.js?v=5a1c9cc930";
-import { createMailShareLink, createNextStep } from "./next-step.js?v=5a1c9cc930";
-import { createReview } from "./review.js?v=5a1c9cc930";
+} from "./model.js?v=cf1e358cad";
+import { createMailShareLink, createNextStep } from "./next-step.js?v=cf1e358cad";
+import { createReview } from "./review.js?v=cf1e358cad";
 
 const element = (tag, text, className) => {
   const node = document.createElement(tag);
@@ -50,13 +56,10 @@ let clock = createClock(performance.now());
 let foreground = !document.hidden;
 let deadlineStage = "";
 function inspecting() {
-  return (
-    (window.matchMedia("(max-width: 900px)").matches && mailUI.active === "reference") ||
-    mailUI.lastTarget !== null ||
-    Object.values(mailUI.address).some(Boolean) ||
-    Object.values(mailUI.link).some(Boolean) ||
-    Object.values(mailUI.original).some(Boolean) ||
-    Boolean(document.querySelector(".reason details[open]"))
+  return inspectionOpen(
+    mailUI,
+    window.matchMedia("(max-width: 900px)").matches,
+    Boolean(document.querySelector(".reason details[open]")),
   );
 }
 function rebaseClock() {
@@ -141,9 +144,11 @@ const button = (label, action, className) => {
 };
 function choose(id, focusId) {
   if (run.phase !== "playing" || !settleClock()) return;
-  mailUI.lastTarget = focusId;
   run = tap(run, id);
+  mailUI = viewAfterAnswer(mailUI, focusId);
   render(focusId);
+  const target = byId(focusId);
+  if (!target?.getClientRects().length) byId("details-received")?.focus({ preventScroll: true });
   const item = inspectionRow(currentCase(run), id);
   byId("live").textContent =
     `${run.feedback.delta < 0 ? COPY[lang].wrong : item.kind === "risk" ? COPY[lang].statusRisk : COPY[lang].statusNormal} ${item.reason[lang]}`;
@@ -157,7 +162,9 @@ function advance() {
 function playView(t) {
   const fragment = document.createDocumentFragment();
   const item = currentCase(run);
-  const checked = run.found[run.index].length + run.revealed[run.index].length;
+  const counts = totals(run);
+  const scoreText = (template, score, max) =>
+    template.replace("{score}", String(score)).replace("{max}", String(max));
   const hud = element("div", undefined, "round-bar");
   hud.append(
     element(
@@ -170,10 +177,15 @@ function playView(t) {
       run.emailLanguages[run.index] === "en" ? "English email" : "日本語メール",
       "email-language",
     ),
+    Object.assign(element("div", undefined, "spot-count"), { id: "score-summary" }),
+  );
+  hud.lastChild.append(
+    element("span", scoreText(t.roundScore, roundScore(run), 20), "round-score"),
+    element("span", scoreText(t.totalScore, counts.score, counts.maxScore), "total-score"),
     element(
       "span",
-      `${t.found} ${checked}/${risks(run).length} · ${t.score} ${roundScore(run)}/20 · ${t.mistakes} ${run.mistakes[run.index].length}`,
-      "spot-count",
+      `${t.ownCount} ${run.found[run.index].length}/${risks(run).length} · ${t.mistakes} ${run.mistakes[run.index].length}`,
+      "answer-count",
     ),
   );
   const heading = element("h2", item.title[lang]);
@@ -220,7 +232,13 @@ function playView(t) {
     if (run.timedOut[run.index])
       controls.append(element("p", `${t.timedOut} ${t.timeoutReason}`, "round-timeout"));
     controls.append(
-      element("p", t.roundDone.replace("{count}", String(risks(run).length)), "done-text"),
+      element(
+        "p",
+        run.revealed[run.index].length
+          ? t.reviewedRound
+          : t.roundDone.replace("{count}", String(risks(run).length)),
+        "done-text",
+      ),
     );
     const advanceButton = button(
       run.index + 1 < run.rounds.length
@@ -267,7 +285,7 @@ function resultsView(t) {
     heading,
     element(
       "p",
-      `${t.score} ${counts.score}/${counts.maxScore} · ${t.mistakes} ${counts.mistakes}`,
+      `${t.totalScore.replace("{score}", String(counts.score)).replace("{max}", String(counts.maxScore))} · ${t.mistakes} ${counts.mistakes}`,
       "result-score",
     ),
     element("p", `${t.ownCount} ${counts.found}/${counts.target}`, "result-count"),
