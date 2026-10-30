@@ -1,6 +1,8 @@
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
+import ColumnLayout from "@cloudscape-design/components/column-layout";
 import Container from "@cloudscape-design/components/container";
+import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import type { ParticipantProblemView, ProblemCatalogEntry } from "@tenkacloud/portal-contracts";
@@ -74,9 +76,11 @@ export function practiceSourceHref(
 export function FoundationGames({
   catalog = [],
   problems = [],
+  competitionCount,
 }: {
   catalog?: readonly ProblemCatalogEntry[];
   problems?: readonly ParticipantProblemView[];
+  competitionCount?: number;
 }) {
   const config = useAppConfig();
   const { locale, setLocale } = useI18n();
@@ -97,87 +101,117 @@ export function FoundationGames({
     <Container
       data-testid="foundation-games"
       header={
-        <Header variant="h2" description={t("foundation_games.description")}>
+        <Header
+          variant="h2"
+          description={t("foundation_games.description")}
+          actions={
+            competitionCount === undefined ? undefined : (
+              <Button wrapText href="#competition-problems">
+                {t("foundation_games.competition_jump", { count: competitionCount })}
+              </Button>
+            )
+          }
+        >
           {t("foundation_games.title")}
         </Header>
       }
     >
       <SpaceBetween size="l">
-        {(["social", "cloud", "web"] as const).map((theme) => {
-          const game = { social: "mail-detective", cloud: "cloud-master", web: null }[theme] as
-            | "mail-detective"
-            | "cloud-master"
-            | null;
-          const entries = catalog
-            .filter(
-              (entry) =>
-                entry.status === "ready" &&
-                entry.visibility === "public" &&
-                ["docker", "aws"].includes(entry.runtime.provider) &&
-                practiceTheme(entry) === theme,
-            )
-            .sort(
-              (a, b) => practicePriority(a.id) - practicePriority(b.id) || a.id.localeCompare(b.id),
+        <ColumnLayout columns={3}>
+          {(["social", "cloud", "web"] as const).map((theme) => {
+            const game = { social: "mail-detective", cloud: "cloud-master", web: null }[theme] as
+              | "mail-detective"
+              | "cloud-master"
+              | null;
+            const entries = catalog
+              .filter(
+                (entry) =>
+                  entry.status === "ready" &&
+                  entry.visibility === "public" &&
+                  ["docker", "aws"].includes(entry.runtime.provider) &&
+                  practiceTheme(entry) === theme,
+              )
+              .sort(
+                (a, b) =>
+                  practicePriority(a.id) - practicePriority(b.id) || a.id.localeCompare(b.id),
+              );
+            return (
+              <SpaceBetween key={theme} size="s">
+                <Box variant="h3">
+                  <span id={`${theme}-practice`}>{t(`foundation_games.themes.${theme}`)}</span>
+                </Box>
+                {game ? (
+                  <>
+                    <Box color="text-body-secondary">
+                      {t(`foundation_games.${game}.description`)} {t("foundation_games.browser")}
+                    </Box>
+                    <Button
+                      wrapText
+                      href={foundationGameHref(import.meta.env.BASE_URL, game, locale)}
+                    >
+                      {t("foundation_games.play", { name: t(`foundation_games.${game}.title`) })}
+                    </Button>
+                  </>
+                ) : null}
+                {entries.length === 0 ? (
+                  <Box color="text-body-secondary">{t("foundation_games.no_ready_practice")}</Box>
+                ) : (
+                  <ExpandableSection
+                    headerText={t("foundation_games.practice_count", { count: entries.length })}
+                    defaultExpanded={false}
+                  >
+                    {entries.map((entry) => {
+                      const problem = problems.find(
+                        (candidate) => candidate.problemId === entry.id,
+                      );
+                      const name = practiceName(entry, locale);
+                      return (
+                        <SpaceBetween key={entry.id} size="xs">
+                          <Box variant="strong">{name}</Box>
+                          <Box color="text-body-secondary">
+                            {t(
+                              entry.runtime.provider === "docker"
+                                ? "foundation_games.local_condition"
+                                : "foundation_games.cloud_condition",
+                            )}
+                          </Box>
+                          <SpaceBetween direction="horizontal" size="s">
+                            {problem ? (
+                              <Button
+                                wrapText
+                                href={practiceHref(import.meta.env.BASE_URL, problem.jobId)}
+                              >
+                                {t("foundation_games.view_practice")}
+                              </Button>
+                            ) : null}
+                            <Button wrapText href={practiceSourceHref(entry, locale)}>
+                              {t("foundation_games.problem_description")}
+                            </Button>
+                            <Button
+                              wrapText
+                              href={`${learningGuideHref(import.meta.env.BASE_URL, "organizer", locale)}#${entry.runtime.provider === "docker" ? "prepare-local-host" : "aws-problems"}`}
+                            >
+                              {t("foundation_games.setup_practice")}
+                            </Button>
+                          </SpaceBetween>
+                        </SpaceBetween>
+                      );
+                    })}
+                  </ExpandableSection>
+                )}
+              </SpaceBetween>
             );
-          return (
-            <SpaceBetween key={theme} size="s">
-              <Box variant="h3">
-                <span id={`${theme}-practice`}>{t(`foundation_games.themes.${theme}`)}</span>
-              </Box>
-              {game ? (
-                <>
-                  <Box color="text-body-secondary">
-                    {t(`foundation_games.${game}.description`)} {t("foundation_games.browser")}
-                  </Box>
-                  <Button href={foundationGameHref(import.meta.env.BASE_URL, game, locale)}>
-                    {t("foundation_games.play", { name: t(`foundation_games.${game}.title`) })}
-                  </Button>
-                </>
-              ) : null}
-              {entries.length === 0 ? (
-                <Box color="text-body-secondary">{t("foundation_games.no_ready_practice")}</Box>
-              ) : (
-                entries.map((entry) => {
-                  const problem = problems.find((candidate) => candidate.problemId === entry.id);
-                  const name = practiceName(entry, locale);
-                  return (
-                    <SpaceBetween key={entry.id} size="xs">
-                      <Box variant="strong">{name}</Box>
-                      <Box color="text-body-secondary">
-                        {t(
-                          entry.runtime.provider === "docker"
-                            ? "foundation_games.local_condition"
-                            : "foundation_games.cloud_condition",
-                        )}
-                      </Box>
-                      <SpaceBetween direction="horizontal" size="s">
-                        {problem ? (
-                          <Button href={practiceHref(import.meta.env.BASE_URL, problem.jobId)}>
-                            {t("foundation_games.view_practice")}
-                          </Button>
-                        ) : null}
-                        <Button href={practiceSourceHref(entry, locale)}>
-                          {t("foundation_games.problem_description")}
-                        </Button>
-                        <Button
-                          href={`${learningGuideHref(import.meta.env.BASE_URL, "organizer", locale)}#${entry.runtime.provider === "docker" ? "prepare-local-host" : "aws-problems"}`}
-                        >
-                          {t("foundation_games.setup_practice")}
-                        </Button>
-                      </SpaceBetween>
-                    </SpaceBetween>
-                  );
-                })
-              )}
-            </SpaceBetween>
-          );
-        })}
+          })}
+        </ColumnLayout>
         <Box color="text-body-secondary">{t("foundation_games.demo_only")}</Box>
         <SpaceBetween direction="horizontal" size="s">
-          <Button href={learningGuideHref(import.meta.env.BASE_URL, "participant", locale)}>
+          <Button
+            wrapText
+            href={learningGuideHref(import.meta.env.BASE_URL, "participant", locale)}
+          >
             {t("foundation_games.participant_guide")}
           </Button>
-          <Button href={learningGuideHref(import.meta.env.BASE_URL, "organizer", locale)}>
+          <Button wrapText href={learningGuideHref(import.meta.env.BASE_URL, "organizer", locale)}>
             {t("foundation_games.organizer_guide")}
           </Button>
         </SpaceBetween>

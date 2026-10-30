@@ -14,3 +14,5 @@ a{color:var(--blue)}#exit,.text-button{border-color:var(--line);border-radius:99
 
 /* Keep small success text readable while retaining the LP green accents. */
 .spot-count,.result-count,.mail-spot .stamp{color:#006d43}
+
+.result-actions{display:flex;align-items:stretch;flex-wrap:wrap;gap:12px;margin-top:20px}.result-actions>button,.result-actions>a{display:inline-flex;align-items:center;justify-content:center;flex:0 1 auto;min-width:0;max-width:100%;min-height:44px;padding:12px 20px;font-size:14px;font-weight:700;line-height:1.5;white-space:normal;overflow-wrap:anywhere;text-align:center;text-decoration:none}.result-actions>a{border:1px solid var(--line);border-radius:999px;background:var(--paper);color:var(--ink)}.result-actions>a:hover{background:var(--paper-3)}@media(max-width:650px){.result-actions>button,.result-actions>a{width:100%;flex-basis:100%}}

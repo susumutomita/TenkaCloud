@@ -735,6 +735,8 @@
     "participant_guide": "Join with an invitation",
     "organizer_guide": "Try or host a practice",
     "problem_description": "Problem description (GitHub)",
-    "setup_practice": "Hosting setup for this mode"
+    "setup_practice": "Hosting setup for this mode",
+    "competition_jump": "Competition demo problems ({count})",
+    "practice_count": "Hands-on exercises ({count})"
   }
 }

@@ -1,9 +1,9 @@
-import { inspectionRow } from "./cases.js?v=cdd5f39e7b";
-import { COPY } from "./copy.js?v=cdd5f39e7b";
-import { advanceClock, createClock, progress } from "./deadline.js?v=cdd5f39e7b";
-import { updateIdnFonts } from "./idn-explanation.js?v=cdd5f39e7b";
-import { levelCase } from "./levels.js?v=cdd5f39e7b";
-import { createEmail } from "./mail-view.js?v=cdd5f39e7b";
+import { inspectionRow } from "./cases.js?v=3fb492a390";
+import { COPY } from "./copy.js?v=3fb492a390";
+import { advanceClock, createClock, progress } from "./deadline.js?v=3fb492a390";
+import { updateIdnFonts } from "./idn-explanation.js?v=3fb492a390";
+import { levelCase } from "./levels.js?v=3fb492a390";
+import { createEmail } from "./mail-view.js?v=3fb492a390";
 import {
   createRun,
   currentCase,
@@ -17,9 +17,9 @@ import {
   roundScore,
   tap,
   totals,
-} from "./model.js?v=cdd5f39e7b";
-import { createMailShareLink, createNextStep } from "./next-step.js?v=cdd5f39e7b";
-import { createReview } from "./review.js?v=cdd5f39e7b";
+} from "./model.js?v=3fb492a390";
+import { createMailShareLink, createNextStep } from "./next-step.js?v=3fb492a390";
+import { createReview } from "./review.js?v=3fb492a390";
 
 const element = (tag, text, className) => {
   const node = document.createElement(tag);
@@ -291,7 +291,9 @@ function resultsView(t) {
     "primary",
   );
   replay.id = "again";
-  panel.append(replay, createMailShareLink(lang, run, counts));
+  const actions = element("div", undefined, "result-actions");
+  actions.append(replay, createMailShareLink(lang, run, counts));
+  panel.append(actions);
   const nextLevel = nextStartLevel(run);
   if (nextLevel !== null) {
     const continueButton = button(
@@ -306,7 +308,7 @@ function resultsView(t) {
       "primary",
     );
     continueButton.id = "continue-level";
-    panel.append(continueButton);
+    actions.append(continueButton);
   }
   if (run.startLevel > 1) {
     const restart = button(
@@ -321,7 +323,7 @@ function resultsView(t) {
       "text-button",
     );
     restart.id = "restart-levels";
-    panel.append(restart);
+    actions.append(restart);
   }
   const review = element("details", undefined, "result-review");
   review.append(element("summary", t.expand));

@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { AppConfigProvider } from "../config-context";
 import { I18nProvider } from "../i18n";
@@ -129,6 +129,7 @@ it("connects only public ready practice to real demo jobs, without inventing dra
   expect(screen.queryByText("Hidden practice")).not.toBeInTheDocument();
   expect(screen.getByText("Cloud practice")).toBeInTheDocument();
   expect(screen.getByText("Local web practice")).toBeInTheDocument();
+  for (const heading of screen.getAllByText(/実践問題（/)) fireEvent.click(heading);
   const links = screen.getAllByRole("link");
   expect(links.some((link) => link.getAttribute("href") === "/problems/actual%2Fcloud")).toBe(true);
   expect(links.some((link) => link.getAttribute("href") === "/problems/actual-local")).toBe(true);
@@ -190,6 +191,8 @@ it.each(["ja", "en"])(
     expect(screen.getByText("Social practice")).toBeInTheDocument();
     expect(screen.queryByText("Unsupported runtime")).not.toBeInTheDocument();
     expect(screen.queryByText("Other topic")).not.toBeInTheDocument();
+    for (const heading of screen.getAllByText(/実践問題（|Hands-on exercises \(/))
+      fireEvent.click(heading);
     const hrefs = screen.getAllByRole("link").map((link) => link.getAttribute("href"));
     const suffix = lang === "ja" ? ".ja" : "";
     expect(hrefs).toContain(
@@ -215,4 +218,49 @@ it("keeps guide/source destinations prefix-safe and preserves meaningful theme p
   );
   expect(practiceTheme({ tags: ["phishing-awareness", "web-security"] })).toBe("social");
   expect(practiceTheme({ id: "security-battle-royale", tags: [] })).toBe("cloud");
+});
+
+it("keeps the existing competition list directly reachable without expanding practice descriptions", () => {
+  localStorage.setItem("tenkacloud.portal.locale", "ja");
+  render(
+    <AppConfigProvider config={config}>
+      <I18nProvider>
+        <FoundationGames competitionCount={6} />
+      </I18nProvider>
+    </AppConfigProvider>,
+  );
+  expect(screen.getByRole("link", { name: "競技デモの問題へ（6件）" })).toHaveAttribute(
+    "href",
+    "#competition-problems",
+  );
+});
+
+it("keeps real catalog practice available on demand instead of pushing the competition cards down", () => {
+  localStorage.setItem("tenkacloud.portal.locale", "ja");
+  const catalog = [
+    {
+      id: "stackstack",
+      name: "Available practice",
+      category: "Challenge",
+      status: "ready",
+      visibility: "public",
+      tags: ["aws"],
+      runtime: { provider: "aws" },
+    },
+  ] as unknown as import("@tenkacloud/portal-contracts").ProblemCatalogEntry[];
+  render(
+    <AppConfigProvider config={config}>
+      <I18nProvider>
+        <FoundationGames catalog={catalog} competitionCount={6} />
+      </I18nProvider>
+    </AppConfigProvider>,
+  );
+  const toggle = screen.getByRole("button", { name: "実践問題（1件）" });
+  expect(toggle).toHaveAttribute("aria-expanded", "false");
+  fireEvent.click(toggle);
+  expect(toggle).toHaveAttribute("aria-expanded", "true");
+  expect(screen.getByRole("link", { name: "問題の説明（GitHub）" })).toHaveAttribute(
+    "href",
+    expect.stringContaining("/stackstack/README.ja.md"),
+  );
 });

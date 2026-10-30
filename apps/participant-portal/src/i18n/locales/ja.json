@@ -735,6 +735,8 @@
     "participant_guide": "招待を受けて参加する",
     "organizer_guide": "自分で試す・開催する",
     "problem_description": "問題の説明（GitHub）",
-    "setup_practice": "この方式の開催手順"
+    "setup_practice": "この方式の開催手順",
+    "competition_jump": "競技デモの問題へ（{count}件）",
+    "practice_count": "実践問題（{count}件）"
   }
 }

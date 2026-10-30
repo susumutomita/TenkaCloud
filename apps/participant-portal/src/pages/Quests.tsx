@@ -338,7 +338,11 @@ export function QuestsPage() {
         {t(isPublicDemo ? "foundation_games.page_title" : "quests.header")}
       </Header>
 
-      <FoundationGames catalog={visibleCatalog} problems={visibleProblems} />
+      <FoundationGames
+        catalog={visibleCatalog}
+        problems={visibleProblems}
+        competitionCount={catalogProblems.length}
+      />
 
       {error && (
         <Alert type="error" header={t("app.fetch_status_failed")}>
@@ -368,7 +372,9 @@ export function QuestsPage() {
 
       {isPublicDemo && (
         <Header variant="h2" description={t("foundation_games.competition_description")}>
-          {t("foundation_games.competition_title")}
+          <span id="competition-problems" tabIndex={-1} style={{ scrollMarginTop: "5rem" }}>
+            {t("foundation_games.competition_title")}
+          </span>
         </Header>
       )}
 
