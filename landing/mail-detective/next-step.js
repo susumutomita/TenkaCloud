@@ -30,7 +30,7 @@ export function buildMailShare(run, counts, lang) {
   const text =
     lang === "en"
       ? `Mail Detective | ${status} · ${levelText}\nScore: ${score}/${maxScore} · Mistakes: ${mistakes} · Timed-out rounds: ${timeouts}\nFound myself: ${found}/${target} · Reviewed: ${reviewed}/${target}\nA fictional email practice, not a certification.`
-      : `メールの間違いさがし｜${status}・${levelText}\n得点 ${score}/${maxScore}・ミス ${mistakes}・時間切れ ${timeouts}\n自分で発見 ${found}/${target}・答えを見て確認 ${reviewed}/${target}\n架空メールでの練習記録です。`;
+      : `メールの間違いさがし。｜${status}・${levelText}\n得点 ${score}/${maxScore}・ミス ${mistakes}・時間切れ ${timeouts}\n自分で発見 ${found}/${target}・答えを見て確認 ${reviewed}/${target}\n架空メールでの練習記録です。`;
   const url = `https://tenkacloud.com/mail-detective/?lang=${lang === "en" ? "en" : "ja"}`;
   const intent = new URL("https://x.com/intent/tweet");
   intent.searchParams.set("text", text);

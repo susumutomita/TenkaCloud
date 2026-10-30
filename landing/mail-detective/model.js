@@ -1,5 +1,5 @@
-import { inspectionRow } from "./cases.js?v=3fb492a390";
-import { chooseVariant, LEVELS, levelCase } from "./levels.js?v=3fb492a390";
+import { inspectionRow } from "./cases.js?v=5a1c9cc930";
+import { chooseVariant, LEVELS, levelCase } from "./levels.js?v=5a1c9cc930";
 
 export function createRun(
   random = Math.random,
