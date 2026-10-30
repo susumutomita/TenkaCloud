@@ -1,8 +1,8 @@
-import { inspectionRow } from "./cases.js?v=5a1c9cc930";
-import { COPY } from "./copy.js?v=5a1c9cc930";
-import { createIdnExplanation } from "./idn-explanation.js?v=5a1c9cc930";
+import { inspectionRow } from "./cases.js?v=cf1e358cad";
+import { COPY } from "./copy.js?v=cf1e358cad";
+import { createIdnExplanation } from "./idn-explanation.js?v=cf1e358cad";
 
-import { createOriginal } from "./message-headers.js?v=5a1c9cc930";
+import { createOriginal } from "./message-headers.js?v=cf1e358cad";
 
 const node = (tag, text, className) => {
   const result = document.createElement(tag);
@@ -74,7 +74,10 @@ function spotControl(row, value, slot, run, t, handlers) {
     );
   }
   if (run.feedback?.id === row.id && run.feedback.fresh) control.classList.add("fresh");
-  control.addEventListener("click", () => handlers.choose(row.id, control.id));
+  control.addEventListener("click", () => {
+    if (!control.isConnected || document.getElementById(control.id) !== control) return;
+    handlers.choose(row.id, control.id);
+  });
   return control;
 }
 function appendReason(group, content, row, slot, run, t, ui, item, lang) {
@@ -87,6 +90,31 @@ function appendReason(group, content, row, slot, run, t, ui, item, lang) {
     (run.found[run.index].includes(row.id) || run.revealed[run.index].includes(row.id))
   )
     note.append(createIdnExplanation(item, lang, content.id, ui.idnOpen));
+  group.append(note);
+}
+function appendAnswerFeedback(group, item, side, lang, run, ui, kind) {
+  const fromPanel =
+    kind === "address"
+      ? ui.lastTarget?.endsWith(`-details-${side}`)
+      : ui.lastTarget === "spot-link-target";
+  if (
+    side === "reference" ||
+    !["playing", "round-complete"].includes(run.phase) ||
+    !run.feedback ||
+    ui[kind][side] ||
+    !fromPanel
+  )
+    return;
+  const row = inspectionRow(item, run.feedback.id);
+  const t = COPY[lang];
+  const note = localReason(
+    { ...row, reason: row.reason[lang], detail: row.detail[lang] },
+    t,
+    "feedback",
+  );
+  note.id = "answer-feedback";
+  note.classList.add("answer-feedback");
+  note.prepend(node("strong", row.kind === "risk" ? t.spotted : t.wrong));
   group.append(note);
 }
 export function createEmail(item, side, lang, run, ui, handlers) {
@@ -173,6 +201,7 @@ export function createEmail(item, side, lang, run, ui, handlers) {
     headers.append(line);
   }
   message.append(headers);
+  appendAnswerFeedback(message, item, side, lang, run, ui, "address");
   if ((item.level ?? 5) >= 4)
     message.append(createOriginal(item, side, lang, ui, handlers, mailLang));
   const body = node("div", undefined, "mail-body");
@@ -198,6 +227,7 @@ export function createEmail(item, side, lang, run, ui, handlers) {
   target.append(node("p", t.actualTarget, "target-label"), field("link", "target", "target-value"));
   if (!reference) target.append(node("p", t.linkTap, "target-hint"));
   link.append(inspect, preview, target);
+  appendAnswerFeedback(link, item, side, lang, run, ui, "link");
   body.append(link, field("signature", "body", "mail-signature", false, view[0]));
   const attachment = emailValue(item, "attachment", side, mailLang);
   if (attachment && !["なし", "None"].includes(attachment)) {

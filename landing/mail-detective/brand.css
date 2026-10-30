@@ -16,3 +16,8 @@ a{color:var(--blue)}#exit,.text-button{border-color:var(--line);border-radius:99
 .spot-count,.result-count,.mail-spot .stamp{color:#006d43}
 
 .result-actions{display:flex;align-items:stretch;flex-wrap:wrap;gap:12px;margin-top:20px}.result-actions>button,.result-actions>a{display:inline-flex;align-items:center;justify-content:center;flex:0 1 auto;min-width:0;max-width:100%;min-height:44px;padding:12px 20px;font-size:14px;font-weight:700;line-height:1.5;white-space:normal;overflow-wrap:anywhere;text-align:center;text-decoration:none}.result-actions>a{border:1px solid var(--line);border-radius:999px;background:var(--paper);color:var(--ink)}.result-actions>a:hover{background:var(--paper-3)}@media(max-width:650px){.result-actions>button,.result-actions>a{width:100%;flex-basis:100%}}
+
+/* Distinguish earned round points from the game total, including an unanswered run. */
+.spot-count{display:flex;flex-wrap:wrap;gap:4px 14px;color:var(--ink-2);line-height:1.6}.spot-count>span{white-space:nowrap}.spot-count .total-score{font-weight:800}.spot-count .answer-count{font-weight:500;color:var(--muted);font-size:12px}.result-score{font-size:clamp(20px,3vw,26px);font-weight:800;color:var(--ink);line-height:1.5}.result-count{font-size:16px;color:var(--ink-2)}
+
+.answer-feedback{margin:16px 0;color:var(--ink-2);font-size:14px}.answer-feedback>strong{color:var(--ink)}.answer-feedback>p{margin:4px 0}.answer-feedback>details>summary{min-height:36px;cursor:pointer}
