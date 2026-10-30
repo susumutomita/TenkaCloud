@@ -6,21 +6,21 @@ description: >-
 # ci.yml now runs several jobs in parallel instead of one long serial job, and every one of them
 # needs the same four steps. Duplicating them per job is how the Bun version, the Safe Chain scan,
 # or the `--ignore-scripts` install silently drifts in one job and not the others; a composite
-# action keeps a single definition. Checkout stays in the caller: a composite action's steps only
-# exist once the repository is on disk.
+# action keeps a single definition. The $/ reference runs this definition at the workflow's
+# own commit; its install commands still operate in the caller's checked-out workspace.
 
 runs:
   using: composite
   steps:
     - name: Setup Node
       # actions/setup-node v4; matches the portable HTTP runtime and mise.toml.
-      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      uses: actions/setup-node@v4.4.0
       with:
         node-version: "24.22.1"
 
     - name: Setup Bun
       # oven-sh/setup-bun v2.0.2
-      uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+      uses: oven-sh/setup-bun@v2.0.2
       with:
         bun-version: "1.4.4"
 

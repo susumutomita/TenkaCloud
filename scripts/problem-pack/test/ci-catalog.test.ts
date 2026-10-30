@@ -85,5 +85,6 @@ test("dependency installation has no catalog work and CI consumers prepare offli
     "build",
     "coverage",
     "source-bundle-macos",
+    "actions-lock",
   ]);
 });

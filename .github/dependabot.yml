@@ -14,3 +14,8 @@ updates:
         patterns:
           - "@aws-sdk/*"
           - "@smithy/*"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
