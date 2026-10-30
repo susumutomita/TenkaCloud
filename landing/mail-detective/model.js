@@ -1,5 +1,5 @@
-import { inspectionRow } from "./cases.js?v=a6c3955e99";
-import { chooseVariant, LEVELS, levelCase } from "./levels.js?v=a6c3955e99";
+import { inspectionRow } from "./cases.js?v=ed7388be74";
+import { chooseVariant, LEVELS, levelCase } from "./levels.js?v=ed7388be74";
 
 export function createRun(random = Math.random, startLevel = 1, previousVariants = {}) {
   if (!Number.isInteger(startLevel) || startLevel < 1 || startLevel > LEVELS.length)

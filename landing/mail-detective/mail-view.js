@@ -1,8 +1,8 @@
-import { inspectionRow } from "./cases.js?v=a6c3955e99";
-import { COPY } from "./copy.js?v=a6c3955e99";
-import { createIdnExplanation } from "./idn-explanation.js?v=a6c3955e99";
+import { inspectionRow } from "./cases.js?v=ed7388be74";
+import { COPY } from "./copy.js?v=ed7388be74";
+import { createIdnExplanation } from "./idn-explanation.js?v=ed7388be74";
 
-import { createOriginal } from "./message-headers.js?v=a6c3955e99";
+import { createOriginal } from "./message-headers.js?v=ed7388be74";
 
 const node = (tag, text, className) => {
   const result = document.createElement(tag);

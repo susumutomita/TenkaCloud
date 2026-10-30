@@ -1,9 +1,9 @@
-import { inspectionRow } from "./cases.js?v=a6c3955e99";
-import { COPY } from "./copy.js?v=a6c3955e99";
-import { advanceClock, createClock, progress } from "./deadline.js?v=a6c3955e99";
-import { updateIdnFonts } from "./idn-explanation.js?v=a6c3955e99";
-import { levelCase } from "./levels.js?v=a6c3955e99";
-import { createEmail } from "./mail-view.js?v=a6c3955e99";
+import { inspectionRow } from "./cases.js?v=ed7388be74";
+import { COPY } from "./copy.js?v=ed7388be74";
+import { advanceClock, createClock, progress } from "./deadline.js?v=ed7388be74";
+import { updateIdnFonts } from "./idn-explanation.js?v=ed7388be74";
+import { levelCase } from "./levels.js?v=ed7388be74";
+import { createEmail } from "./mail-view.js?v=ed7388be74";
 import {
   createRun,
   currentCase,
@@ -16,9 +16,9 @@ import {
   risks,
   tap,
   totals,
-} from "./model.js?v=a6c3955e99";
-import { createMailShareLink, createNextStep } from "./next-step.js?v=a6c3955e99";
-import { createReview } from "./review.js?v=a6c3955e99";
+} from "./model.js?v=ed7388be74";
+import { createMailShareLink, createNextStep } from "./next-step.js?v=ed7388be74";
+import { createReview } from "./review.js?v=ed7388be74";
 
 const element = (tag, text, className) => {
   const node = document.createElement(tag);
@@ -136,7 +136,7 @@ const button = (label, action, className) => {
   return node;
 };
 function choose(id, focusId) {
-  if (!settleClock()) return;
+  if (!["playing", "round-complete"].includes(run.phase) || !settleClock()) return;
   mailUI.lastTarget = focusId;
   run = tap(run, id);
   render(focusId);

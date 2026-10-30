@@ -1,4 +1,4 @@
-import { CASES } from "./cases.js?v=a6c3955e99";
+import { CASES } from "./cases.js?v=ed7388be74";
 
 const text = (ja, en) => ({ ja, en });
 export const LEVELS = [
