@@ -19,7 +19,7 @@ jobs:
 
       - name: Setup Bun
         # oven-sh/setup-bun v2.0.2
-        uses: oven-sh/setup-bun@v2.0.2
+        uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version: "1.4.4"
 
