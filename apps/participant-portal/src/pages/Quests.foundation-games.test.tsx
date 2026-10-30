@@ -181,6 +181,9 @@ it.each(["ja", "en"])(
     );
     const text = screen.getByTestId("foundation-games").textContent ?? "";
     const battleName = lang === "en" ? "Battle EN" : "Battle JA";
+    for (const name of ["First cloud", battleName, "Other cloud", "Last cloud"]) {
+      expect(text).toContain(name);
+    }
     expect(text.indexOf("First cloud")).toBeLessThan(text.indexOf(battleName));
     expect(text.indexOf(battleName)).toBeLessThan(text.indexOf("Other cloud"));
     expect(text.indexOf("Other cloud")).toBeLessThan(text.indexOf("Last cloud"));
