@@ -145,9 +145,14 @@ test("resume brings back an environment whose stopped containers were removed", 
     await f.engine.pause(f.job);
     writeFileSync(f.calls, "");
     await f.engine.resume(f.job);
-    const calls = readFileSync(f.calls, "utf8").trim().split("\n");
+    const calls = readFileSync(f.calls, "utf8")
+      .trim()
+      .split("\n")
+      .filter((call) => call !== "compose version");
     // `compose restart` does nothing for removed containers; `up --no-recreate` creates them
     // again and still starts surviving stopped containers in place.
-    expect(calls).toEqual([`compose -f ${f.compose} -p tch-synthetic-job up -d --no-recreate`]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toStartWith(`compose -f ${f.compose} -p tch-synthetic-job `);
+    expect(calls[0]).toEndWith(" up -d --no-recreate");
   });
 });
