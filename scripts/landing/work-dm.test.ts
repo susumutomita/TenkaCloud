@@ -53,7 +53,7 @@ describe("one work-network DM, prototype", () => {
       expect(choose(start(variant), "hold")).toMatchObject({ outcome: "held", points: 40 });
       expect(choose(site(variant), "hold").outcome).not.toBe("unsafe");
     }
-    expect(choose(site(), "report")).toMatchObject({ outcome: "stopped", points: 70 });
+    expect(choose(site(), "report")).toMatchObject({ outcome: "resolved", points: 100 });
   });
   test("30 seconds spans every stage; inspections alone pause it", () => {
     let state = elapse(start(), 10_000);
@@ -81,14 +81,52 @@ describe("one work-network DM, prototype", () => {
   test("the player can stop at any stage; the evidence available determines credit", () => {
     expect(choose(start("install"), "hold")).toMatchObject({ points: 40, decisionStage: "dm" });
     expect(choose(site(), "hold")).toMatchObject({
-      outcome: "stopped",
-      points: 70,
+      outcome: "resolved",
+      points: 100,
       decisionStage: "setup",
     });
     const verified = choose(choose(choose(site(), "tools"), "verify"), "close");
     expect(choose(verified, "hold")).toMatchObject({ outcome: "resolved", points: 100 });
     const legitimate = choose(choose(choose(site("browser"), "tools"), "verify"), "close");
     expect(choose(legitimate, "hold")).toMatchObject({ outcome: "held", points: 40 });
+  });
+  test("all stopping times score the safety decision, not hidden investigation clicks", () => {
+    for (const variant of ["install", "browser"]) {
+      const early = [
+        start(variant),
+        choose(start(variant), "discuss"),
+        choose(choose(start(variant), "discuss"), "visit"),
+      ];
+      for (const state of early)
+        expect(choose(state, "hold")).toMatchObject({ outcome: "held", points: 40 });
+      const requested = site(variant);
+      const company = choose(choose(choose(requested, "tools"), "company"), "close");
+      const checked = choose(choose(choose(requested, "tools"), "verify"), "close");
+      for (const state of [requested, company, checked]) {
+        expect(choose(state, "hold").points).toBe(variant === "install" ? 100 : 40);
+        expect(choose(state, "hold").points).toBeLessThanOrEqual(100);
+      }
+    }
+    expect(COPY.ja.resolvedInstall).toContain("照合をしなくても");
+    expect(COPY.en.resolvedInstall).toContain("without requiring a verification step");
+    expect(COPY.ja.pending).toContain("まだ表示されていない");
+    expect(COPY.en.pending).toContain("before a risky request appeared");
+  });
+  test("timeout at every stage is zero and cannot gain points from revealed evidence or late answers", () => {
+    for (const variant of ["install", "browser"]) {
+      const states = [
+        start(variant),
+        choose(start(variant), "discuss"),
+        choose(choose(start(variant), "discuss"), "visit"),
+        site(variant),
+      ];
+      for (const state of states) {
+        const ended = elapse(state, ROUND_MS);
+        expect(ended).toMatchObject({ outcome: "timeout", points: 0, decisionStage: state.stage });
+        for (const action of ["hold", "proceed", "report", "verify"])
+          expect(choose(ended, action)).toEqual(ended);
+      }
+    }
   });
   test("clicking every control in order cannot undo a bad final decision or earn extra points", () => {
     for (const variant of ["install", "browser"]) {

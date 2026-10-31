@@ -1,16 +1,15 @@
 export const COPY = {
   ja: {
     title: "そのお願い、聞いていい？",
-    instruction: "この依頼、進めていい？ 不安な時点で止めよう。",
+    instruction: "会話を進め、何を頼まれたかで判断しよう。",
     safety: "すべてゲーム内の模擬操作です。送信・ダウンロード・インストールは行いません。",
     games: "ゲーム一覧へ",
     format:
-      "1場面・100点満点。止める／最後の実行で終了。照合して判断すると100点。30秒で時間切れ（調査中は停止）。",
+      "1場面・100点満点。止める／最後の実行で終了。危険な要求を止める／正当な依頼を照合して進めると100点。30秒で時間切れ（調査中は停止）。",
     evidence: "判断した場面を振り返る",
-    pending: "ここではまだ危険とは判断できません。依頼を続けるなら、内容を確かめましょう。",
+    pending:
+      "危険につながる要求がまだ表示されていない段階で中断しました。安全な選択ですが、相手が知らない人・外部サイトというだけで不正とは判断できません。",
     next: "次の一手",
-    stopped: "実行する前に、止めた。",
-    stoppedShort: "70点：予期しないアプリ要求で止まりました。公式窓口での照合はまだです。",
     stoppedReason:
       "実行せず、相手が指定した連絡先ではなく、自分で開いた企業の公式窓口で依頼と試験方法を確認しましょう。業務の依頼なら組織の窓口にも報告できます。",
     nextBrowser:
@@ -60,19 +59,19 @@ export const COPY = {
     nuance:
       "独自サイトや採用試験用ソフトが、すべて悪性という意味ではありません。プロフィールや自然な会話だけで、この依頼の安全は保証されません。",
     held: "安全に止めた。",
-    resolved: "確認して、解決。",
+    resolved: "判断して、解決。",
     limited: "安全な範囲で進めた。",
     unsafe: "途中で、要求が変わった。",
     timeout: "今回は、保留。",
-    heldShort: "40点：安全な保留を選び、終了しました。確認して判断する進め方もあります。",
-    resolvedShort: "100点：依頼を確かめ、確認結果に合った行動を選べました。",
+    heldShort: "40点：安全な中断です。危険な要求を見抜いた得点とは分けています。",
+    resolvedShort: "100点：要求の内容を見て、適切な行動を選べました。",
     limitedShort: "50点：追加アプリや秘密は渡さず進めました。依頼元は未確認です。",
     unsafeShort: "この模擬依頼は、不正なアプリへの誘導でした。",
     timeoutShort: "未回答なので0点。何も実行していません。",
     heldReason:
       "保留や辞退は、安全な選択です。依頼を続けたいときは、相手が指定した連絡先ではなく、自分で開いた企業の公式窓口で確かめられます。",
     resolvedInstall:
-      "本物の会社の試験と食い違うことを確かめ、実行せず止められました。この模擬依頼の狙いは、不正なアプリをインストールさせることでした。",
+      "仕事の相談から予期しないアプリの実行要求へ変わったところで、実行せず止められました。照合をしなくても、この安全な判断は100点です。この模擬依頼の狙いは、不正なアプリをインストールさせることでした。",
     resolvedBrowser:
       "依頼と試験方法を独立した公式窓口で照合し、確認した範囲の課題だけ進められました。何でも断る以外にも、安全な進め方があります。",
     limitedReason:
@@ -84,18 +83,15 @@ export const COPY = {
   },
   en: {
     title: "Should I do what they ask?",
-    instruction: "Should you continue? Stop the request when you have doubts.",
+    instruction: "Follow the conversation. Judge what the request asks you to do.",
     safety: "All actions are simulated. No real messages, downloads or installations.",
     games: "All games",
     format:
-      "One scene · 100 points. Stop or take the final action to finish. Verify, then decide for 100 points. 30 seconds, paused during investigation.",
+      "One scene · 100 points. Stop or take the final action to finish. Stop a risky request, or verify and continue a legitimate one, for 100 points. 30 seconds, paused during investigation.",
     evidence: "Review the moment you decided",
     pending:
-      "There is not enough evidence of danger here yet. If you continue, check what the request asks you to do.",
+      "You stopped before a risky request appeared. That is safe, but an unfamiliar sender or an external site alone does not establish wrongdoing.",
     next: "A safe next step",
-    stopped: "You stopped before running it.",
-    stoppedShort:
-      "70 points: you stopped at an unexpected app request. Official verification is still missing.",
     stoppedReason:
       "Do not run it. Find the company’s official contact independently and verify the request and assessment method. For work requests, you can also report it to your organization’s support team.",
     nextBrowser:
@@ -145,20 +141,20 @@ export const COPY = {
     nuance:
       "Not every custom assessment site or recruiting app is malicious. A plausible profile and natural conversation alone do not establish the safety of this request.",
     held: "You stopped safely.",
-    resolved: "Verified. Resolved.",
+    resolved: "Decided. Resolved.",
     limited: "You stayed within a safe scope.",
     unsafe: "The request changed along the way.",
     timeout: "On hold this time.",
-    heldShort:
-      "40 points: you chose to stop safely. Verifying the request is another way to make a decision.",
-    resolvedShort: "100 points: you verified the request and acted on what you found.",
+    heldShort: "40 points: you stopped safely. This is separate from identifying a risky request.",
+    resolvedShort:
+      "100 points: you judged what was being requested and chose an appropriate action.",
     limitedShort: "50 points: no extra app or secrets shared. The requester remains unverified.",
     unsafeShort: "This simulated request was a pretext to install a malicious app.",
     timeoutShort: "No answer, no points. Nothing was executed.",
     heldReason:
       "Putting a request on hold or declining it is safe. If you want to continue, check with the company's official contact that you find yourself, not one supplied by the sender.",
     resolvedInstall:
-      "You checked the conflicting assessment instructions, avoided execution and stopped the request. This simulated request was trying to make you install a malicious app.",
+      "You stopped when a work conversation changed into an unexpected app execution request. That safe decision earns 100 points without requiring a verification step. This simulated request was trying to make you install a malicious app.",
     resolvedBrowser:
       "You checked the request and assessment method through an independent official contact, then continued only within that verified scope. Refusing everything is not the only safe option.",
     limitedReason:

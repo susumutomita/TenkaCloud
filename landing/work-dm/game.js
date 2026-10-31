@@ -1,5 +1,5 @@
-import { COPY } from "./copy.js?v=f95412011e";
-import { choose, elapse, ROUND_MS, start } from "./model.js?v=f95412011e";
+import { COPY } from "./copy.js?v=e13873c338";
+import { choose, elapse, ROUND_MS, start } from "./model.js?v=e13873c338";
 
 let lang = new URLSearchParams(location.search).get("lang") === "en" ? "en" : "ja",
   state = start(),

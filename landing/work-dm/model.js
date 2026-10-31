@@ -31,8 +31,7 @@ function proceed(state) {
 }
 
 function stopRequest(state) {
-  if (state.stage === "setup" && state.variant === "install")
-    return finish(state, state.checked ? "resolved" : "stopped", state.checked ? 100 : 70);
+  if (state.stage === "setup" && state.variant === "install") return finish(state, "resolved", 100);
   return finish(state, "held", 40);
 }
 
