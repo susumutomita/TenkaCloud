@@ -1,160 +1,169 @@
 import { describe, expect, test } from "bun:test";
-import { COPY } from "../../landing/work-dm/copy.js";
+import { COPY, shareHref } from "../../landing/work-dm/copy.js";
 import {
-  CONNECTIONS,
   choose,
   elapse,
+  hits,
   ROUND_MS,
-  SOURCES,
   score,
   start,
+  TASKS,
 } from "../../landing/work-dm/model.js";
 
-function collect(state, id) {
-  return choose(choose(state, { type: "open", view: SOURCES[id] }), { type: "collect", id });
+function shoot(state, id) {
+  let next = choose(state, { type: "reveal", id });
+  next = choose(next, { type: "aim", id });
+  return choose(next, { type: "fire" });
 }
-function pair(state, a, b) {
-  let next = collect(collect(state, a), b);
-  next = choose(choose(next, { type: "select", id: a }), { type: "select", id: b });
-  return choose(next, { type: "connect" });
-}
-function prove(state, id) {
-  const connected = pair(state, ...CONNECTIONS[id]);
-  return choose(choose(connected, { type: "arm", id }), { type: "present" });
+function revealAll(state) {
+  return Object.keys(TASKS).reduce((next, id) => choose(next, { type: "reveal", id }), state);
 }
 function shape(value) {
   if (typeof value === "string") return "string";
   return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, shape(child)]));
 }
 
-describe("work-DM evidence investigation", () => {
-  test("a case opens directly on the DM; every source is available without hidden gates", () => {
-    let state = start();
-    expect(state.view).toBe("dm");
+describe("peel the recruiting disguise, direct action prototype", () => {
+  test("starts directly on four stationary tasks with no score or preselected target", () => {
+    const state = start();
+    expect(new Set(state.order)).toEqual(new Set(Object.keys(TASKS)));
+    expect(state.revealed).toEqual([]);
+    expect(state.aim).toBeNull();
+    expect(state.outcome).toBeNull();
+    expect(score(state)).toBe(0);
     expect(ROUND_MS).toBe(120_000);
-    for (const view of ["official", "assessment", "profile", "dm"]) {
-      state = choose(state, { type: "open", view });
-      expect(state.view).toBe(view);
-      expect(score(state)).toBe(0);
-    }
   });
-  test("collecting everything, visiting every screen and tapping cards earns no score", () => {
-    let state = start();
-    for (const id of Object.keys(SOURCES)) state = collect(state, id);
-    expect(state.collected).toHaveLength(8);
-    for (const id of state.collected) state = choose(state, { type: "select", id });
-    expect(state.selected.length).toBeLessThanOrEqual(2);
+  test("retry layout is randomized but always bounded, including invalid injected random values", () => {
+    expect(start(() => 0).order).not.toEqual(start(() => 0.9).order);
+    for (const value of [-1, 1, Number.NaN, Number.POSITIVE_INFINITY])
+      expect(new Set(start(() => value).order)).toEqual(new Set(Object.keys(TASKS)));
+  });
+  test("peeling and aiming do not award points or execute a request", () => {
+    const state = choose(revealAll(start()), { type: "aim", id: "application" });
+    expect(state.revealed).toHaveLength(4);
+    expect(state.shots).toEqual([]);
     expect(score(state)).toBe(0);
     expect(state.outcome).toBeNull();
   });
-  test("facts must be seen at their source and saved before selecting; unknown controls are inert", () => {
-    expect(choose(start(), { type: "collect", id: "application" })).toEqual(start());
-    expect(choose(start(), { type: "select", id: "application" })).toEqual(start());
-    for (const type of ["proceed", "hold", "verify", "toString", "__proto__"])
-      expect(choose(start(), { type })).toEqual(start());
-    expect(choose(start(), { type: "open", view: "unknown" })).toEqual(start());
+  test("shooting requires a visible payload and a selected target, not hidden investigation clicks", () => {
+    const state = start(() => 0);
+    expect(choose(state, { type: "aim", id: "application" })).toEqual(state);
+    expect(choose(state, { type: "fire" })).toEqual(state);
+    expect(score(shoot(state, "application"))).toBe(50);
   });
-  test("a contradiction must be connected and presented on the actual request, not merely collected", () => {
-    let state = pair(start(), ...CONNECTIONS.software);
-    expect(state.connected).toEqual(["software"]);
-    expect(score(state)).toBe(0);
-    expect(choose(state, { type: "present" })).toEqual(state);
-    state = choose(state, { type: "arm", id: "software" });
-    expect(state.view).toBe("dm");
-    state = choose(state, { type: "present" });
-    expect(score(state)).toBe(50);
-    expect(state.presented).toEqual(["software"]);
-    expect(state.outcome).toBeNull();
-  });
-  test("both supported contradictions resolve the case for100, in either order", () => {
+  test("the two concrete policy conflicts earn100 in either order, without investigation prerequisites", () => {
     for (const order of [
-      ["location", "software"],
-      ["software", "location"],
+      ["application", "upload"],
+      ["upload", "application"],
     ]) {
-      let state = start();
-      for (const id of order) state = prove(state, id);
+      let state = revealAll(start());
+      for (const id of order) state = shoot(state, id);
       expect(score(state)).toBe(100);
-      expect(state.outcome).toBe("solved");
-      expect(state.presented).toHaveLength(2);
+      expect(hits(state)).toBe(2);
+      expect(choose(state, { type: "finish" }).outcome).toBe("complete");
     }
   });
-  test("two consistent facts do not become a contradiction because both were clicked", () => {
-    const state = pair(start(), "deadline", "officialDeadline");
-    expect(state.mistakes).toBe(1);
-    expect(state.connected).toHaveLength(0);
-    expect(state.notice).toBe("mismatch");
-    expect(score(state)).toBe(0);
-    const found = prove(prove(state, "location"), "software");
-    expect(score(found)).toBe(90);
-  });
-  test("repeated facts, pairs and presentation cannot duplicate rewards or penalties", () => {
-    let state = pair(start(), "deadline", "officialDeadline");
-    state = pair(state, "officialDeadline", "deadline");
-    expect(state.mistakes).toBe(1);
-    state = prove(state, "software");
-    const points = score(state);
-    state = choose(state, { type: "present" });
-    state = pair(state, ...CONNECTIONS.software);
-    state = choose(state, { type: "arm", id: "software" });
-    expect(score(state)).toBe(points);
-    expect(state.presented).toHaveLength(1);
-    expect(state.connected).toHaveLength(1);
-  });
-  test("three distinct unsupported pairs stop brute-force comparison before exhaustive guessing", () => {
+  test("shooting every task earns only50; later correct shots do not erase wrong shots", () => {
     let state = start();
-    for (const ids of [
-      ["deadline", "role"],
-      ["deadline", "officialRole"],
-      ["role", "officialRole"],
-    ])
-      state = pair(state, ...ids);
-    expect(state.outcome).toBe("unresolved");
-    expect(state.attempted).toHaveLength(3);
-    expect(score(state)).toBe(0);
-    expect(prove(state, "location")).toEqual(state);
+    for (const id of Object.keys(TASKS)) state = shoot(state, id);
+    expect(state.shots).toHaveLength(4);
+    expect(score(state)).toBe(50);
+    expect(choose(state, { type: "finish" }).outcome).toBe("complete");
+    const wrongThenRight = shoot(shoot(start(), "calendar"), "application");
+    expect(score(wrongThenRight)).toBe(25);
   });
-  test("no input times out to zero; earned partial points remain, with no reveal points", () => {
-    expect(score(elapse(start(), ROUND_MS))).toBe(0);
-    const ended = elapse(prove(start(), "software"), ROUND_MS);
-    expect(ended.outcome).toBe("timeout");
-    expect(score(ended)).toBe(50);
-    expect(prove(ended, "location")).toEqual(ended);
-  });
-  test("terminal actions and animation frames cannot change final scores", () => {
-    for (const ended of [
-      elapse(start(), ROUND_MS),
-      prove(prove(start(), "software"), "location"),
-    ]) {
-      expect(elapse(ended, ROUND_MS)).toEqual(ended);
-      for (const type of ["collect", "select", "connect", "open", "board", "arm", "present"])
-        expect(choose(ended, { type, id: "domain", view: "dm", open: true })).toEqual(ended);
-      expect(score(ended)).toBeLessThanOrEqual(100);
+  test("a target cannot receive duplicate rewards or penalties from rapid clicks", () => {
+    for (const id of Object.keys(TASKS)) {
+      const state = shoot(start(), id);
+      expect(shoot(state, id)).toEqual(state);
+      expect(choose(state, { type: "fire" })).toEqual(state);
     }
   });
-  test("restart returns an independent clean case and timings stay finite", () => {
-    const previous = prove(start(), "software");
+  test("finishing a revealed but untouched board scores0; hidden tasks cannot be graded as completed", () => {
+    const state = start(() => 0);
+    expect(choose(state, { type: "finish" })).toEqual(state);
+    const done = choose(revealAll(state), { type: "finish" });
+    expect(done.outcome).toBe("complete");
+    expect(score(done)).toBe(0);
+  });
+  test("early safe stopping is ungraded, not a failed or low-scoring judgement", () => {
+    const held = choose(choose(start(), { type: "pause" }), { type: "hold" });
+    expect(held.outcome).toBe("held");
+    expect(COPY.ja.heldNote).toContain("採点なし");
+    expect(COPY.en.heldNote).toContain("Not graded");
+    expect(elapse(held, ROUND_MS)).toEqual(held);
+  });
+  test("pause preserves time and blocks play; resume restores the same peeled targets and score", () => {
+    const playing = shoot(start(), "application");
+    const paused = choose(playing, { type: "pause" });
+    expect(elapse(paused, ROUND_MS)).toEqual(paused);
+    expect(shoot(paused, "upload")).toEqual(paused);
+    const resumed = choose(paused, { type: "resume" });
+    expect(resumed.remaining).toBe(playing.remaining);
+    expect(resumed.revealed).toEqual(playing.revealed);
+    expect(score(resumed)).toBe(50);
+  });
+  test("unanswered timeout is0, earned partial points remain, and no final actions add scores", () => {
+    const unanswered = elapse(start(), ROUND_MS);
+    const partial = elapse(shoot(start(), "application"), ROUND_MS);
+    expect(unanswered.outcome).toBe("timeout");
+    expect(score(unanswered)).toBe(0);
+    expect(score(partial)).toBe(50);
+    for (const ended of [unanswered, partial, choose(revealAll(start()), { type: "finish" })]) {
+      for (const type of ["reveal", "aim", "fire", "pause", "resume", "hold", "finish"])
+        expect(choose(ended, { type, id: "upload" })).toEqual(ended);
+      expect(elapse(ended, ROUND_MS)).toEqual(ended);
+    }
+  });
+  test("restart resets all effects, target, score and timing, with finite timing at extremes", () => {
+    shoot(start(), "application");
     const reset = start();
-    expect(reset.collected).toEqual([]);
-    expect(reset.selected).toEqual([]);
-    expect(reset.connected).toEqual([]);
-    expect(reset.presented).toEqual([]);
-    expect(reset.attempted).toEqual([]);
-    expect(reset.mistakes).toBe(0);
-    expect(reset.armed).toBeNull();
+    expect(reset.shots).toEqual([]);
+    expect(reset.revealed).toEqual([]);
+    expect(reset.flash).toBeNull();
+    expect(reset.aim).toBeNull();
+    expect(reset.paused).toBe(false);
     expect(reset.remaining).toBe(ROUND_MS);
-    expect(previous.presented).toEqual(["software"]);
-    for (const delta of [-1, Number.NaN, Number.POSITIVE_INFINITY])
+    for (const delta of [0, -1, Number.NaN, Number.POSITIVE_INFINITY])
       expect(elapse(reset, delta)).toEqual(reset);
     expect(elapse(reset, Number.MAX_VALUE).remaining).toBe(0);
+    for (const type of ["toString", "__proto__", "unknown"])
+      expect(choose(reset, { type })).toEqual(reset);
+    expect(choose(reset, { type: "reveal", id: "__proto__" })).toEqual(reset);
   });
-  test("bilingual evidence has the same IDs; each solution has an explicit independent reference", () => {
+  test("both languages expose the same facts and explain the case policy, not universal app or domain guilt", () => {
     expect(shape(COPY.ja)).toEqual(shape(COPY.en));
-    expect(Object.keys(COPY.ja.facts).sort()).toEqual(Object.keys(SOURCES).sort());
-    expect(COPY.ja.facts.officialDomain).toContain("外部の試験サイトは使いません");
-    expect(COPY.en.facts.officialDomain).toContain("do not use external");
-    expect(COPY.ja.facts.officialApplication).toContain("インストールは行いません");
-    expect(COPY.en.facts.officialApplication).toContain("do not distribute");
-    expect(COPY.ja.nuance).toContain("外部サイトだから危険なのではありません");
-    expect(COPY.en.nuance).toContain("not inherently dangerous");
+    expect(Object.keys(COPY.ja.covers).sort()).toEqual(Object.keys(TASKS).sort());
+    expect(COPY.ja.safeNext).toContain("常に悪性とは限りません");
+    expect(COPY.en.safeNext).toContain("not inherently malicious");
+    expect(TASKS.application.kind).toBe("APP");
+    expect(TASKS.upload.site).not.toBe("aoba");
+    for (const id of ["calendar", "task"])
+      expect(TASKS[id]).toMatchObject({ kind: "WEB", site: "aoba", mismatch: null });
+  });
+  test("manual X intent encodes actual results and current reachable game URL without spoilers or private query data", () => {
+    for (const lang of ["ja", "en"]) {
+      const state = choose(revealAll(shoot(start(), "application")), { type: "finish" });
+      const u = new URL(
+        shareHref(
+          state,
+          lang,
+          "https://preview.example/work-dm/?private=not-for-sharing#debug",
+          score(state),
+          hits(state),
+        ),
+      );
+      expect(u.origin).toBe("https://twitter.com");
+      expect(u.pathname).toBe("/intent/tweet");
+      expect(u.searchParams.get("text")).toContain("50/100");
+      expect(u.searchParams.get("text")).not.toContain("aoba-skills");
+      expect(u.searchParams.get("url")).toBe(`https://preview.example/work-dm/?lang=${lang}`);
+      const held = choose(choose(start(), { type: "pause" }), { type: "hold" });
+      const text = new URL(
+        shareHref(held, lang, "https://preview.example/work-dm/", 0, 0),
+      ).searchParams.get("text");
+      expect(text).not.toContain("0/100");
+      expect(text).toContain(lang === "ja" ? "採点なし" : "not graded");
+    }
   });
 });

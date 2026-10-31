@@ -1,238 +1,264 @@
-import { COPY } from "./copy.js?v=82ce93a3e3";
-import {
-  CONNECTIONS,
-  choose,
-  elapse,
-  ROUND_MS,
-  SOURCES,
-  score,
-  start,
-} from "./model.js?v=82ce93a3e3";
+import { COPY, shareHref } from "./copy.js?v=e6c7188599";
+import { choose, elapse, hits, ROUND_MS, score, start, TASKS } from "./model.js?v=e6c7188599";
 
 let lang = new URLSearchParams(location.search).get("lang") === "en" ? "en" : "ja";
 let state = start();
 let last = performance.now();
 const $ = (id) => document.getElementById(id);
 function node(tag, text = "", cls = "") {
-  const n = document.createElement(tag);
-  n.textContent = text;
-  if (cls) n.className = cls;
-  return n;
+  const e = document.createElement(tag);
+  e.textContent = text;
+  if (cls) e.className = cls;
+  return e;
 }
 function button(id, text, action, cls = "") {
   const b = node("button", text, cls);
-  b.id = id;
   b.type = "button";
+  b.id = id;
   b.addEventListener("click", () => {
     if (b.isConnected) dispatch(action);
   });
   return b;
 }
 function heading(text, id) {
-  const h = node("h2", text);
-  h.id = id;
-  h.tabIndex = -1;
-  return h;
-}
-function focusAfter(action) {
-  if (state.outcome) return $("result-title")?.focus();
-  const ids = {
-    collect: `fact-${action.id}`,
-    select: `card-${action.id}`,
-    connect:
-      state.notice === "linked" ? `arm-${state.connected.at(-1)}` : `card-${state.collected[0]}`,
-    arm: "request-target",
-    present: "opponent-reply",
-    open: "view-title",
-    board: state.board ? "board-title" : "view-title",
-    retry: "view-title",
-  };
-  $(ids[action.type])?.focus({ preventScroll: ["collect", "select"].includes(action.type) });
-}
-function dispatch(action) {
-  clock(performance.now());
-  state = action.type === "retry" ? start() : choose(state, action);
-  last = performance.now();
-  render();
-  focusAfter(action);
+  const e = node("h2", text);
+  e.id = id;
+  e.tabIndex = -1;
+  return e;
 }
 function clock(now) {
   const delta = Math.max(0, now - last);
   last = now;
   if (document.hidden) return;
-  const wasOver = state.outcome;
+  const ended = state.outcome;
   state = elapse(state, delta);
-  if (!wasOver && state.outcome) {
+  if (!ended && state.outcome) {
     render();
     $("result-title")?.focus();
   }
 }
-function fact(id, t) {
-  const b = button(`fact-${id}`, "", { type: "collect", id }, "fact");
-  const saved = state.collected.includes(id);
-  b.setAttribute("aria-label", `${saved ? t.savedPin : t.pin}: ${t.facts[id]}`);
-  b.append(node("span", t.facts[id]), node("span", saved ? "✓" : "+", "pin"));
-  b.querySelector(".pin").setAttribute("aria-hidden", "true");
-  b.dataset.fact = id;
+function shotLine(id) {
+  const target = $(`tile-${id}`)?.getBoundingClientRect();
+  const cannon = $("fire")?.getBoundingClientRect();
+  if (!target || !cannon) return null;
+  return {
+    x: cannon.x + cannon.width / 2,
+    y: cannon.y,
+    tx: target.x + target.width / 2,
+    ty: target.y + target.height / 2,
+  };
+}
+function beam(line) {
+  if (!line) return;
+  $("beam")?.remove();
+  const e = node("div", "", "beam");
+  e.id = "beam";
+  e.setAttribute("aria-hidden", "true");
+  const dx = line.tx - line.x,
+    dy = line.ty - line.y;
+  e.style.left = `${line.x}px`;
+  e.style.top = `${line.y}px`;
+  e.style.width = `${Math.hypot(dx, dy)}px`;
+  e.style.transform = `rotate(${Math.atan2(dy, dx)}rad)`;
+  document.body.append(e);
+  setTimeout(() => e.remove(), 260);
+}
+function nextTarget() {
+  const id = state.order.find((item) => !state.shots.includes(item));
+  if (!id) return "finish";
+  return state.revealed.includes(id) ? `aim-${id}` : `peel-${id}`;
+}
+function focusAfter(action) {
+  if (state.outcome) return $("result-title")?.focus();
+  if (state.paused) return $("resume")?.focus();
+  const targets = {
+    reveal: `aim-${action.id}`,
+    aim: "fire",
+    fire: `tile-${state.flash}`,
+    retry: nextTarget(),
+    resume: "pause",
+  };
+  $(targets[action.type])?.focus({ preventScroll: ["aim", "fire"].includes(action.type) });
+  if (action.type === "reveal") $(`tile-${action.id}`)?.scrollIntoView({ block: "center" });
+}
+function dispatch(action) {
+  clock(performance.now());
+  const line = action.type === "fire" ? shotLine(state.aim) : null;
+  const previous = state;
+  state = action.type === "retry" ? start() : choose(state, action);
+  if (state === previous) return;
+  last = performance.now();
+  render();
+  focusAfter(action);
+  if (action.type === "fire" && state.shots.length > previous.shots.length) beam(line);
+}
+function cover(id, t) {
+  const b = button(`peel-${id}`, "", { type: "reveal", id }, "cover");
+  b.setAttribute("aria-label", `${t.peel}: ${t.covers[id]}`);
+  b.append(node("span", "↔", "rub-icon"), node("strong", t.covers[id]), node("small", t.peelHint));
+  let x = null,
+    progress = 0;
+  b.addEventListener("pointerdown", (event) => {
+    if (!event.isPrimary) return;
+    x = event.clientX;
+    progress = 0;
+    b.setPointerCapture(event.pointerId);
+  });
+  b.addEventListener("pointermove", (event) => {
+    if (x === null) return;
+    progress = Math.min(1, Math.abs(event.clientX - x) / (b.offsetWidth * 0.65));
+    b.style.setProperty("--peel", String(progress));
+  });
+  b.addEventListener("pointerup", () => {
+    if (progress >= 0.35 && b.isConnected) dispatch({ type: "reveal", id });
+    else b.style.setProperty("--peel", "0");
+    x = null;
+  });
+  b.addEventListener("pointercancel", () => {
+    x = null;
+    progress = 0;
+    b.style.setProperty("--peel", "0");
+  });
   return b;
 }
-function pageNav(t) {
-  const n = node("nav", "", "page-nav");
-  n.setAttribute("aria-label", t.sources);
-  for (const [view, label] of Object.entries(t.views)) {
-    const b = button(`open-${view}`, label, { type: "open", view });
-    b.setAttribute("aria-current", String(view === state.view));
-    n.append(b);
-  }
-  return n;
-}
-function dm(t) {
-  const d = node("div", "", "dm");
-  const profile = button("profile-open", "", { type: "open", view: "profile" }, "profile-link");
-  profile.setAttribute("aria-label", t.profileOpen);
-  profile.append(
-    node("span", "HO", "avatar"),
-    node("strong", t.sender),
-    node("small", t.senderRole),
+function payload(id, t) {
+  const task = TASKS[id];
+  const p = node("div", "", "payload");
+  p.append(
+    node("span", task.kind === "APP" ? "⚙" : "▣", "payload-icon"),
+    node("strong", task.kind, "payload-kind"),
+    node("span", t.actions[task.kind], "payload-action"),
+    node("strong", task.site, "site-name"),
+    node("small", ".example", "site-suffix"),
   );
-  const request = state.armed
-    ? button("request-target", "", { type: "present" }, "bubble request target")
-    : node("div", "", "bubble request");
-  request.append(node("p", t.request));
-  if (state.armed) request.append(node("strong", `${t.target} ↓`, "target-label"));
-  d.append(profile, node("p", t.greeting, "bubble"), request);
-  const link = button("assessment-link", "", { type: "open", view: "assessment" }, "link-preview");
-  link.append(
-    node("span", "↗", "site-icon"),
-    node("strong", t.openSite),
-    node("small", t.facts.domain),
+  return p;
+}
+function revealedTile(e, id, t, spent, correct) {
+  const target = button(`aim-${id}`, "", { type: "aim", id }, "target");
+  target.setAttribute(
+    "aria-label",
+    `${t.aim}: ${t.covers[id]}, ${t.actions[TASKS[id].kind]}, ${TASKS[id].site}.example`,
   );
-  d.append(link);
-  if (state.presented.length) {
-    for (const id of state.presented)
-      d.append(node("p", `${t.presented}: ${t.links[id]}`, "bubble self"));
-    const reply = node("p", t.reply, "bubble");
-    reply.id = "opponent-reply";
-    reply.tabIndex = -1;
-    d.append(reply);
+  target.setAttribute("aria-pressed", String(state.aim === id));
+  target.disabled = spent;
+  target.append(payload(id, t));
+  e.append(target);
+  if (spent)
+    e.append(node("span", correct ? `＋50 · ${t.blocked}` : `−25 · ${t.matched}`, "shot-label"));
+  if (state.notice === "revealed" && state.flash === id) {
+    const peel = cover(id, t);
+    peel.tabIndex = -1;
+    peel.disabled = true;
+    peel.setAttribute("aria-hidden", "true");
+    e.append(peel);
   }
-  return d;
 }
-function sourcePage(t) {
-  const s = node("section", "", "browser");
-  s.append(pageNav(t));
-  const screen = node("div", "", "screen");
-  screen.append(heading(t.sourceNames[state.view], "view-title"));
-  const pages = {
-    dm: () => screen.append(dm(t)),
-    profile: () => screen.append(node("p", t.profileBio), fact("role", t)),
-    assessment: () =>
-      screen.append(
-        fact("domain", t),
-        node("div", "↓", "app-symbol"),
-        node("h3", t.assessmentTitle),
-        node("p", t.assessmentLead),
-        node("small", t.fileLabel),
-        fact("application", t),
-        fact("deadline", t),
-      ),
-    official: () => {
-      screen.append(node("h3", t.officialTitle), node("p", t.officialLead, "muted"));
-      for (const id of [
-        "officialDomain",
-        "officialApplication",
-        "officialDeadline",
-        "officialRole",
-      ])
-        screen.append(fact(id, t));
-    },
-  };
-  pages[state.view]();
-  screen.append(node("p", t.evidenceHint, "caption"));
-  s.append(screen);
-  return s;
+function tile(id, t) {
+  const revealed = state.revealed.includes(id),
+    spent = state.shots.includes(id);
+  const correct = spent && Boolean(TASKS[id].mismatch);
+  const e = node("article", "", "tile");
+  e.id = `tile-${id}`;
+  e.tabIndex = -1;
+  if (revealed) e.classList.add("revealed");
+  if (state.aim === id) e.classList.add("aimed");
+  if (spent) e.classList.add(correct ? "hit" : "miss");
+  if (state.flash === id) e.classList.add(`flash-${state.notice}`);
+  if (revealed) revealedTile(e, id, t, spent, correct);
+  else e.append(cover(id, t));
+  return e;
 }
-function slots(t) {
-  const row = node("div", "", "slots");
-  for (let i = 0; i < 2; i++) {
-    const id = state.selected[i];
-    const slot = id
-      ? button(`slot-${i}`, t.facts[id], { type: "select", id }, "slot filled")
-      : node("div", `${t.slot} ${i + 1}\n${t.slotEmpty}`, "slot");
-    if (id) slot.setAttribute("aria-label", `${t.clearSlot}: ${t.facts[id]}`);
-    row.append(slot);
-  }
-  row.append(node("span", "↔", "connector"));
-  return row;
+function reference(t) {
+  const r = node("section", "", "reference");
+  r.setAttribute("aria-label", t.reference);
+  r.append(node("small", `✓ ${t.reference}`));
+  const rules = node("div", "", "rules");
+  rules.append(node("strong", `▣ ${t.webOnly}`));
+  const domain = node("span");
+  domain.append(node("small", t.destination), node("strong", `${t.policyDomain}.example`));
+  rules.append(domain);
+  r.append(rules);
+  return r;
 }
-function connection(id, t) {
-  const c = node("article", "", "connection");
-  c.dataset.connection = id;
-  c.append(node("h3", t.links[id]));
-  const pair = node("div", "", "pair-lines");
-  for (const factId of CONNECTIONS[id]) pair.append(node("p", t.facts[factId]));
-  c.append(pair);
-  if (state.presented.includes(id)) c.append(node("strong", `✓ ${t.presented}`, "presented"));
-  else c.append(button(`arm-${id}`, t.useConnection, { type: "arm", id }, "primary"));
+function controls(t) {
+  const c = node("div", "", "controls");
+  const fire = button("fire", `⌖ ${t.fire}`, { type: "fire" }, "fire");
+  fire.disabled = !state.aim;
+  const finish = button("finish", t.finish, { type: "finish" }, "finish");
+  finish.disabled = state.revealed.length !== 4;
+  c.append(fire, finish);
   return c;
 }
-function notebook(t) {
-  const n = node("section", "", "notebook");
-  n.append(heading(t.notebook, "board-title"), node("p", t.selection, "caption"), slots(t));
-  const join = button("connect", `${t.connect} ↔`, { type: "connect" }, "primary");
-  join.disabled = state.selected.length !== 2;
-  n.append(join, node("p", t.notices[state.notice] || "", "board-feedback"));
-  const list = node("div", "", "evidence-cards");
-  for (const id of state.collected) {
-    const b = button(`card-${id}`, "", { type: "select", id }, "evidence-card");
-    b.append(node("small", t.views[SOURCES[id]]), node("span", t.facts[id]));
-    b.setAttribute("aria-pressed", String(state.selected.includes(id)));
-    list.append(b);
-  }
-  if (!state.collected.length) list.append(node("p", t.empty, "empty"));
-  n.append(list);
-  for (const id of state.connected) n.append(connection(id, t));
-  return n;
+function pauseDialog(t) {
+  const d = node("dialog", "", "pause-panel");
+  d.setAttribute("aria-labelledby", "pause-title");
+  d.append(
+    heading(t.paused, "pause-title"),
+    button("resume", t.resume, { type: "resume" }, "primary"),
+    button("hold", t.hold, { type: "hold" }),
+  );
+  d.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    dispatch({ type: "resume" });
+  });
+  return d;
+}
+function play(t) {
+  const p = node("div", "", "play");
+  const sender = node("div", "", "sender");
+  sender.append(node("span", "AO", "avatar"), node("strong", t.sender), node("span", t.message));
+  const status = node("div", "", "status");
+  status.append(
+    node("span", `${t.progress} ${hits(state)}/2`),
+    node("strong", `${score(state)}/100`),
+    button("pause", "Ⅱ", { type: "pause" }, "pause"),
+  );
+  status.querySelector("button").setAttribute("aria-label", t.pause);
+  const deadline = node("div", "", "request-window");
+  deadline.id = "request-window";
+  const label = node("span");
+  label.id = "window-label";
+  deadline.append(label, node("span", t.deadlineEnd));
+  const arena = node("section", "", "arena");
+  arena.setAttribute("aria-label", t.message);
+  for (const id of state.order) arena.append(tile(id, t));
+  p.append(
+    sender,
+    reference(t),
+    status,
+    deadline,
+    arena,
+    node("p", t.finishHint, "caption"),
+    controls(t),
+  );
+  return p;
 }
 function result(t) {
   const r = node("section", "", "result-panel");
   r.dataset.outcome = state.outcome;
-  r.append(
-    heading(t[state.outcome], "result-title"),
-    node("p", `${t.score}: ${score(state)} / 100`, "result-score"),
-    node("p", `${t.progress}: ${state.presented.length} / 2`),
-    node("p", t.resultSummary, "caption"),
-    button("retry", t.retry, { type: "retry" }, "primary"),
-    node("h3", t.review),
-  );
-  for (const [id, pair] of Object.entries(CONNECTIONS)) {
-    const e = node("section", "", "result-evidence");
-    e.append(node("h3", t.links[id]));
-    for (const factId of pair) {
-      const line = node("blockquote");
-      line.append(node("small", t.views[SOURCES[factId]]), node("mark", t.facts[factId]));
-      e.append(line);
-    }
-    e.append(node("p", t.explanations[id]));
+  const title = state.outcome === "complete" && score(state) === 100 ? t.cleared : t[state.outcome];
+  r.append(heading(title, "result-title"));
+  if (state.outcome === "held") r.append(node("p", t.heldNote));
+  else r.append(node("p", `${t.score}: ${score(state)} / 100 ${t.unit}`, "result-score"));
+  r.append(button("retry", t.retry, { type: "retry" }, "primary"));
+  const share = node("a", t.share, "share");
+  share.href = shareHref(state, lang, location.href, score(state), hits(state));
+  share.target = "_blank";
+  share.rel = "noopener noreferrer";
+  r.append(share, node("h3", t.review));
+  for (const id of ["application", "upload", "calendar", "task"]) {
+    const e = node("div", "", "result-evidence");
+    e.append(
+      node("strong", t.covers[id]),
+      node("p", `${TASKS[id].kind} · ${TASKS[id].site}.example`),
+      node("p", t.explanations[TASKS[id].mismatch || "normal"]),
+    );
     r.append(e);
   }
   const details = node("details");
-  details.append(node("summary", t.details), node("p", t.nuance));
+  details.append(node("summary", t.more), node("p", t.safeNext));
   r.append(details);
   return r;
-}
-function deadline(t) {
-  const d = node("div", "", "request-window");
-  d.id = "request-window";
-  const label = node("span");
-  label.id = "window-label";
-  d.append(label, node("span", t.windowEnd));
-  return d;
-}
-function workspace(t) {
-  const w = node("div", "", state.board ? "workspace board-open" : "workspace");
-  w.append(sourcePage(t), notebook(t));
-  return w;
 }
 function render() {
   const t = COPY[lang];
@@ -242,39 +268,20 @@ function render() {
   $("games").href = `../portal-demo/?demo=1&goto=${encodeURIComponent(`/problems?lang=${lang}`)}`;
   for (const l of ["ja", "en"]) $(l).setAttribute("aria-pressed", String(lang === l));
   $("feedback").textContent = t.notices[state.notice] || "";
-  const app = $("app");
-  app.replaceChildren();
-  if (state.outcome) app.append(result(t));
-  else {
-    app.append(
-      node("p", `${t.goal} · ${state.presented.length}/2 · ${score(state)}/100`, "case-status"),
-      node(
-        "p",
-        `${t.chances}: ${"●".repeat(3 - state.mistakes)}${"○".repeat(state.mistakes)}`,
-        "chances",
-      ),
-      deadline(t),
-      workspace(t),
-    );
-    const modes = node("nav", "", "mobile-modes");
-    modes.setAttribute("aria-label", t.sources);
-    modes.append(
-      button("show-sources", t.sources, { type: "board", open: false }),
-      button("show-board", `${t.notebook} (${state.collected.length})`, {
-        type: "board",
-        open: true,
-      }),
-    );
-    app.append(modes);
+  $("app").replaceChildren(state.outcome ? result(t) : play(t));
+  if (state.paused) {
+    const d = pauseDialog(t);
+    $("app").append(d);
+    d.showModal();
   }
   paint();
 }
 function paint() {
-  const d = $("request-window");
-  if (!d) return;
-  d.style.setProperty("--used", `${100 * (1 - state.remaining / ROUND_MS)}%`);
+  const e = $("request-window");
+  if (!e) return;
+  e.style.setProperty("--used", `${100 * (1 - state.remaining / ROUND_MS)}%`);
   $("window-label").textContent =
-    state.remaining < 20_000 ? COPY[lang].windowClosing : COPY[lang].windowOpen;
+    state.remaining < 20000 ? COPY[lang].closing : COPY[lang].deadline;
 }
 for (const l of ["ja", "en"])
   $(l).addEventListener("click", () => {
