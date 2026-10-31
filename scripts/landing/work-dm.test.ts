@@ -10,10 +10,13 @@ import {
   TASKS,
 } from "../../landing/work-dm/model.js";
 
+function play(random = Math.random) {
+  return start(random, false);
+}
+
 function shoot(state, id) {
-  let next = choose(state, { type: "reveal", id });
-  next = choose(next, { type: "aim", id });
-  return choose(next, { type: "fire" });
+  const next = choose(state, { type: "reveal", id });
+  return choose(next, { type: "fire", id });
 }
 function revealAll(state) {
   return Object.keys(TASKS).reduce((next, id) => choose(next, { type: "reveal", id }), state);
@@ -24,31 +27,52 @@ function shape(value) {
 }
 
 describe("peel the recruiting disguise, direct action prototype", () => {
-  test("starts directly on four stationary tasks with no score or preselected target", () => {
-    const state = start();
+  test("first card teaches on-card interaction without points or consuming the main clock", () => {
+    let state = start(() => 0);
+    expect(state.phase).toBe("practice");
+    expect(elapse(state, ROUND_MS * 10)).toEqual(state);
+    expect(choose(state, { type: "begin" })).toEqual(state);
+    expect(choose(state, { type: "fire", id: "practice" })).toEqual(state);
+    state = choose(state, { type: "reveal", id: "practice" });
+    expect(state.practiceRevealed).toBe(true);
+    state = choose(state, { type: "fire", id: "practice" });
+    expect(state.practiceShot).toBe(true);
+    expect(score(state)).toBe(0);
+    expect(state.shots).toEqual([]);
+    expect(state.revealed).toEqual([]);
+    expect(choose(state, { type: "fire", id: "practice" })).toEqual(state);
+    state = choose(state, { type: "begin" });
+    expect(state.phase).toBe("play");
+    expect(state.remaining).toBe(ROUND_MS);
+    expect(score(state)).toBe(0);
+    expect(state.revealed).toEqual([]);
+    expect(choose(state, { type: "begin" })).toEqual(state);
+  });
+  test("the main round starts with four stationary tasks and no hidden target-selection step", () => {
+    const state = play();
     expect(new Set(state.order)).toEqual(new Set(Object.keys(TASKS)));
     expect(state.revealed).toEqual([]);
-    expect(state.aim).toBeNull();
+    expect(state.phase).toBe("play");
     expect(state.outcome).toBeNull();
     expect(score(state)).toBe(0);
     expect(ROUND_MS).toBe(120_000);
   });
   test("retry layout is randomized but always bounded, including invalid injected random values", () => {
-    expect(start(() => 0).order).not.toEqual(start(() => 0.9).order);
+    expect(play(() => 0).order).not.toEqual(play(() => 0.9).order);
     for (const value of [-1, 1, Number.NaN, Number.POSITIVE_INFINITY])
-      expect(new Set(start(() => value).order)).toEqual(new Set(Object.keys(TASKS)));
+      expect(new Set(play(() => value).order)).toEqual(new Set(Object.keys(TASKS)));
   });
-  test("peeling and aiming do not award points or execute a request", () => {
-    const state = choose(revealAll(start()), { type: "aim", id: "application" });
+  test("peeling does not award points or execute a request", () => {
+    const state = revealAll(play());
     expect(state.revealed).toHaveLength(4);
     expect(state.shots).toEqual([]);
     expect(score(state)).toBe(0);
     expect(state.outcome).toBeNull();
   });
-  test("shooting requires a visible payload and a selected target, not hidden investigation clicks", () => {
-    const state = start(() => 0);
-    expect(choose(state, { type: "aim", id: "application" })).toEqual(state);
-    expect(choose(state, { type: "fire" })).toEqual(state);
+  test("shooting requires only a visible payload, not target selection or hidden investigation clicks", () => {
+    const state = play(() => 0);
+    expect(choose(state, { type: "fire", id: "application" })).toEqual(state);
+    expect(choose(state, { type: "fire", id: "application" })).toEqual(state);
     expect(score(shoot(state, "application"))).toBe(50);
   });
   test("the two concrete policy conflicts earn100 in either order, without investigation prerequisites", () => {
@@ -56,7 +80,7 @@ describe("peel the recruiting disguise, direct action prototype", () => {
       ["application", "upload"],
       ["upload", "application"],
     ]) {
-      let state = revealAll(start());
+      let state = revealAll(play());
       for (const id of order) state = shoot(state, id);
       expect(score(state)).toBe(100);
       expect(hits(state)).toBe(2);
@@ -64,37 +88,37 @@ describe("peel the recruiting disguise, direct action prototype", () => {
     }
   });
   test("shooting every task earns only50; later correct shots do not erase wrong shots", () => {
-    let state = start();
+    let state = play();
     for (const id of Object.keys(TASKS)) state = shoot(state, id);
     expect(state.shots).toHaveLength(4);
     expect(score(state)).toBe(50);
     expect(choose(state, { type: "finish" }).outcome).toBe("complete");
-    const wrongThenRight = shoot(shoot(start(), "calendar"), "application");
+    const wrongThenRight = shoot(shoot(play(), "calendar"), "application");
     expect(score(wrongThenRight)).toBe(25);
   });
   test("a target cannot receive duplicate rewards or penalties from rapid clicks", () => {
     for (const id of Object.keys(TASKS)) {
-      const state = shoot(start(), id);
+      const state = shoot(play(), id);
       expect(shoot(state, id)).toEqual(state);
-      expect(choose(state, { type: "fire" })).toEqual(state);
+      expect(choose(state, { type: "fire", id: "application" })).toEqual(state);
     }
   });
   test("finishing a revealed but untouched board scores0; hidden tasks cannot be graded as completed", () => {
-    const state = start(() => 0);
+    const state = play(() => 0);
     expect(choose(state, { type: "finish" })).toEqual(state);
     const done = choose(revealAll(state), { type: "finish" });
     expect(done.outcome).toBe("complete");
     expect(score(done)).toBe(0);
   });
   test("early safe stopping is ungraded, not a failed or low-scoring judgement", () => {
-    const held = choose(choose(start(), { type: "pause" }), { type: "hold" });
+    const held = choose(choose(play(), { type: "pause" }), { type: "hold" });
     expect(held.outcome).toBe("held");
     expect(COPY.ja.heldNote).toContain("採点なし");
     expect(COPY.en.heldNote).toContain("Not graded");
     expect(elapse(held, ROUND_MS)).toEqual(held);
   });
   test("pause preserves time and blocks play; resume restores the same peeled targets and score", () => {
-    const playing = shoot(start(), "application");
+    const playing = shoot(play(), "application");
     const paused = choose(playing, { type: "pause" });
     expect(elapse(paused, ROUND_MS)).toEqual(paused);
     expect(shoot(paused, "upload")).toEqual(paused);
@@ -104,24 +128,24 @@ describe("peel the recruiting disguise, direct action prototype", () => {
     expect(score(resumed)).toBe(50);
   });
   test("unanswered timeout is0, earned partial points remain, and no final actions add scores", () => {
-    const unanswered = elapse(start(), ROUND_MS);
-    const partial = elapse(shoot(start(), "application"), ROUND_MS);
+    const unanswered = elapse(play(), ROUND_MS);
+    const partial = elapse(shoot(play(), "application"), ROUND_MS);
     expect(unanswered.outcome).toBe("timeout");
     expect(score(unanswered)).toBe(0);
     expect(score(partial)).toBe(50);
-    for (const ended of [unanswered, partial, choose(revealAll(start()), { type: "finish" })]) {
-      for (const type of ["reveal", "aim", "fire", "pause", "resume", "hold", "finish"])
+    for (const ended of [unanswered, partial, choose(revealAll(play()), { type: "finish" })]) {
+      for (const type of ["reveal", "fire", "pause", "resume", "hold", "finish", "begin"])
         expect(choose(ended, { type, id: "upload" })).toEqual(ended);
       expect(elapse(ended, ROUND_MS)).toEqual(ended);
     }
   });
   test("restart resets all effects, target, score and timing, with finite timing at extremes", () => {
-    shoot(start(), "application");
-    const reset = start();
+    shoot(play(), "application");
+    const reset = play();
     expect(reset.shots).toEqual([]);
     expect(reset.revealed).toEqual([]);
     expect(reset.flash).toBeNull();
-    expect(reset.aim).toBeNull();
+    expect(reset.phase).toBe("play");
     expect(reset.paused).toBe(false);
     expect(reset.remaining).toBe(ROUND_MS);
     for (const delta of [0, -1, Number.NaN, Number.POSITIVE_INFINITY])
@@ -143,7 +167,7 @@ describe("peel the recruiting disguise, direct action prototype", () => {
   });
   test("manual X intent encodes actual results and current reachable game URL without spoilers or private query data", () => {
     for (const lang of ["ja", "en"]) {
-      const state = choose(revealAll(shoot(start(), "application")), { type: "finish" });
+      const state = choose(revealAll(shoot(play(), "application")), { type: "finish" });
       const u = new URL(
         shareHref(
           state,
@@ -158,7 +182,7 @@ describe("peel the recruiting disguise, direct action prototype", () => {
       expect(u.searchParams.get("text")).toContain("50/100");
       expect(u.searchParams.get("text")).not.toContain("aoba-skills");
       expect(u.searchParams.get("url")).toBe(`https://preview.example/work-dm/?lang=${lang}`);
-      const held = choose(choose(start(), { type: "pause" }), { type: "hold" });
+      const held = choose(choose(play(), { type: "pause" }), { type: "hold" });
       const text = new URL(
         shareHref(held, lang, "https://preview.example/work-dm/", 0, 0),
       ).searchParams.get("text");

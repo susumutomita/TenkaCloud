@@ -1,9 +1,10 @@
-import { COPY, shareHref } from "./copy.js?v=e6c7188599";
-import { choose, elapse, hits, ROUND_MS, score, start, TASKS } from "./model.js?v=e6c7188599";
+import { COPY, shareHref } from "./copy.js?v=b753193fc7";
+import { choose, elapse, hits, ROUND_MS, score, start, TASKS } from "./model.js?v=b753193fc7";
 
 let lang = new URLSearchParams(location.search).get("lang") === "en" ? "en" : "ja";
 let state = start();
 let last = performance.now();
+const shotReadyAt = new Map();
 const $ = (id) => document.getElementById(id);
 function node(tag, text = "", cls = "") {
   const e = document.createElement(tag);
@@ -11,12 +12,37 @@ function node(tag, text = "", cls = "") {
   if (cls) e.className = cls;
   return e;
 }
+function canActivate(action, event, moved) {
+  if (["reveal", "fire"].includes(action.type) && event.detail > 0 && moved) return false;
+  if (action.type === "begin" && event.detail > 1) return false;
+  if (action.type !== "fire") return true;
+  if (event.detail > 1 || performance.now() < (shotReadyAt.get(action.id) || 0)) {
+    $("feedback").textContent = COPY[lang].releaseHint;
+    return false;
+  }
+  return true;
+}
 function button(id, text, action, cls = "") {
   const b = node("button", text, cls);
   b.type = "button";
   b.id = id;
-  b.addEventListener("click", () => {
-    if (b.isConnected) dispatch(action);
+  let origin = null,
+    moved = false;
+  if (["reveal", "fire"].includes(action.type)) {
+    b.addEventListener("pointerdown", (e) => {
+      origin = { x: e.clientX, y: e.clientY };
+      moved = false;
+    });
+    b.addEventListener("pointermove", (e) => {
+      if (origin && Math.hypot(e.clientX - origin.x, e.clientY - origin.y) > 8) moved = true;
+    });
+    b.addEventListener("pointercancel", () => {
+      moved = true;
+      origin = null;
+    });
+  }
+  b.addEventListener("click", (event) => {
+    if (b.isConnected && canActivate(action, event, moved)) dispatch(action);
   });
   return b;
 }
@@ -37,63 +63,59 @@ function clock(now) {
     $("result-title")?.focus();
   }
 }
-function shotLine(id) {
+function impact(id) {
   const target = $(`tile-${id}`)?.getBoundingClientRect();
-  const cannon = $("fire")?.getBoundingClientRect();
-  if (!target || !cannon) return null;
-  return {
-    x: cannon.x + cannon.width / 2,
-    y: cannon.y,
-    tx: target.x + target.width / 2,
-    ty: target.y + target.height / 2,
-  };
-}
-function beam(line) {
-  if (!line) return;
-  $("beam")?.remove();
-  const e = node("div", "", "beam");
-  e.id = "beam";
+  if (!target) return;
+  $("impact")?.remove();
+  const e = node("div", "⌖", "impact");
+  e.id = "impact";
   e.setAttribute("aria-hidden", "true");
-  const dx = line.tx - line.x,
-    dy = line.ty - line.y;
-  e.style.left = `${line.x}px`;
-  e.style.top = `${line.y}px`;
-  e.style.width = `${Math.hypot(dx, dy)}px`;
-  e.style.transform = `rotate(${Math.atan2(dy, dx)}rad)`;
+  e.style.left = `${target.x + target.width / 2}px`;
+  e.style.top = `${target.y + target.height / 2}px`;
   document.body.append(e);
   setTimeout(() => e.remove(), 260);
 }
 function nextTarget() {
   const id = state.order.find((item) => !state.shots.includes(item));
   if (!id) return "finish";
-  return state.revealed.includes(id) ? `aim-${id}` : `peel-${id}`;
+  return state.revealed.includes(id) ? `shoot-${id}` : `peel-${id}`;
 }
 function focusAfter(action) {
   if (state.outcome) return $("result-title")?.focus();
   if (state.paused) return $("resume")?.focus();
   const targets = {
-    reveal: `aim-${action.id}`,
-    aim: "fire",
-    fire: `tile-${state.flash}`,
-    retry: nextTarget(),
+    reveal: `shoot-${action.id}`,
+    fire: state.phase === "practice" ? "begin" : `tile-${state.flash}`,
+    retry: state.phase === "practice" ? "peel-practice" : nextTarget(),
+    begin: nextTarget(),
     resume: "pause",
   };
-  $(targets[action.type])?.focus({ preventScroll: ["aim", "fire"].includes(action.type) });
+  $(targets[action.type])?.focus({
+    preventScroll: action.type === "fire" && state.phase === "play",
+  });
   if (action.type === "reveal") $(`tile-${action.id}`)?.scrollIntoView({ block: "center" });
 }
 function dispatch(action) {
   clock(performance.now());
-  const line = action.type === "fire" ? shotLine(state.aim) : null;
   const previous = state;
-  state = action.type === "retry" ? start() : choose(state, action);
+  state =
+    action.type === "retry"
+      ? start(Math.random, state.phase === "practice")
+      : choose(state, action);
   if (state === previous) return;
+  if (["retry", "begin"].includes(action.type) || state.outcome) shotReadyAt.clear();
+  if (action.type === "reveal") shotReadyAt.set(action.id, performance.now() + 500);
   last = performance.now();
   render();
   focusAfter(action);
-  if (action.type === "fire" && state.shots.length > previous.shots.length) beam(line);
+  if (
+    action.type === "fire" &&
+    (state.shots.length > previous.shots.length || state.practiceShot !== previous.practiceShot)
+  )
+    impact(action.id);
 }
-function cover(id, t) {
-  const b = button(`peel-${id}`, "", { type: "reveal", id }, "cover");
+function cover(id, t, key = id) {
+  const b = button(`peel-${key}`, "", { type: "reveal", id: key }, "cover");
   b.setAttribute("aria-label", `${t.peel}: ${t.covers[id]}`);
   b.append(node("span", "↔", "rub-icon"), node("strong", t.covers[id]), node("small", t.peelHint));
   let x = null,
@@ -110,7 +132,7 @@ function cover(id, t) {
     b.style.setProperty("--peel", String(progress));
   });
   b.addEventListener("pointerup", () => {
-    if (progress >= 0.35 && b.isConnected) dispatch({ type: "reveal", id });
+    if (progress >= 0.35 && b.isConnected) dispatch({ type: "reveal", id: key });
     else b.style.setProperty("--peel", "0");
     x = null;
   });
@@ -133,39 +155,47 @@ function payload(id, t) {
   );
   return p;
 }
-function revealedTile(e, id, t, spent, correct) {
-  const target = button(`aim-${id}`, "", { type: "aim", id }, "target");
+function revealedTile(e, id, key, t, spent, correct, training) {
+  const target = button(`shoot-${key}`, "", { type: "fire", id: key }, "target");
   target.setAttribute(
     "aria-label",
-    `${t.aim}: ${t.covers[id]}, ${t.actions[TASKS[id].kind]}, ${TASKS[id].site}.example`,
+    `${t.fire}: ${t.covers[id]}, ${t.actions[TASKS[id].kind]}, ${TASKS[id].site}.example`,
   );
-  target.setAttribute("aria-pressed", String(state.aim === id));
   target.disabled = spent;
-  target.append(payload(id, t));
+  const waiting = performance.now() < (shotReadyAt.get(key) || 0);
+  target.setAttribute("aria-disabled", String(spent || waiting));
+  target.append(payload(id, t), node("small", waiting ? t.releaseHint : t.directFire, "shot-hint"));
   e.append(target);
   if (spent)
-    e.append(node("span", correct ? `＋50 · ${t.blocked}` : `−25 · ${t.matched}`, "shot-label"));
-  if (state.notice === "revealed" && state.flash === id) {
-    const peel = cover(id, t);
+    e.append(
+      node(
+        "span",
+        training ? t.practiceBlocked : correct ? `＋50 · ${t.blocked}` : `−25 · ${t.matched}`,
+        "shot-label",
+      ),
+    );
+  if (state.notice === "revealed" && state.flash === key) {
+    const peel = cover(id, t, key);
     peel.tabIndex = -1;
     peel.disabled = true;
     peel.setAttribute("aria-hidden", "true");
     e.append(peel);
   }
 }
-function tile(id, t) {
-  const revealed = state.revealed.includes(id),
-    spent = state.shots.includes(id);
-  const correct = spent && Boolean(TASKS[id].mismatch);
+function tile(id, t, training = false) {
+  const key = training ? "practice" : id;
+  const revealed = training ? state.practiceRevealed : state.revealed.includes(id);
+  const spent = training ? state.practiceShot : state.shots.includes(id);
+  const correct = spent && (training || Boolean(TASKS[id].mismatch));
   const e = node("article", "", "tile");
-  e.id = `tile-${id}`;
+  e.id = `tile-${key}`;
   e.tabIndex = -1;
   if (revealed) e.classList.add("revealed");
-  if (state.aim === id) e.classList.add("aimed");
   if (spent) e.classList.add(correct ? "hit" : "miss");
-  if (state.flash === id) e.classList.add(`flash-${state.notice}`);
-  if (revealed) revealedTile(e, id, t, spent, correct);
-  else e.append(cover(id, t));
+  if (state.flash === key)
+    e.classList.add(`flash-${state.notice === "practiceHit" ? "hit" : state.notice}`);
+  if (revealed) revealedTile(e, id, key, t, spent, correct, training);
+  else e.append(cover(id, t, key));
   return e;
 }
 function reference(t) {
@@ -182,11 +212,15 @@ function reference(t) {
 }
 function controls(t) {
   const c = node("div", "", "controls");
-  const fire = button("fire", `⌖ ${t.fire}`, { type: "fire" }, "fire");
-  fire.disabled = !state.aim;
-  const finish = button("finish", t.finish, { type: "finish" }, "finish");
-  finish.disabled = state.revealed.length !== 4;
-  c.append(fire, finish);
+  const remaining = 4 - state.revealed.length;
+  const finish = button(
+    "finish",
+    remaining ? t.finishRemaining.replace("{count}", String(remaining)) : t.finish,
+    { type: "finish" },
+    "finish",
+  );
+  finish.disabled = remaining !== 0;
+  c.append(finish);
   return c;
 }
 function pauseDialog(t) {
@@ -203,17 +237,37 @@ function pauseDialog(t) {
   });
   return d;
 }
+function lesson(t) {
+  const p = node("section", "", "practice-panel");
+  const hint = state.practiceShot
+    ? t.practiceDone
+    : state.practiceRevealed
+      ? t.practiceCompare
+      : t.practicePeel;
+  p.append(node("p", hint, "lesson-hint"), tile("application", t, true));
+  if (state.practiceShot) p.append(button("begin", t.begin, { type: "begin" }, "primary begin"));
+  return p;
+}
 function play(t) {
   const p = node("div", "", "play");
+  const training = state.phase === "practice";
   const sender = node("div", "", "sender");
-  sender.append(node("span", "AO", "avatar"), node("strong", t.sender), node("span", t.message));
-  const status = node("div", "", "status");
-  status.append(
-    node("span", `${t.progress} ${hits(state)}/2`),
-    node("strong", `${score(state)}/100`),
-    button("pause", "Ⅱ", { type: "pause" }, "pause"),
+  sender.append(
+    node("span", "AO", "avatar"),
+    node("strong", t.sender),
+    node("span", training ? t.practiceMessage : t.message),
   );
-  status.querySelector("button").setAttribute("aria-label", t.pause);
+  const status = node("div", "", "status");
+  status.append(node("span", training ? t.practiceLabel : `${t.progress} ${hits(state)}/2`));
+  if (!training) status.append(node("strong", `${score(state)}/100`));
+  const pause = button("pause", "Ⅱ", { type: "pause" }, "pause");
+  pause.setAttribute("aria-label", t.pause);
+  status.append(pause);
+  p.append(sender, reference(t), status);
+  if (training) {
+    p.append(lesson(t));
+    return p;
+  }
   const deadline = node("div", "", "request-window");
   deadline.id = "request-window";
   const label = node("span");
@@ -222,15 +276,7 @@ function play(t) {
   const arena = node("section", "", "arena");
   arena.setAttribute("aria-label", t.message);
   for (const id of state.order) arena.append(tile(id, t));
-  p.append(
-    sender,
-    reference(t),
-    status,
-    deadline,
-    arena,
-    node("p", t.finishHint, "caption"),
-    controls(t),
-  );
+  p.append(deadline, arena, node("p", t.finishHint, "caption"), controls(t));
   return p;
 }
 function result(t) {
@@ -264,7 +310,9 @@ function render() {
   const t = COPY[lang];
   document.documentElement.lang = lang;
   document.title = `${t.title} | TenkaCloud`;
-  for (const id of ["title", "instruction", "format", "safety", "games"]) $(id).textContent = t[id];
+  for (const id of ["title", "instruction", "safety", "games"]) $(id).textContent = t[id];
+  $("format").textContent =
+    state.phase === "practice" && !state.outcome ? t.practiceLabel : t.format;
   $("games").href = `../portal-demo/?demo=1&goto=${encodeURIComponent(`/problems?lang=${lang}`)}`;
   for (const l of ["ja", "en"]) $(l).setAttribute("aria-pressed", String(lang === l));
   $("feedback").textContent = t.notices[state.notice] || "";
@@ -277,6 +325,16 @@ function render() {
   paint();
 }
 function paint() {
+  for (const [id, until] of shotReadyAt) {
+    if (performance.now() < until) continue;
+    shotReadyAt.delete(id);
+    const target = $(`shoot-${id}`);
+    if (target && !target.disabled) {
+      target.setAttribute("aria-disabled", "false");
+      const hint = target.querySelector(".shot-hint");
+      if (hint) hint.textContent = COPY[lang].directFire;
+    }
+  }
   const e = $("request-window");
   if (!e) return;
   e.style.setProperty("--used", `${100 * (1 - state.remaining / ROUND_MS)}%`);
@@ -293,6 +351,14 @@ for (const l of ["ja", "en"])
     render();
     $(l).focus();
   });
+document.addEventListener("keydown", (event) => {
+  if (
+    event.repeat &&
+    event.target instanceof Element &&
+    event.target.closest(".cover,.target,.begin")
+  )
+    event.preventDefault();
+});
 document.addEventListener("visibilitychange", () => {
   last = performance.now();
 });
