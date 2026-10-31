@@ -1,32 +1,25 @@
-import { COPY } from "./copy.js?v=e13873c338";
-import { choose, elapse, ROUND_MS, start } from "./model.js?v=e13873c338";
+import { COPY } from "./copy.js?v=82ce93a3e3";
+import {
+  CONNECTIONS,
+  choose,
+  elapse,
+  ROUND_MS,
+  SOURCES,
+  score,
+  start,
+} from "./model.js?v=82ce93a3e3";
 
-let lang = new URLSearchParams(location.search).get("lang") === "en" ? "en" : "ja",
-  state = start(),
-  last = performance.now();
-const $ = (id) => document.getElementById(id),
-  app = $("app");
+let lang = new URLSearchParams(location.search).get("lang") === "en" ? "en" : "ja";
+let state = start();
+let last = performance.now();
+const $ = (id) => document.getElementById(id);
 function node(tag, text = "", cls = "") {
   const n = document.createElement(tag);
   n.textContent = text;
   if (cls) n.className = cls;
   return n;
 }
-function focusView() {
-  const e = $("panel-title") || $("screen-title") || $("result-title");
-  e?.focus({ preventScroll: true });
-  if (!state.panel && state.stage === "invite") {
-    const screen = document.querySelector(".screen");
-    if (screen) screen.scrollTop = screen.scrollHeight;
-  }
-}
-function dispatch(action) {
-  clock(performance.now());
-  state = action === "retry" ? start() : choose(state, action);
-  render();
-  focusView();
-}
-function button(id, text, action, cls = "choice") {
+function button(id, text, action, cls = "") {
   const b = node("button", text, cls);
   b.id = id;
   b.type = "button";
@@ -35,195 +28,254 @@ function button(id, text, action, cls = "choice") {
   });
   return b;
 }
-function heading(text, id = "screen-title") {
+function heading(text, id) {
   const h = node("h2", text);
   h.id = id;
   h.tabIndex = -1;
   return h;
 }
+function focusAfter(action) {
+  if (state.outcome) return $("result-title")?.focus();
+  const ids = {
+    collect: `fact-${action.id}`,
+    select: `card-${action.id}`,
+    connect:
+      state.notice === "linked" ? `arm-${state.connected.at(-1)}` : `card-${state.collected[0]}`,
+    arm: "request-target",
+    present: "opponent-reply",
+    open: "view-title",
+    board: state.board ? "board-title" : "view-title",
+    retry: "view-title",
+  };
+  $(ids[action.type])?.focus({ preventScroll: ["collect", "select"].includes(action.type) });
+}
+function dispatch(action) {
+  clock(performance.now());
+  state = action.type === "retry" ? start() : choose(state, action);
+  last = performance.now();
+  render();
+  focusAfter(action);
+}
 function clock(now) {
   const delta = Math.max(0, now - last);
   last = now;
   if (document.hidden) return;
-  const ended = state.outcome;
+  const wasOver = state.outcome;
   state = elapse(state, delta);
-  if (!ended && state.outcome) {
+  if (!wasOver && state.outcome) {
     render();
-    focusView();
+    $("result-title")?.focus();
   }
 }
-function paint() {
-  const p = $("request-window");
-  if (!p) return;
-  p.style.setProperty("--used", `${100 * (1 - state.remaining / ROUND_MS)}%`);
-  $("window-label").textContent = state.panel
-    ? COPY[lang].paused
-    : state.remaining < 8000
-      ? COPY[lang].nearing
-      : COPY[lang].accepting;
+function fact(id, t) {
+  const b = button(`fact-${id}`, "", { type: "collect", id }, "fact");
+  const saved = state.collected.includes(id);
+  b.setAttribute("aria-label", `${saved ? t.savedPin : t.pin}: ${t.facts[id]}`);
+  b.append(node("span", t.facts[id]), node("span", saved ? "✓" : "+", "pin"));
+  b.querySelector(".pin").setAttribute("aria-hidden", "true");
+  b.dataset.fact = id;
+  return b;
 }
-function panel(t) {
-  const s = node("section", "", "sheet");
-  s.setAttribute("aria-labelledby", "panel-title");
-  if (state.panel === "tools") {
-    s.append(heading(t.toolsHeading, "panel-title"), button("company", t.company, "company"));
-    if (state.stage === "setup") s.append(button("verify", t.verify, "verify"));
-  } else if (state.panel === "company") {
-    s.append(
-      heading(t.companyTitle, "panel-title"),
-      node("p", t.companyBody),
-      node("p", t.companyNext, "muted"),
-    );
-  } else {
-    s.append(
-      heading(t.verificationTitle, "panel-title"),
-      node("blockquote", state.variant === "install" ? t.installVerified : t.browserVerified),
-    );
+function pageNav(t) {
+  const n = node("nav", "", "page-nav");
+  n.setAttribute("aria-label", t.sources);
+  for (const [view, label] of Object.entries(t.views)) {
+    const b = button(`open-${view}`, label, { type: "open", view });
+    b.setAttribute("aria-current", String(view === state.view));
+    n.append(b);
   }
-  s.append(button("close-panel", t.close, "close", "primary"));
+  return n;
+}
+function dm(t) {
+  const d = node("div", "", "dm");
+  const profile = button("profile-open", "", { type: "open", view: "profile" }, "profile-link");
+  profile.setAttribute("aria-label", t.profileOpen);
+  profile.append(
+    node("span", "HO", "avatar"),
+    node("strong", t.sender),
+    node("small", t.senderRole),
+  );
+  const request = state.armed
+    ? button("request-target", "", { type: "present" }, "bubble request target")
+    : node("div", "", "bubble request");
+  request.append(node("p", t.request));
+  if (state.armed) request.append(node("strong", `${t.target} ↓`, "target-label"));
+  d.append(profile, node("p", t.greeting, "bubble"), request);
+  const link = button("assessment-link", "", { type: "open", view: "assessment" }, "link-preview");
+  link.append(
+    node("span", "↗", "site-icon"),
+    node("strong", t.openSite),
+    node("small", t.facts.domain),
+  );
+  d.append(link);
+  if (state.presented.length) {
+    for (const id of state.presented)
+      d.append(node("p", `${t.presented}: ${t.links[id]}`, "bubble self"));
+    const reply = node("p", t.reply, "bubble");
+    reply.id = "opponent-reply";
+    reply.tabIndex = -1;
+    d.append(reply);
+  }
+  return d;
+}
+function sourcePage(t) {
+  const s = node("section", "", "browser");
+  s.append(pageNav(t));
+  const screen = node("div", "", "screen");
+  screen.append(heading(t.sourceNames[state.view], "view-title"));
+  const pages = {
+    dm: () => screen.append(dm(t)),
+    profile: () => screen.append(node("p", t.profileBio), fact("role", t)),
+    assessment: () =>
+      screen.append(
+        fact("domain", t),
+        node("div", "↓", "app-symbol"),
+        node("h3", t.assessmentTitle),
+        node("p", t.assessmentLead),
+        node("small", t.fileLabel),
+        fact("application", t),
+        fact("deadline", t),
+      ),
+    official: () => {
+      screen.append(node("h3", t.officialTitle), node("p", t.officialLead, "muted"));
+      for (const id of [
+        "officialDomain",
+        "officialApplication",
+        "officialDeadline",
+        "officialRole",
+      ])
+        screen.append(fact(id, t));
+    },
+  };
+  pages[state.view]();
+  screen.append(node("p", t.evidenceHint, "caption"));
+  s.append(screen);
   return s;
+}
+function slots(t) {
+  const row = node("div", "", "slots");
+  for (let i = 0; i < 2; i++) {
+    const id = state.selected[i];
+    const slot = id
+      ? button(`slot-${i}`, t.facts[id], { type: "select", id }, "slot filled")
+      : node("div", `${t.slot} ${i + 1}\n${t.slotEmpty}`, "slot");
+    if (id) slot.setAttribute("aria-label", `${t.clearSlot}: ${t.facts[id]}`);
+    row.append(slot);
+  }
+  row.append(node("span", "↔", "connector"));
+  return row;
+}
+function connection(id, t) {
+  const c = node("article", "", "connection");
+  c.dataset.connection = id;
+  c.append(node("h3", t.links[id]));
+  const pair = node("div", "", "pair-lines");
+  for (const factId of CONNECTIONS[id]) pair.append(node("p", t.facts[factId]));
+  c.append(pair);
+  if (state.presented.includes(id)) c.append(node("strong", `✓ ${t.presented}`, "presented"));
+  else c.append(button(`arm-${id}`, t.useConnection, { type: "arm", id }, "primary"));
+  return c;
+}
+function notebook(t) {
+  const n = node("section", "", "notebook");
+  n.append(heading(t.notebook, "board-title"), node("p", t.selection, "caption"), slots(t));
+  const join = button("connect", `${t.connect} ↔`, { type: "connect" }, "primary");
+  join.disabled = state.selected.length !== 2;
+  n.append(join, node("p", t.notices[state.notice] || "", "board-feedback"));
+  const list = node("div", "", "evidence-cards");
+  for (const id of state.collected) {
+    const b = button(`card-${id}`, "", { type: "select", id }, "evidence-card");
+    b.append(node("small", t.views[SOURCES[id]]), node("span", t.facts[id]));
+    b.setAttribute("aria-pressed", String(state.selected.includes(id)));
+    list.append(b);
+  }
+  if (!state.collected.length) list.append(node("p", t.empty, "empty"));
+  n.append(list);
+  for (const id of state.connected) n.append(connection(id, t));
+  return n;
 }
 function result(t) {
   const r = node("section", "", "result-panel");
   r.dataset.outcome = state.outcome;
   r.append(
     heading(t[state.outcome], "result-title"),
-    node("p", `${t.score}: ${state.points} / 100 ${t.unit}`, "result-score"),
-    node("p", t[`${state.outcome}Short`]),
-    button("retry", t.retry, "retry", "primary"),
+    node("p", `${t.score}: ${score(state)} / 100`, "result-score"),
+    node("p", `${t.progress}: ${state.presented.length} / 2`),
+    node("p", t.resultSummary, "caption"),
+    button("retry", t.retry, { type: "retry" }, "primary"),
+    node("h3", t.review),
   );
-  r.append(evidence(t));
-  const d = node("details");
-  const reason =
-    state.outcome === "resolved"
-      ? state.variant === "install"
-        ? t.resolvedInstall
-        : t.resolvedBrowser
-      : t[`${state.outcome}Reason`];
-  d.append(node("summary", t.deeper), node("p", reason), node("p", t.nuance));
-  r.append(d);
+  for (const [id, pair] of Object.entries(CONNECTIONS)) {
+    const e = node("section", "", "result-evidence");
+    e.append(node("h3", t.links[id]));
+    for (const factId of pair) {
+      const line = node("blockquote");
+      line.append(node("small", t.views[SOURCES[factId]]), node("mark", t.facts[factId]));
+      e.append(line);
+    }
+    e.append(node("p", t.explanations[id]));
+    r.append(e);
+  }
+  const details = node("details");
+  details.append(node("summary", t.details), node("p", t.nuance));
+  r.append(details);
   return r;
 }
-function requestEvidence(e, t) {
-  const request = node("blockquote", "", "request-evidence");
-  const installing = state.variant === "install";
-  request.append(node(installing ? "mark" : "span", installing ? t.installBody : t.browserBody));
-  e.append(request);
-  if (installing) e.append(node("p", t.requestRisk));
-  if (state.checked)
-    e.append(node("blockquote", installing ? t.installVerified : t.browserVerified));
-}
-function evidence(t) {
-  const e = node("section", "", "evidence");
-  e.append(heading(t.evidence, "evidence-title"));
-  e.append(node("p", t.introduction, "bubble"));
-  if (state.decisionStage !== "dm") e.append(node("p", t.invitation, "bubble"));
-  if (state.decisionStage === "setup") requestEvidence(e, t);
-  else e.append(node("p", t.pending));
-  e.append(
-    node("h3", t.next),
-    node("p", state.variant === "browser" && state.checked ? t.nextBrowser : t.stoppedReason),
-  );
-  return e;
-}
-function header(t) {
-  document.documentElement.lang = lang;
-  document.title = `${t.title} | TenkaCloud`;
-  for (const id of ["title", "instruction", "safety", "games"]) $(id).textContent = t[id];
-  $("exit").hidden = true;
-  $("instruction").hidden = Boolean(state.outcome);
-  $("format").textContent = t.format;
-  $("games").href = `../portal-demo/?demo=1&goto=${encodeURIComponent(`/problems?lang=${lang}`)}`;
-  for (const l of ["ja", "en"]) $(l).setAttribute("aria-pressed", String(lang === l));
-}
-function dmScreen(content, t) {
-  const profile = node("div", "", "profile");
-  profile.append(node("span", "KO", "avatar"), node("strong", t.person), node("small", t.role));
-  const title =
-    state.stage === "dm" ? { ja: "新しいDM", en: "New DM" } : { ja: "メッセージ", en: "Messages" };
-  content.append(
-    profile,
-    heading(title[lang]),
-    node("p", t.introduction, "bubble"),
-    node("p", t.incoming, "bubble"),
-    node("p", t.offer, "bubble"),
-  );
-  if (state.stage === "dm") content.append(button("discuss", t.discuss, "discuss", "reply"));
-  else
-    content.append(
-      node("p", t.reply, "bubble self"),
-      node("p", t.jobDetail, "bubble"),
-      node("p", t.invitation, "bubble"),
-      button("visit", `${t.visit} ↗`, "visit", "site-link"),
-    );
-}
-function siteScreen(content, t) {
-  content.append(
-    node(
-      "div",
-      state.variant === "install" ? "assessment.aoba-skills.example" : "careers.aoba.example",
-      "address",
-    ),
-  );
-  if (state.stage === "site") {
-    content.append(
-      node("div", "</>", "site-icon"),
-      heading(t.siteIntro),
-      button("begin", t.begin, "begin", "primary"),
-    );
-    return;
-  }
-  const installing = state.variant === "install";
-  content.append(
-    node("div", installing ? "↓" : "</>", "site-icon"),
-    heading(installing ? t.installHeading : t.browserHeading),
-    node("p", installing ? t.installBody : t.browserBody),
-    button("proceed", installing ? t.install : t.proceed, "proceed", "primary"),
-  );
-}
-function dock(t) {
-  const d = node("div", "", "dock"),
-    window = node("div", "", "request-window"),
-    label = node("span");
-  window.id = "request-window";
+function deadline(t) {
+  const d = node("div", "", "request-window");
+  d.id = "request-window";
+  const label = node("span");
   label.id = "window-label";
-  window.append(label, node("span", lang === "ja" ? "→ 終了" : "→ Finish"));
-  const controls = node("div", "", "controls");
-  controls.append(button("tools", t.tools, "tools"), button("hold", t.exit, "hold"));
-  d.append(window, controls);
+  d.append(label, node("span", t.windowEnd));
   return d;
 }
-function device(t) {
-  const d = node("section", "", "device");
-  d.dataset.stage = state.stage;
-  const top = node("div", "", "app-bar"),
-    chat = state.stage === "dm" || state.stage === "invite";
-  top.append(
-    node("span", chat ? t.network : t.page),
-    node("small", lang === "ja" ? "模擬" : "Simulated"),
-  );
-  const content = node("div", "", "screen");
-  if (chat) dmScreen(content, t);
-  else siteScreen(content, t);
-  const controls = dock(t);
-  d.append(top, content, controls);
-  if (state.panel) {
-    const overlay = node("div", "", "sheet-backdrop");
-    content.inert = true;
-    controls.inert = true;
-    overlay.append(panel(t));
-    d.append(overlay);
-  }
-  return d;
+function workspace(t) {
+  const w = node("div", "", state.board ? "workspace board-open" : "workspace");
+  w.append(sourcePage(t), notebook(t));
+  return w;
 }
 function render() {
   const t = COPY[lang];
-  header(t);
+  document.documentElement.lang = lang;
+  document.title = `${t.title} | TenkaCloud`;
+  for (const id of ["title", "instruction", "format", "safety", "games"]) $(id).textContent = t[id];
+  $("games").href = `../portal-demo/?demo=1&goto=${encodeURIComponent(`/problems?lang=${lang}`)}`;
+  for (const l of ["ja", "en"]) $(l).setAttribute("aria-pressed", String(lang === l));
+  $("feedback").textContent = t.notices[state.notice] || "";
+  const app = $("app");
   app.replaceChildren();
-  app.append(state.outcome ? result(t) : device(t));
+  if (state.outcome) app.append(result(t));
+  else {
+    app.append(
+      node("p", `${t.goal} · ${state.presented.length}/2 · ${score(state)}/100`, "case-status"),
+      node(
+        "p",
+        `${t.chances}: ${"●".repeat(3 - state.mistakes)}${"○".repeat(state.mistakes)}`,
+        "chances",
+      ),
+      deadline(t),
+      workspace(t),
+    );
+    const modes = node("nav", "", "mobile-modes");
+    modes.setAttribute("aria-label", t.sources);
+    modes.append(
+      button("show-sources", t.sources, { type: "board", open: false }),
+      button("show-board", `${t.notebook} (${state.collected.length})`, {
+        type: "board",
+        open: true,
+      }),
+    );
+    app.append(modes);
+  }
   paint();
 }
-
+function paint() {
+  const d = $("request-window");
+  if (!d) return;
+  d.style.setProperty("--used", `${100 * (1 - state.remaining / ROUND_MS)}%`);
+  $("window-label").textContent =
+    state.remaining < 20_000 ? COPY[lang].windowClosing : COPY[lang].windowOpen;
+}
 for (const l of ["ja", "en"])
   $(l).addEventListener("click", () => {
     clock(performance.now());
@@ -232,13 +284,8 @@ for (const l of ["ja", "en"])
     u.searchParams.set("lang", l);
     history.replaceState(null, "", u);
     render();
+    $(l).focus();
   });
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && state.panel) {
-    e.preventDefault();
-    dispatch("close");
-  }
-});
 document.addEventListener("visibilitychange", () => {
   last = performance.now();
 });
