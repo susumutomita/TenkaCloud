@@ -429,7 +429,12 @@ describe("TenkaCloud shell and end-of-play mail review", () => {
       game.indexOf("function resultsView("),
     );
     expect(playCode).not.toContain("createReview");
-    expect(game).toContain("createReview(lang, guideOpen, currentLevel(run))");
+    const results = readFileSync(
+      join(import.meta.dir, "../../landing/mail-detective/result-view.js"),
+      "utf8",
+    );
+    expect(game).toContain("createResultsView({");
+    expect(results).toContain("createReview(lang, guideOpen, currentLevel(run))");
     expect(game).toContain("guideOpen.clear()");
   });
   test("shell uses current LP tokens and font stack while keeping the separate email layout", () => {

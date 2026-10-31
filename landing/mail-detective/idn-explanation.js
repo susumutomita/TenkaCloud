@@ -1,12 +1,8 @@
+import { element as node } from "./dom.js?v=09ce225f20";
+
 // Names verified against UnicodeData.txt, not inferred from the glyph's appearance.
 const japaneseNames = { a: "ラテン文字の小文字 a", а: "キリル文字の小文字 а" };
 const names = { a: "LATIN SMALL LETTER A", а: "CYRILLIC SMALL LETTER A" };
-const node = (tag, text, className) => {
-  const result = document.createElement(tag);
-  if (text !== undefined) result.textContent = text;
-  if (className) result.className = className;
-  return result;
-};
 function domain(url) {
   const match = /^https:\/\/([^/?#]+)\//u.exec(url);
   if (!match || /[@:]/u.test(match[1])) throw new TypeError("Expected an authored HTTPS domain");

@@ -1,3 +1,5 @@
+import { element as node } from "./dom.js?v=09ce225f20";
+
 // Original learning copy. Official links are separate from the inert fictional email targets.
 const source = {
   gmail: "https://support.google.com/mail/answer/8253",
@@ -170,12 +172,6 @@ export const REVIEW = {
       },
     ],
   },
-};
-const node = (tag, text, className) => {
-  const result = document.createElement(tag);
-  if (text !== undefined) result.textContent = text;
-  if (className) result.className = className;
-  return result;
 };
 export function createReview(lang, openItems, level = 5) {
   const t = REVIEW[lang],
