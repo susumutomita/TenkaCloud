@@ -1,9 +1,22 @@
 export const COPY = {
   ja: {
     title: "そのお願い、聞いていい？",
-    instruction: "メッセージが届きました。",
+    instruction: "この依頼、進めていい？ 不安な時点で止めよう。",
     safety: "すべてゲーム内の模擬操作です。送信・ダウンロード・インストールは行いません。",
     games: "ゲーム一覧へ",
+    format:
+      "1場面・100点満点。止める／最後の実行で終了。照合して判断すると100点。30秒で時間切れ（調査中は停止）。",
+    evidence: "判断した場面を振り返る",
+    pending: "ここではまだ危険とは判断できません。依頼を続けるなら、内容を確かめましょう。",
+    next: "次の一手",
+    stopped: "実行する前に、止めた。",
+    stoppedShort: "70点：予期しないアプリ要求で止まりました。公式窓口での照合はまだです。",
+    stoppedReason:
+      "実行せず、相手が指定した連絡先ではなく、自分で開いた企業の公式窓口で依頼と試験方法を確認しましょう。業務の依頼なら組織の窓口にも報告できます。",
+    nextBrowser:
+      "続ける場合は、確認した範囲の課題だけ進めましょう。追加の要求が出たら、改めて確認できます。",
+    requestRisk:
+      "気をつけるのは、この実行要求。ソフトそのものではなく、予期しない要求を未確認のまま実行することが問題です。",
     person: "小野 遥",
     role: "青葉テック · 採用担当",
     network: "しごと広場",
@@ -22,19 +35,19 @@ export const COPY = {
     verify: "公式窓口で照合",
     close: "戻る",
     report: "実行せず、報告する",
-    exit: "保留",
+    exit: "止めて終了",
     siteIntro: "Webアプリの画面づくりの課題",
     begin: "課題を確認する",
     installHeading: "テスト用アプリが必要です",
     installBody: "専用アプリ SkillTrial を入れてから進んでください。",
     browserHeading: "この画面で、お題を確認",
     browserBody: "追加アプリなし。ブラウザだけで進められます。",
-    install: "インストール",
-    proceed: "課題へ進む",
+    install: "インストールして終了（模擬）",
+    proceed: "課題へ進んで終了",
     accepting: "受付中",
     nearing: "まもなく保留",
     paused: "調べている間は停止",
-    score: "この場面",
+    score: "獲得点",
     unit: "点",
     retry: "もう一度やってみる",
     deeper: "何が起きた？",
@@ -51,15 +64,15 @@ export const COPY = {
     limited: "安全な範囲で進めた。",
     unsafe: "途中で、要求が変わった。",
     timeout: "今回は、保留。",
-    heldShort: "保留や辞退も、安全な選択。",
-    resolvedShort: "依頼そのものを確かめて、次の一手を選べた。",
-    limitedShort: "追加アプリや秘密は渡さなかった。依頼元の確認はまだ。",
+    heldShort: "40点：安全な保留を選び、終了しました。確認して判断する進め方もあります。",
+    resolvedShort: "100点：依頼を確かめ、確認結果に合った行動を選べました。",
+    limitedShort: "50点：追加アプリや秘密は渡さず進めました。依頼元は未確認です。",
     unsafeShort: "この模擬依頼は、不正なアプリへの誘導でした。",
     timeoutShort: "未回答なので0点。何も実行していません。",
     heldReason:
       "保留や辞退は、安全な選択です。依頼を続けたいときは、相手が指定した連絡先ではなく、自分で開いた企業の公式窓口で確かめられます。",
     resolvedInstall:
-      "本物の会社の試験と食い違うことを確かめ、実行せず報告できました。この模擬依頼の狙いは、不正なアプリをインストールさせることでした。",
+      "本物の会社の試験と食い違うことを確かめ、実行せず止められました。この模擬依頼の狙いは、不正なアプリをインストールさせることでした。",
     resolvedBrowser:
       "依頼と試験方法を独立した公式窓口で照合し、確認した範囲の課題だけ進められました。何でも断る以外にも、安全な進め方があります。",
     limitedReason:
@@ -71,9 +84,24 @@ export const COPY = {
   },
   en: {
     title: "Should I do what they ask?",
-    instruction: "A new message just arrived.",
+    instruction: "Should you continue? Stop the request when you have doubts.",
     safety: "All actions are simulated. No real messages, downloads or installations.",
     games: "All games",
+    format:
+      "One scene · 100 points. Stop or take the final action to finish. Verify, then decide for 100 points. 30 seconds, paused during investigation.",
+    evidence: "Review the moment you decided",
+    pending:
+      "There is not enough evidence of danger here yet. If you continue, check what the request asks you to do.",
+    next: "A safe next step",
+    stopped: "You stopped before running it.",
+    stoppedShort:
+      "70 points: you stopped at an unexpected app request. Official verification is still missing.",
+    stoppedReason:
+      "Do not run it. Find the company’s official contact independently and verify the request and assessment method. For work requests, you can also report it to your organization’s support team.",
+    nextBrowser:
+      "If you continue, stay within the verified task. Check again if a new request appears.",
+    requestRisk:
+      "This is the execution request to examine. Software is not inherently malicious; acting on an unexpected, unverified request is the risk.",
     person: "Haru Ono",
     role: "Aoba Tech · Recruiting",
     network: "Work Square",
@@ -92,19 +120,19 @@ export const COPY = {
     verify: "Check the official contact",
     close: "Back",
     report: "Do not run it. Report it.",
-    exit: "Hold",
+    exit: "Stop and finish",
     siteIntro: "A short web-app UI task",
     begin: "View the task",
     installHeading: "An assessment app is required",
     installBody: "Install SkillTrial before you continue.",
     browserHeading: "View the task on this screen",
     browserBody: "No extra app. Continue in your browser.",
-    install: "Install",
-    proceed: "View the task",
+    install: "Install and finish (simulated)",
+    proceed: "Continue and finish",
     accepting: "Window open",
     nearing: "Soon on hold",
     paused: "Paused while investigating",
-    score: "This scene",
+    score: "Your score",
     unit: "points",
     retry: "Try another conversation",
     deeper: "What happened?",
@@ -121,15 +149,16 @@ export const COPY = {
     limited: "You stayed within a safe scope.",
     unsafe: "The request changed along the way.",
     timeout: "On hold this time.",
-    heldShort: "Putting it on hold or declining is safe.",
-    resolvedShort: "You checked this specific request before choosing your next move.",
-    limitedShort: "No extra app or secrets shared. The requester is still unverified.",
+    heldShort:
+      "40 points: you chose to stop safely. Verifying the request is another way to make a decision.",
+    resolvedShort: "100 points: you verified the request and acted on what you found.",
+    limitedShort: "50 points: no extra app or secrets shared. The requester remains unverified.",
     unsafeShort: "This simulated request was a pretext to install a malicious app.",
     timeoutShort: "No answer, no points. Nothing was executed.",
     heldReason:
       "Putting a request on hold or declining it is safe. If you want to continue, check with the company's official contact that you find yourself, not one supplied by the sender.",
     resolvedInstall:
-      "You checked the conflicting assessment instructions, avoided execution and reported the request. This simulated request was trying to make you install a malicious app.",
+      "You checked the conflicting assessment instructions, avoided execution and stopped the request. This simulated request was trying to make you install a malicious app.",
     resolvedBrowser:
       "You checked the request and assessment method through an independent official contact, then continued only within that verified scope. Refusing everything is not the only safe option.",
     limitedReason:

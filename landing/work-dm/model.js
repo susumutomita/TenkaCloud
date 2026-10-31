@@ -15,7 +15,7 @@ export function start(variant = Math.random() < 0.5 ? "install" : "browser") {
 
 export function finish(state, outcome, points) {
   if (state.outcome) return state;
-  return { ...state, outcome, points, panel: null, stage: "result" };
+  return { ...state, outcome, points, decisionStage: state.stage, panel: null, stage: "result" };
 }
 
 export function elapse(state, milliseconds) {
@@ -27,7 +27,13 @@ export function elapse(state, milliseconds) {
 
 function proceed(state) {
   if (state.variant === "install") return finish(state, "unsafe", 0);
-  return finish(state, state.checked ? "resolved" : "limited", state.checked ? 20 : 10);
+  return finish(state, state.checked ? "resolved" : "limited", state.checked ? 100 : 50);
+}
+
+function stopRequest(state) {
+  if (state.stage === "setup" && state.variant === "install")
+    return finish(state, state.checked ? "resolved" : "stopped", state.checked ? 100 : 70);
+  return finish(state, "held", 40);
 }
 
 function play(state, action) {
@@ -38,11 +44,10 @@ function play(state, action) {
   };
   const transition = transitions[action];
   if (transition && state.stage === transition[0]) return { ...state, stage: transition[1] };
-  if (action === "hold") return finish(state, "held", 10);
+  if (action === "hold") return stopRequest(state);
   if (state.stage !== "setup") return state;
   if (action === "proceed") return proceed(state);
-  if (action === "report" && state.variant === "install")
-    return finish(state, state.checked ? "resolved" : "held", state.checked ? 20 : 10);
+  if (action === "report" && state.variant === "install") return stopRequest(state);
   return state;
 }
 

@@ -1,5 +1,5 @@
-import { COPY } from "./copy.js?v=7fa972761a";
-import { choose, elapse, ROUND_MS, start } from "./model.js?v=7fa972761a";
+import { COPY } from "./copy.js?v=f95412011e";
+import { choose, elapse, ROUND_MS, start } from "./model.js?v=f95412011e";
 
 let lang = new URLSearchParams(location.search).get("lang") === "en" ? "en" : "ja",
   state = start(),
@@ -88,10 +88,11 @@ function result(t) {
   r.dataset.outcome = state.outcome;
   r.append(
     heading(t[state.outcome], "result-title"),
-    node("p", `${t.score}: ${state.points} / 20 ${t.unit}`, "result-score"),
+    node("p", `${t.score}: ${state.points} / 100 ${t.unit}`, "result-score"),
     node("p", t[`${state.outcome}Short`]),
     button("retry", t.retry, "retry", "primary"),
   );
+  r.append(evidence(t));
   const d = node("details");
   const reason =
     state.outcome === "resolved"
@@ -103,12 +104,35 @@ function result(t) {
   r.append(d);
   return r;
 }
+function requestEvidence(e, t) {
+  const request = node("blockquote", "", "request-evidence");
+  const installing = state.variant === "install";
+  request.append(node(installing ? "mark" : "span", installing ? t.installBody : t.browserBody));
+  e.append(request);
+  if (installing) e.append(node("p", t.requestRisk));
+  if (state.checked)
+    e.append(node("blockquote", installing ? t.installVerified : t.browserVerified));
+}
+function evidence(t) {
+  const e = node("section", "", "evidence");
+  e.append(heading(t.evidence, "evidence-title"));
+  e.append(node("p", t.introduction, "bubble"));
+  if (state.decisionStage !== "dm") e.append(node("p", t.invitation, "bubble"));
+  if (state.decisionStage === "setup") requestEvidence(e, t);
+  else e.append(node("p", t.pending));
+  e.append(
+    node("h3", t.next),
+    node("p", state.variant === "browser" && state.checked ? t.nextBrowser : t.stoppedReason),
+  );
+  return e;
+}
 function header(t) {
   document.documentElement.lang = lang;
   document.title = `${t.title} | TenkaCloud`;
   for (const id of ["title", "instruction", "safety", "games"]) $(id).textContent = t[id];
   $("exit").hidden = true;
-  $("instruction").hidden = !["dm", "invite"].includes(state.stage);
+  $("instruction").hidden = Boolean(state.outcome);
+  $("format").textContent = t.format;
   $("games").href = `../portal-demo/?demo=1&goto=${encodeURIComponent(`/problems?lang=${lang}`)}`;
   for (const l of ["ja", "en"]) $(l).setAttribute("aria-pressed", String(lang === l));
 }
@@ -156,7 +180,6 @@ function siteScreen(content, t) {
     node("p", installing ? t.installBody : t.browserBody),
     button("proceed", installing ? t.install : t.proceed, "proceed", "primary"),
   );
-  if (state.checked && installing) content.append(button("report", t.report, "report", "choice"));
 }
 function dock(t) {
   const d = node("div", "", "dock"),
@@ -164,7 +187,7 @@ function dock(t) {
     label = node("span");
   window.id = "request-window";
   label.id = "window-label";
-  window.append(label, node("span", lang === "ja" ? "→ 保留" : "→ Hold"));
+  window.append(label, node("span", lang === "ja" ? "→ 終了" : "→ Finish"));
   const controls = node("div", "", "controls");
   controls.append(button("tools", t.tools, "tools"), button("hold", t.exit, "hold"));
   d.append(window, controls);
