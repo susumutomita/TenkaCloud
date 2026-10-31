@@ -165,6 +165,35 @@ describe("peel the recruiting disguise, direct action prototype", () => {
     for (const id of ["calendar", "task"])
       expect(TASKS[id]).toMatchObject({ kind: "WEB", site: "aoba", mismatch: null });
   });
+  test("SNS and phone each contain a legitimate request and a conflicting request; medium is not the grading rule", () => {
+    expect(TASKS.application.medium).toBe("sns");
+    expect(TASKS.task.medium).toBe("sns");
+    expect(TASKS.calendar.medium).toBe("phone");
+    expect(TASKS.upload.medium).toBe("phone");
+    for (const medium of ["sns", "phone"]) {
+      let state = play();
+      const requests = Object.keys(TASKS).filter((id) => TASKS[id].medium === medium);
+      expect(requests).toHaveLength(2);
+      expect(requests.filter((id) => TASKS[id].mismatch)).toHaveLength(1);
+      for (const id of requests) state = shoot(state, id);
+      expect(score(state)).toBe(25);
+    }
+  });
+  test("read recruiting history establishes role, work conditions and agreed interview before the assessment", () => {
+    expect(COPY.ja.history).toHaveLength(5);
+    expect(COPY.en.history).toHaveLength(5);
+    expect(COPY.ja.history[0].text).toContain("予約ページ");
+    expect(COPY.ja.history[2].text).toContain("週3日");
+    expect(COPY.ja.history[3].text).toContain("火曜の17時");
+    expect(COPY.ja.history[4].text).toContain("スキルチェック");
+    expect(COPY.en.history[2].text).toContain("three days");
+    expect(COPY.en.history[3].text).toContain("Tuesday at 17:00");
+    expect(COPY.en.history[4].text).toContain("assessment");
+    expect(COPY.ja.requests.application).toContain("環境をそろえる");
+    expect(COPY.ja.previews.upload).toContain("SNS");
+    expect(COPY.ja.requests.upload).toContain("DM");
+    expect(COPY.en.requests.upload).toContain("DM");
+  });
   test("manual X intent encodes actual results and current reachable game URL without spoilers or private query data", () => {
     for (const lang of ["ja", "en"]) {
       const state = choose(revealAll(shoot(play(), "application")), { type: "finish" });

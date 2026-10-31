@@ -1,9 +1,10 @@
-import { COPY, shareHref } from "./copy.js?v=b753193fc7";
-import { choose, elapse, hits, ROUND_MS, score, start, TASKS } from "./model.js?v=b753193fc7";
+import { COPY, shareHref } from "./copy.js?v=02506211be";
+import { choose, elapse, hits, ROUND_MS, score, start, TASKS } from "./model.js?v=02506211be";
 
 let lang = new URLSearchParams(location.search).get("lang") === "en" ? "en" : "ja";
 let state = start();
 let last = performance.now();
+let historyOpen = false;
 const shotReadyAt = new Map();
 const $ = (id) => document.getElementById(id);
 function node(tag, text = "", cls = "") {
@@ -55,7 +56,7 @@ function heading(text, id) {
 function clock(now) {
   const delta = Math.max(0, now - last);
   last = now;
-  if (document.hidden) return;
+  if (document.hidden || historyOpen) return;
   const ended = state.outcome;
   state = elapse(state, delta);
   if (!ended && state.outcome) {
@@ -64,7 +65,7 @@ function clock(now) {
   }
 }
 function impact(id) {
-  const target = $(`tile-${id}`)?.getBoundingClientRect();
+  const target = $(`tile-${id}`)?.querySelector(".surface")?.getBoundingClientRect();
   if (!target) return;
   $("impact")?.remove();
   const e = node("div", "⌖", "impact");
@@ -104,6 +105,8 @@ function dispatch(action) {
       : choose(state, action);
   if (state === previous) return;
   if (["retry", "begin"].includes(action.type) || state.outcome) shotReadyAt.clear();
+  if (["reveal", "fire", "finish", "retry", "begin"].includes(action.type) || state.outcome)
+    historyOpen = false;
   if (action.type === "reveal") shotReadyAt.set(action.id, performance.now() + 500);
   last = performance.now();
   render();
@@ -116,8 +119,18 @@ function dispatch(action) {
 }
 function cover(id, t, key = id) {
   const b = button(`peel-${key}`, "", { type: "reveal", id: key }, "cover");
-  b.setAttribute("aria-label", `${t.peel}: ${t.covers[id]}`);
-  b.append(node("span", "↔", "rub-icon"), node("strong", t.covers[id]), node("small", t.peelHint));
+  b.setAttribute(
+    "aria-label",
+    `${t.media[TASKS[id].medium]} · ${t.peel}: ${t.covers[id]}。${t.previews[id]}`,
+  );
+  if (TASKS[id].medium === "phone")
+    b.append(node("span", "☏", "call-icon"), node("small", t.caller));
+  else b.append(node("span", "↗", "rub-icon"));
+  b.append(
+    node("strong", t.covers[id]),
+    node("span", t.previews[id], "contact-quote"),
+    node("small", t.peelHint),
+  );
   let x = null,
     progress = 0;
   b.addEventListener("pointerdown", (event) => {
@@ -146,12 +159,14 @@ function cover(id, t, key = id) {
 function payload(id, t) {
   const task = TASKS[id];
   const p = node("div", "", "payload");
+  p.append(node("small", t.route[task.medium], "route-label"));
   p.append(
     node("span", task.kind === "APP" ? "⚙" : "▣", "payload-icon"),
     node("strong", task.kind, "payload-kind"),
     node("span", t.actions[task.kind], "payload-action"),
     node("strong", task.site, "site-name"),
     node("small", ".example", "site-suffix"),
+    node("span", t.requests[id], "request-quote"),
   );
   return p;
 }
@@ -159,7 +174,7 @@ function revealedTile(e, id, key, t, spent, correct, training) {
   const target = button(`shoot-${key}`, "", { type: "fire", id: key }, "target");
   target.setAttribute(
     "aria-label",
-    `${t.fire}: ${t.covers[id]}, ${t.actions[TASKS[id].kind]}, ${TASKS[id].site}.example`,
+    `${t.media[TASKS[id].medium]} · ${t.fire}: ${t.covers[id]}, ${t.actions[TASKS[id].kind]}, ${TASKS[id].site}.example。${t.requests[id]}`,
   );
   target.disabled = spent;
   const waiting = performance.now() < (shotReadyAt.get(key) || 0);
@@ -182,21 +197,61 @@ function revealedTile(e, id, key, t, spent, correct, training) {
     e.append(peel);
   }
 }
+function contactHeader(id, t) {
+  const medium = TASKS[id].medium;
+  const h = node("div", "", "contact-head");
+  h.append(
+    node("span", medium === "phone" ? "☏" : "WS", "medium-icon"),
+    node("strong", t.media[medium]),
+  );
+  if (medium === "phone") h.append(node("small", t.silentCall));
+  return h;
+}
 function tile(id, t, training = false) {
   const key = training ? "practice" : id;
   const revealed = training ? state.practiceRevealed : state.revealed.includes(id);
   const spent = training ? state.practiceShot : state.shots.includes(id);
   const correct = spent && (training || Boolean(TASKS[id].mismatch));
-  const e = node("article", "", "tile");
+  const e = node("article", "", `tile ${TASKS[id].medium}`);
   e.id = `tile-${key}`;
   e.tabIndex = -1;
   if (revealed) e.classList.add("revealed");
   if (spent) e.classList.add(correct ? "hit" : "miss");
   if (state.flash === key)
     e.classList.add(`flash-${state.notice === "practiceHit" ? "hit" : state.notice}`);
-  if (revealed) revealedTile(e, id, key, t, spent, correct, training);
-  else e.append(cover(id, t, key));
+  const surface = node("div", "", "surface");
+  if (revealed) revealedTile(surface, id, key, t, spent, correct, training);
+  else surface.append(cover(id, t, key));
+  e.append(contactHeader(id, t), surface);
   return e;
+}
+function conversation(t) {
+  const s = node("section", "", "sns-history");
+  s.append(node("div", `WS  ${t.snsBrand}`, "sns-brand"));
+  const profile = node("div", "", "sns-profile");
+  profile.append(node("span", "HO", "avatar"), node("strong", t.recruiter));
+  const history = node("details", "", "read-history");
+  history.open = historyOpen;
+  const summary = node("summary");
+  summary.append(node("small", t.historyTitle));
+  for (const line of t.historyPreview) summary.append(node("span", line, "history-preview"));
+  history.append(summary);
+  const messages = node("div", "", "chat-history");
+  for (const [i, entry] of t.history.entries()) {
+    const message = node("div", "", i % 2 ? "chat-bubble own" : "chat-bubble");
+    message.append(node("small", entry.from), node("p", entry.text));
+    messages.append(message);
+  }
+  history.append(messages);
+  history.addEventListener("toggle", () => {
+    if (!history.isConnected || history.open === historyOpen) return;
+    clock(performance.now());
+    historyOpen = history.open;
+    last = performance.now();
+    paint();
+  });
+  s.append(profile, history);
+  return s;
 }
 function reference(t) {
   const r = node("section", "", "reference");
@@ -251,19 +306,13 @@ function lesson(t) {
 function play(t) {
   const p = node("div", "", "play");
   const training = state.phase === "practice";
-  const sender = node("div", "", "sender");
-  sender.append(
-    node("span", "AO", "avatar"),
-    node("strong", t.sender),
-    node("span", training ? t.practiceMessage : t.message),
-  );
   const status = node("div", "", "status");
   status.append(node("span", training ? t.practiceLabel : `${t.progress} ${hits(state)}/2`));
   if (!training) status.append(node("strong", `${score(state)}/100`));
   const pause = button("pause", "Ⅱ", { type: "pause" }, "pause");
   pause.setAttribute("aria-label", t.pause);
   status.append(pause);
-  p.append(sender, reference(t), status);
+  p.append(conversation(t), reference(t), status);
   if (training) {
     p.append(lesson(t));
     return p;
@@ -338,8 +387,11 @@ function paint() {
   const e = $("request-window");
   if (!e) return;
   e.style.setProperty("--used", `${100 * (1 - state.remaining / ROUND_MS)}%`);
-  $("window-label").textContent =
-    state.remaining < 20000 ? COPY[lang].closing : COPY[lang].deadline;
+  $("window-label").textContent = historyOpen
+    ? COPY[lang].historyPaused
+    : state.remaining < 20000
+      ? COPY[lang].closing
+      : COPY[lang].deadline;
 }
 for (const l of ["ja", "en"])
   $(l).addEventListener("click", () => {

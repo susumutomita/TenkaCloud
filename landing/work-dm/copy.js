@@ -5,6 +5,50 @@ export const COPY = {
     format: "本番2分。偽装2つを撃つと100点。誤射−25／4枚めくって結果へ。",
     safety: "架空のゲームです。実際の送信・ダウンロード・インストールは行いません。",
     games: "ゲーム一覧へ",
+    snsBrand: "WorkSquare · 架空の仕事SNS",
+    recruiter: "小野 遥 · 青葉テック採用担当を名乗る相手",
+    historySummary: "既読：作品へのスカウト → 業務・条件の確認 → 火曜17時の面談",
+    historyTitle: "既読の会話を開く",
+    historyPreview: [
+      "採用担当：法人向け予約サービスのUI開発です。週3日はリモート勤務が可能です。",
+      "あなた：来週火曜の17時なら空いています。",
+    ],
+    historyPaused: "履歴の確認中は停止",
+    history: [
+      {
+        from: "採用担当",
+        text: "公開された予約ページの作品を拝見しました。青葉テックでWebアプリの画面を作る方を探しています。ご関心はありますか？",
+      },
+      {
+        from: "あなた（架空）",
+        text: "ありがとうございます。仕事内容と働き方を教えていただけますか。",
+      },
+      {
+        from: "採用担当",
+        text: "法人向け予約サービスのUI開発です。週3日はリモート勤務が可能です。まず30分ほどオンラインでお話ししませんか。",
+      },
+      { from: "あなた（架空）", text: "業務に興味があります。来週火曜の17時なら空いています。" },
+      {
+        from: "採用担当",
+        text: "では火曜17時でお願いします。面談前に10分ほどのスキルチェックをご案内します。",
+      },
+    ],
+    media: { sns: "WorkSquare · 模擬DM", phone: "着信 · 模擬通話" },
+    caller: "青葉テック 採用窓口（名乗り）",
+    silentCall: "音声なし・字幕",
+    route: { sns: "DMから案内された模擬サイト", phone: "電話で案内されたDM内のリンク" },
+    previews: {
+      calendar: "火曜17時の面談日時について、ご確認のお電話です。",
+      application: "日程のご調整ありがとうございます。課題の説明をまとめました。",
+      task: "面談前のブラウザ課題をご案内します。",
+      upload: "先ほどSNSでお送りした課題の、提出方法についてです。",
+    },
+    requests: {
+      calendar: "招待の日時を、公式の日程ページでご確認ください。",
+      application: "環境をそろえるため、面談前にこの検証アプリを実行してください。",
+      task: "ブラウザで解く事前課題です。採用ページからご確認ください。",
+      upload: "結果が出たら、面談前にDMへ追記したこちらの提出先へお願いします。",
+    },
     sender: "青葉テック · 採用担当",
     message: "面接前に、この4つをお願いします。",
     reference: "自分で確かめた公式の約束",
@@ -16,8 +60,8 @@ export const COPY = {
     directFire: "怪しいなら、このカードをタップして撃つ",
     releaseHint: "指を離してから、もう一度タップ。",
     practiceLabel: "操作練習・得点なし",
-    practiceMessage: "面接前のテストです。こちらを開いてください。",
-    practicePeel: "① 表は『画面テスト』。こすって裏の要求を見よう。",
+    practiceMessage: "日程のご調整ありがとうございます。課題の説明をこちらにまとめました。",
+    practicePeel: "① 自然なDMの案内。こすって、サイトの要求を見よう。",
     practiceCompare: "② 裏はアプリ実行。公式はWEBだけ。食い違うこのカードを直接タップして撃つ。",
     practiceDone: "見せかけと要求が違った。次は自分で見破ろう。",
     practiceBlocked: "練習成功・得点なし",
@@ -56,20 +100,21 @@ export const COPY = {
       miss: "これは公式の約束と一致。誤射 −25",
     },
     covers: {
-      calendar: "日程を選ぶ",
-      application: "画面テスト",
-      task: "課題を開く",
-      upload: "成績を提出",
+      calendar: "面談日時の確認",
+      application: "スキルチェック",
+      task: "事前課題の案内",
+      upload: "課題結果の確認",
     },
     actions: { WEB: "ブラウザで開く", APP: "アプリを実行" },
     blocked: "偽装を遮断",
     matched: "公式と一致",
     explanations: {
-      application: "『画面テスト』の中身はアプリの実行要求。公式の『WEBだけ』と矛盾します。",
+      application:
+        "自然なスカウトや面談調整の後に、検証アプリの実行へ誘っています。本件では公式の「WEBだけ」という試験方針に反する要求です。",
       destination:
-        "『成績を提出』の中身はaoba-skills.exampleへの送信。公式はaoba.exampleだけと明記しています。",
+        "電話で先ほどのSNSの話をつなぎ、面談前の提出を頼んでいます。本件では提出先が公式のaoba.exampleと違うことが根拠です。",
       normal:
-        "ブラウザで開き、提出先もaoba.example。表示された約束との矛盾はありません。安全性全般の保証ではありません。",
+        "電話やSNS、面談前の連絡自体は危険の根拠ではありません。この要求はWEBとaoba.exampleという表示ルールに一致します。安全性全般の保証ではありません。",
     },
   },
   en: {
@@ -79,6 +124,56 @@ export const COPY = {
     format: "2 min. Shoot both disguises for 100. Wrong shot −25. Reveal all four, then finish.",
     safety: "A fictional game. No real messages, downloads or installations.",
     games: "All games",
+    snsBrand: "WorkSquare · Fictional work network",
+    recruiter: "Haru Ono · Claims to recruit for Aoba Tech",
+    historySummary:
+      "Read: portfolio approach → role and work arrangements → Tuesday 17:00 interview",
+    historyTitle: "Open the read conversation",
+    historyPreview: [
+      "Recruiter: UI for a business booking service; remote work three days a week.",
+      "You: I am available next Tuesday at 17:00.",
+    ],
+    historyPaused: "Paused while reading history",
+    history: [
+      {
+        from: "Recruiter",
+        text: "I saw the booking page in your public portfolio. Aoba Tech is hiring someone to build our web-app screens. Would you be interested?",
+      },
+      {
+        from: "You (fictional)",
+        text: "Thank you. Could you tell me about the role and working arrangements?",
+      },
+      {
+        from: "Recruiter",
+        text: "You would build the UI for a business booking service. Remote work is available three days a week. Could we start with a 30-minute online conversation?",
+      },
+      {
+        from: "You (fictional)",
+        text: "The role sounds interesting. I am available next Tuesday at 17:00.",
+      },
+      {
+        from: "Recruiter",
+        text: "Tuesday at 17:00 works. I will send a short, ten-minute skills assessment before the interview.",
+      },
+    ],
+    media: { sns: "WorkSquare · Simulated DM", phone: "Incoming · Simulated call" },
+    caller: "Claims to be Aoba Tech recruiting",
+    silentCall: "Silent · captions",
+    route: { sns: "Simulated site linked in the DM", phone: "DM link referred to in the call" },
+    previews: {
+      calendar: "Calling to confirm your interview on Tuesday at 17:00.",
+      application: "Thank you for arranging a time. I have put the task instructions here.",
+      task: "Here is the browser task before our interview.",
+      upload: "Calling about how to submit the assessment I sent through the network.",
+    },
+    requests: {
+      calendar: "Please confirm the invitation time on our official scheduling page.",
+      application:
+        "To keep the test environment consistent, run this assessment app before the interview.",
+      task: "This task runs in your browser. Open it from our careers page.",
+      upload:
+        "When your results are ready, use this submission link added to the DM before the interview.",
+    },
     sender: "Aoba Tech · Recruiting",
     message: "Please complete these four steps before an interview.",
     reference: "Official rules you checked independently",
@@ -90,8 +185,8 @@ export const COPY = {
     directFire: "If suspicious, tap this card to shoot",
     releaseHint: "Release, then tap again.",
     practiceLabel: "Practice · no points",
-    practiceMessage: "Please open this assessment before an interview.",
-    practicePeel: "① It says ‘UI test’. Rub to see what it really asks.",
+    practiceMessage: "Thank you for arranging a time. I have put the task instructions here.",
+    practicePeel: "① A normal-looking DM invitation. Rub to see what the linked site asks.",
     practiceCompare:
       "② It asks you to run an app, but the rules say WEB only. Tap this conflicting card to shoot.",
     practiceDone: "The label hid a different request. Now investigate for yourself.",
@@ -132,21 +227,21 @@ export const COPY = {
       miss: "This matches the official rules. Wrong shot −25",
     },
     covers: {
-      calendar: "Choose a date",
-      application: "UI test",
-      task: "Open the task",
-      upload: "Submit results",
+      calendar: "Interview time",
+      application: "Skills assessment",
+      task: "Before the interview",
+      upload: "Assessment results",
     },
     actions: { WEB: "Open in browser", APP: "Run an app" },
     blocked: "Disguise blocked",
     matched: "Matches the rules",
     explanations: {
       application:
-        "The ‘UI test’ asks you to run an app. That conflicts with the official ‘WEB only’ rule.",
+        "After a plausible approach and interview arrangements, the request changes to running an assessment app. In this case, that conflicts with the official WEB-only assessment policy.",
       destination:
-        "‘Submit results’ sends to aoba-skills.example. The official rule explicitly allows only aoba.example.",
+        "The caller refers to the earlier DM and asks for results before the interview. The evidence here is that the submission destination conflicts with the official aoba.example-only rule.",
       normal:
-        "It opens in a browser at aoba.example. It does not conflict with the displayed rules. This is not a general guarantee of safety.",
+        "A phone call, DM or pre-interview request is not inherently dangerous. This request matches the displayed WEB and aoba.example rules. That is not a general guarantee of safety.",
     },
   },
 };

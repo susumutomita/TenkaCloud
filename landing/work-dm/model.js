@@ -1,9 +1,9 @@
 export const ROUND_MS = 120_000;
 export const TASKS = {
-  calendar: { kind: "WEB", site: "aoba", mismatch: null },
-  application: { kind: "APP", site: "aoba-skills", mismatch: "application" },
-  task: { kind: "WEB", site: "aoba", mismatch: null },
-  upload: { kind: "WEB", site: "aoba-skills", mismatch: "destination" },
+  calendar: { medium: "phone", kind: "WEB", site: "aoba", mismatch: null },
+  application: { medium: "sns", kind: "APP", site: "aoba-skills", mismatch: "application" },
+  task: { medium: "sns", kind: "WEB", site: "aoba", mismatch: null },
+  upload: { medium: "phone", kind: "WEB", site: "aoba-skills", mismatch: "destination" },
 };
 function shuffled(random) {
   const ids = Object.keys(TASKS);
