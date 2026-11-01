@@ -13,6 +13,7 @@
     "@codemirror/language": ["prepare"],
     "@codemirror/lint": ["prepare"],
     "@codemirror/state": ["prepare"],
+    "@codemirror/streamparser": ["prepare"],
     "@codemirror/view": ["prepare"],
     "@eslint/eslintrc": ["prepare"],
     "@humanfs/core": ["prepare"],
