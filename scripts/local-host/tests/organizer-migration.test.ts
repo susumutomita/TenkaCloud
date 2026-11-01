@@ -2,17 +2,19 @@ import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
 import { HostStore } from "../store";
 
-test("fresh SQLite creates organizer tables with bootstrap and flags off", () => {
+const organizerCount = (db: Database) =>
+  db.query("SELECT count(*) AS count FROM host_organizer_users").get();
+
+test("fresh SQLite keeps the organizer tables empty, without a key, and flags off", () => {
   const db = new Database(":memory:");
   const store = new HostStore(db);
   expect(db.query("SELECT version FROM host_schema").get()).toEqual({ version: 5 });
-  expect(store.bootstrapCompleted()).toBe(false);
+  expect(store.localOrganizerKeyEnabled()).toBe(false);
   expect(store.featureFlags()).toEqual({
-    saml: false,
     audit: false,
     challengePrerequisiteGate: false,
   });
-  expect(store.organizers()).toEqual([]);
+  expect(organizerCount(db)).toEqual({ count: 0 });
   store.close();
 });
 
@@ -42,8 +44,7 @@ for (const version of [1, 2] as const) {
         { body: '{"accountId":"account-1"}' },
       );
     expect(db.query("SELECT count(*) AS count FROM host_sessions").get()).toEqual({ count: 0 });
-    expect(store.bootstrapCompleted()).toBe(false);
-    expect(store.organizers()).toEqual([]);
+    expect(organizerCount(db)).toEqual({ count: 0 });
     store.close();
   });
 }
@@ -77,28 +78,32 @@ function v3Database(): Database {
   return db;
 }
 
-test("v3 identities migrate to stable provider IDs while credentials and records survive", async () => {
+test("v3 identities migrate to stable provider IDs while stored records survive", () => {
   const db = v3Database();
-  const hash = await Bun.password.hash("correct horse battery staple", { algorithm: "argon2id" });
-  db.prepare(
-    "INSERT INTO host_organizer_users VALUES ('user-1','admin','Admin','active',1,?,1)",
-  ).run(hash);
+  db.exec(
+    "INSERT INTO host_organizer_users VALUES ('user-1','admin','Admin','active',1,'stored-hash',1)",
+  );
   db.exec("INSERT INTO host_organizer_identities VALUES ('local','admin','user-1')");
   const store = new HostStore(db);
   expect(db.query("SELECT version FROM host_schema").get()).toEqual({ version: 5 });
-  expect(store.bootstrapCompleted()).toBe(true);
-  expect(store.localIdentity("user-1")).toMatchObject({
+  expect(
+    db
+      .query(
+        "SELECT provider,issuer,subject,user_id AS userId FROM host_organizer_identities WHERE user_id='user-1'",
+      )
+      .get(),
+  ).toEqual({
     provider: "local-password",
     issuer: "local-host",
     subject: "admin",
     userId: "user-1",
   });
-  expect(
-    await Bun.password.verify(
-      "correct horse battery staple",
-      store.organizerByUsername("admin")?.passwordHash ?? "",
-    ),
-  ).toBe(true);
+  expect(db.query("SELECT username,password_hash AS hash FROM host_organizer_users").get()).toEqual(
+    { username: "admin", hash: "stored-hash" },
+  );
+  expect(db.query("SELECT value FROM host_settings WHERE key='bootstrap_completed'").get()).toEqual(
+    { value: "true" },
+  );
   expect(db.query("SELECT count(*) AS count FROM host_sessions").get()).toEqual({ count: 0 });
   expect(db.query("SELECT body FROM host_events WHERE id='event-1'").get()).toEqual({
     body: '{"eventId":"event-1","name":"preserved"}',

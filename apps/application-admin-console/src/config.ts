@@ -285,11 +285,11 @@ function buildDemoConfig(
   };
 }
 
-/** Feature availability provided by the local host API. */
+/** Feature availability provided by the local host API. Disruptions run only in cloud hosting. */
 const LOCAL_HOST_FEATURES = {
   samlSso: false,
   nonAwsRuntime: false,
-  redTeam: true,
+  redTeam: false,
   challengePrerequisiteGate: false,
 } as const;
 

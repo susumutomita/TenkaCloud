@@ -8,7 +8,7 @@ import { type HttpHost, startHttpHost } from "../http";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
 import { HistoricalCompetitionEngine as CompetitionEngine } from "./historical-competition-fixture";
-import { REHEARSAL_ORGANIZER } from "./organizer-login";
+import { organizerToken } from "./organizer-login";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 interface EventResult {
@@ -44,6 +44,13 @@ test("real HTTP/SQLite crypto competition: login, scoring, event isolation, resu
   let host: HttpHost | undefined;
   let portal: HttpHost | undefined;
   let admin = "";
+  // Only the key's hash is stored, so the same key keeps working after a restart.
+  const organizerKey = store.ensureLocalOrganizerKey().key;
+  if (!organizerKey) throw new Error("A fresh store must issue an organizer key.");
+  async function signIn() {
+    if (!host) throw new Error("Admin host absent");
+    admin = await organizerToken({ admin: host.origin, key: organizerKey ?? "" });
+  }
   async function attach() {
     host = await startHttpHost({
       kind: "admin",
@@ -59,13 +66,7 @@ test("real HTTP/SQLite crypto competition: login, scoring, event isolation, resu
       staticRoot: data,
       service,
     });
-    const firstVisit = !(await api("admin", "/host/bootstrap-status")).body.bootstrapCompleted;
-    const login = await api("admin", firstVisit ? "/host/bootstrap" : "/host/login", "POST", {
-      ...(firstVisit ? { key: "test-only-host-key" } : {}),
-      username: REHEARSAL_ORGANIZER.username,
-      password: REHEARSAL_ORGANIZER.password,
-    });
-    admin = login.body.idToken as string;
+    await signIn();
   }
   async function api(
     role: "admin" | "participant",
@@ -395,12 +396,7 @@ test("real HTTP/SQLite crypto competition: login, scoring, event isolation, resu
     await api("participant", "/portal/leaderboard", "GET", undefined, required(b).teamLoginKey);
     expect(store.coordination(event.eventId, "crypto-battle")).toBe(ended);
     // The simulated long match exceeded the host's 15-minute login lifetime.
-    admin = (
-      await api("admin", "/host/login", "POST", {
-        username: REHEARSAL_ORGANIZER.username,
-        password: REHEARSAL_ORGANIZER.password,
-      })
-    ).body.idToken;
+    await signIn();
     // An event that ends while locked receives its end on unlock, without counting the locked time.
     const peer = required(unrelated.teams[0]);
     await api("admin", `/events/${unrelated.eventId}/schedule`, "PATCH", { startNow: true });

@@ -65,11 +65,10 @@ function pageNavigation(request: IncomingMessage): boolean {
   );
 }
 
-function validOrigin(request: IncomingMessage, origin: string, samlPost = false): void {
+function validOrigin(request: IncomingMessage, origin: string): void {
   const host = new URL(origin).host;
   if (request.headers.host !== host)
     throw new HostError(403, `Untrusted Host header. Expected ${host}.`);
-  if (samlPost) return;
   if (request.headers.origin && request.headers.origin !== origin)
     throw new HostError(403, "Cross-origin requests are not allowed.");
   if (request.headers["sec-fetch-site"] === "cross-site" && !pageNavigation(request))
@@ -256,7 +255,8 @@ export async function startHttpHost(options: {
       apiBaseUrl: `${origin}/api`,
       participantPortalUrl: options.participantOrigin,
       role: options.kind,
-      hasAws: options.service.engine.hasAws === true,
+      // Runtime contract field kept for the participant portal; local hosting never offers AWS.
+      hasAws: false,
       ...(runtimeAwsRegion ? { awsRegion: runtimeAwsRegion } : {}),
     };
   }
@@ -283,11 +283,7 @@ export async function startHttpHost(options: {
       return;
     }
     const url = requestTarget(request, origin);
-    const samlPost =
-      options.kind === "admin" &&
-      request.method === "POST" &&
-      url.pathname === "/api/host/saml/acs";
-    validOrigin(request, origin, samlPost);
+    validOrigin(request, origin);
     if (await serveApiDocs(request.method, url.pathname, options.kind, response)) return;
     if (serveConfiguration(request.method, url.pathname, response)) return;
     if (!url.pathname.startsWith("/api/")) {
@@ -333,58 +329,11 @@ export async function startHttpHost(options: {
       throw new HostError(404, "Unknown participant endpoint.");
     if (options.kind === "admin" && participantRoute)
       throw new HostError(404, "Unknown host endpoint.");
-    if (
-      options.kind === "admin" &&
-      path.startsWith("/host/saml/") &&
-      options.service.store.localOrganizerKeyEnabled()
-    )
-      throw new HostError(404, "SAML is unavailable in local key mode.");
   }
   async function dispatch(apiRequest: ApiRequest): Promise<ApiResponse> {
     return options.kind === "admin"
       ? options.service.admin(apiRequest)
       : options.service.participant(apiRequest);
-  }
-  async function handleSaml(
-    request: IncomingMessage,
-    response: ServerResponse,
-    path: string,
-  ): Promise<boolean> {
-    if (options.kind !== "admin") return false;
-    if (path === "/host/saml/metadata" && request.method === "GET") {
-      const metadata = options.service.saml.metadata();
-      response.writeHead(200, {
-        "content-type": "application/samlmetadata+xml; charset=utf-8",
-        "cache-control": "no-store",
-        "x-content-type-options": "nosniff",
-      });
-      response.end(metadata);
-      return true;
-    }
-    if (path !== "/host/saml/acs" || request.method !== "POST") return false;
-    if (
-      request.headers["content-type"]?.split(";")[0]?.trim().toLowerCase() !==
-      "application/x-www-form-urlencoded"
-    )
-      throw new HostError(415, "Use a form-encoded SAML response.");
-    const form = new URLSearchParams(await readBody(request, 320 * 1024));
-    if (
-      Array.from(form.keys()).length !== 2 ||
-      form.getAll("SAMLResponse").length !== 1 ||
-      form.getAll("RelayState").length !== 1
-    )
-      throw new HostError(400, "Provide one SAMLResponse and one RelayState.");
-    const ticket = await options.service.saml.consume(
-      form.get("SAMLResponse") ?? "",
-      form.get("RelayState") ?? "",
-    );
-    response.writeHead(303, {
-      location: `/login#samlTicket=${encodeURIComponent(ticket)}`,
-      "cache-control": "no-store",
-      "referrer-policy": "no-referrer",
-    });
-    response.end();
-    return true;
   }
   function recordCredentialFailure(error: unknown, remote: string): void {
     if (error instanceof HostError && error.status === 401) limiter.record(remote);
@@ -400,7 +349,6 @@ export async function startHttpHost(options: {
     const remote = clientAddress(request, options.behindProxy ?? false);
     limiter.assertAllowed(remote);
     try {
-      if (await handleSaml(request, response, path)) return;
       const apiRequest: ApiRequest = {
         method: request.method ?? "GET",
         path,
@@ -433,7 +381,6 @@ export async function startHttpHost(options: {
     });
   const bound = await listen(server, options.hostname, options.port);
   origin = options.advertised ?? bound;
-  if (options.kind === "admin") options.service.saml.bindOrigin(origin);
   const terminalTransport =
     options.kind === "participant"
       ? installTerminalTransport(

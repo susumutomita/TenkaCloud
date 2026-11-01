@@ -38,8 +38,6 @@ export interface UptimeStackDefinition extends StackDefinitionBase {
   hostHintOutputKey: "Ec2HostHint";
 }
 
-export type StackDefinition = FlagStackDefinition | UptimeStackDefinition;
-
 /** Recorded before CreateStack, so an interrupted create can still be cleaned up. */
 export interface StackUnit {
   kind: "cloudformation";

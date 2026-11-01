@@ -1,19 +1,39 @@
 import { expect, test } from "bun:test";
-import { fileURLToPath } from "node:url";
 import { projectScore, projectScoreTimeline } from "@tenkacloud/problem-sdk/internal";
-import { cloudFormationCatalog } from "../cloudformation-engine";
+import type { HostedEvent } from "../model";
+import { projectedScore, scorePolicies } from "../score";
+import { LEGACY_FLAG_STACK, LEGACY_UPTIME_STACK, legacyStackProblem } from "./legacy-aws-fixture";
 
-test("only the new reviewed hello-world definition pins a zero score floor", () => {
-  const root = fileURLToPath(new URL("../../../", import.meta.url));
-  const problems = cloudFormationCatalog(root);
-  const hello = JSON.parse(
-    problems.find((p) => p.problemId === "hello-world")?.definition ?? "null",
-  );
-  const battle = JSON.parse(
-    problems.find((p) => p.problemId === "hello-world-battle")?.definition ?? "null",
-  );
-  expect(hello.scoreFloor).toBe(0);
-  expect(battle.scoreFloor).toBeUndefined();
+test("the host reads a saved event's pinned score floor and leaves an unpinned Battle signed", () => {
+  const event: HostedEvent = {
+    eventId: "saved-event",
+    name: "Saved event",
+    status: "READY",
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+    expiresAt: 0,
+    scoringLocked: false,
+    scoreboardFreezeMinutes: 0,
+    problems: [legacyStackProblem(LEGACY_FLAG_STACK), legacyStackProblem(LEGACY_UPTIME_STACK)],
+  };
+  expect(scorePolicies(event)).toEqual([
+    { problemId: "hello-world", scoreFloor: 0 },
+    { problemId: "hello-world-battle" },
+  ]);
+  const entries = [
+    { problemId: "hello-world", points: -5 },
+    { problemId: "hello-world-battle", points: -100 },
+  ].map((entry, index) => ({
+    ...entry,
+    jobId: `job-${String(index)}`,
+    source: "flag",
+    result: "wrong" as const,
+    occurredAt: new Date(index).toISOString(),
+  }));
+  expect(projectedScore(event, entries)).toEqual({
+    total: -100,
+    byProblem: { "hello-world": 0, "hello-world-battle": -100 },
+  });
 });
 
 test("a pinned floor projects per-problem cumulative debt and leaves Battle signed", () => {

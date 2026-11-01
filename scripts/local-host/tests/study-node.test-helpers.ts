@@ -24,7 +24,7 @@ async function attach() {
   if (key) writeSync(3, `${key}\n`);
   service = new HostingService(
     store,
-    new CompetitionEngine(process.cwd(), directory ?? "", false, undefined, undefined, catalogPath),
+    new CompetitionEngine(process.cwd(), directory ?? "", false, undefined, catalogPath),
     "test-study-master-key",
     () => clock,
   );

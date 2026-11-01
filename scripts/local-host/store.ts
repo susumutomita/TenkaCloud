@@ -11,12 +11,7 @@ import {
   type UptimeOverride,
   type UptimeState,
 } from "./model";
-import type { OrganizerRole } from "./organizer-access";
-import type {
-  OrganizerAuthMethod,
-  OrganizerIdentityRecord,
-  OrganizerPrincipal,
-} from "./organizer-principal";
+import type { OrganizerIdentityRecord, OrganizerPrincipal } from "./organizer-principal";
 export const digest = (value: string): string => createHash("sha256").update(value).digest("hex");
 
 interface BodyRow {
@@ -28,25 +23,6 @@ interface LocalOrganizerKey {
   version: number;
 }
 
-export type { OrganizerRole } from "./organizer-access";
-export type OrganizerStatus = "active" | "disabled";
-export interface OrganizerUser {
-  id: string;
-  username: string;
-  role: OrganizerRole;
-  status: OrganizerStatus;
-  authVersion: number;
-  passwordHash: string;
-  createdAt: number;
-}
-export type OrganizerView = Omit<OrganizerUser, "passwordHash">;
-export interface OrganizerIdentity {
-  id: string;
-  provider: string;
-  issuer: string;
-  subject: string;
-  userId: string;
-}
 export type { OrganizerPrincipal } from "./organizer-principal";
 
 /** Type capability is minted here only after authenticateAdmin's existing durable checks. */
@@ -445,9 +421,6 @@ export class HostStore {
       JSON.stringify(observation),
     );
   }
-  bootstrapCompleted(): boolean {
-    return this.localOrganizerKeyEnabled() || this.setting("bootstrap_completed") === "true";
-  }
   private setting(key: string): string | undefined {
     const row = this.statement("SELECT value FROM host_settings WHERE key=?").get(key) as
       | { value: string }
@@ -480,7 +453,10 @@ export class HostStore {
   localOrganizerKeyEnabled(): boolean {
     return this.localOrganizerKey() !== undefined;
   }
-  /** Enable key-only local authentication once, preserving historical users and event state. */
+  /**
+   * Enable key-only local authentication once. Organizer accounts, SAML links and their sessions
+   * from older revisions stay stored but can no longer sign in; event state is unchanged.
+   */
   ensureLocalOrganizerKey(): { key?: string } {
     return this.transaction(() =>
       this.localOrganizerKeyEnabled() ? {} : { key: this.rotateLocalOrganizerKey() },
@@ -510,165 +486,35 @@ export class HostStore {
   }
   featureFlags(): Record<string, boolean> {
     return {
-      saml: !this.localOrganizerKeyEnabled() && this.setting("flag:saml") === "true",
       // Compatibility response only; the retired setting stays stored and cannot enable collection.
       audit: false,
       challengePrerequisiteGate: this.setting("flag:challengePrerequisiteGate") === "true",
     };
   }
-  setFeatureFlag(key: "saml" | "challengePrerequisiteGate", enabled: boolean): void {
+  setFeatureFlag(key: "challengePrerequisiteGate", enabled: boolean): void {
     this.statement(
       "INSERT INTO host_settings(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
     ).run(`flag:${key}`, String(enabled));
   }
-  bootstrap(user: OrganizerUser): OrganizerIdentity {
-    return this.transaction(() => {
-      if (this.bootstrapCompleted()) throw new HostError(409, "Host bootstrap is complete.");
-      this.insertOrganizer(user);
-      this.statement(
-        "INSERT INTO host_settings(key,value) VALUES ('bootstrap_completed','true')",
-      ).run();
-      this.statement("DELETE FROM host_sessions").run();
-      const identity = this.localIdentity(user.id);
-      if (!identity) throw new Error("Bootstrap identity was not stored.");
-      return identity;
-    });
-  }
-  insertOrganizer(user: OrganizerUser): void {
-    this.statement(
-      "INSERT INTO host_organizer_users(id,username,role,status,auth_version,password_hash,created_at) VALUES (?,?,?,?,?,?,?)",
-    ).run(
-      user.id,
-      user.username,
-      user.role,
-      user.status,
-      user.authVersion,
-      user.passwordHash,
-      user.createdAt,
-    );
-    this.statement(
-      "INSERT INTO host_organizer_identities(id,provider,issuer,subject,user_id) VALUES (lower(hex(randomblob(16))),'local-password','local-host',?,?)",
-    ).run(user.username, user.id);
-  }
-  identity(provider: string, issuer: string, subject: string): OrganizerIdentity | undefined {
-    return this.statement(
-      "SELECT id,provider,issuer,subject,user_id AS userId FROM host_organizer_identities WHERE provider=? AND issuer=? AND subject=?",
-    ).get(provider, issuer, subject) as OrganizerIdentity | undefined;
-  }
-  localIdentity(userId: string): OrganizerIdentity | undefined {
-    return this.statement(
-      "SELECT id,provider,issuer,subject,user_id AS userId FROM host_organizer_identities WHERE provider='local-password' AND issuer='local-host' AND user_id=?",
-    ).get(userId) as OrganizerIdentity | undefined;
-  }
-  organizer(id: string): OrganizerUser | undefined {
-    return this.statement(
-      "SELECT id,username,role,status,auth_version AS authVersion,password_hash AS passwordHash,created_at AS createdAt FROM host_organizer_users WHERE id=?",
-    ).get(id) as OrganizerUser | undefined;
-  }
-  organizerByUsername(username: string): OrganizerUser | undefined {
-    return this.statement(
-      "SELECT u.id,u.username,u.role,u.status,u.auth_version AS authVersion,u.password_hash AS passwordHash,u.created_at AS createdAt FROM host_organizer_users u JOIN host_organizer_identities i ON i.user_id=u.id WHERE i.provider='local-password' AND i.issuer='local-host' AND i.subject=?",
-    ).get(username) as OrganizerUser | undefined;
-  }
-  organizers(): OrganizerView[] {
-    return this.statement(
-      "SELECT id,username,role,status,auth_version AS authVersion,created_at AS createdAt FROM host_organizer_users ORDER BY username",
-    ).all() as OrganizerView[];
-  }
-  updateOrganizer(user: OrganizerUser): void {
-    this.transaction(() => {
-      const current = this.organizer(user.id);
-      if (!current) throw new HostError(404, "Organizer not found.");
-      if (current.authVersion !== user.authVersion)
-        throw new HostError(409, "Organizer changed during this request.");
-      if (
-        current.role === "Admin" &&
-        current.status === "active" &&
-        this.localIdentity(user.id) &&
-        (user.role !== "Admin" || user.status !== "active") &&
-        this.activeAdminCount() <= 1
-      )
-        throw new HostError(409, "At least one active local-password Admin is required.");
-      this.statement(
-        "UPDATE host_organizer_users SET role=?,status=?,password_hash=?,auth_version=auth_version+1 WHERE id=?",
-      ).run(user.role, user.status, user.passwordHash, user.id);
-      this.statement("DELETE FROM host_sessions WHERE user_id=?").run(user.id);
-    });
-  }
-  deleteOrganizer(id: string): void {
-    this.transaction(() => {
-      const current = this.organizer(id);
-      if (!current) throw new HostError(404, "Organizer not found.");
-      if (
-        current.role === "Admin" &&
-        current.status === "active" &&
-        this.localIdentity(id) &&
-        this.activeAdminCount() <= 1
-      )
-        throw new HostError(409, "At least one active local-password Admin is required.");
-      this.statement("DELETE FROM host_organizer_users WHERE id=?").run(id);
-    });
-  }
-  private activeAdminCount(): number {
-    const row = this.statement(
-      "SELECT count(*) AS count FROM host_organizer_users u JOIN host_organizer_identities i ON i.user_id=u.id WHERE u.role='Admin' AND u.status='active' AND i.provider='local-password' AND i.issuer='local-host' AND u.password_hash<>''",
-    ).get() as { count: number };
-    return row.count;
-  }
-  private identityById(id: string): OrganizerIdentity | undefined {
-    return this.statement(
-      "SELECT id,provider,issuer,subject,user_id AS userId FROM host_organizer_identities WHERE id=?",
-    ).get(id) as OrganizerIdentity | undefined;
-  }
-  private validIdentity(user: OrganizerUser, identity: OrganizerIdentity): boolean {
-    if (this.localOrganizerKeyEnabled()) return false;
-    if (identity.userId !== user.id || this.identityById(identity.id)?.userId !== user.id)
-      return false;
-    if (identity.provider === "saml") return this.featureFlags().saml === true;
-    return (
-      identity.provider === "local-password" &&
-      identity.issuer === "local-host" &&
-      identity.subject === user.username
-    );
-  }
+  /** Only organizer-key sessions are issued; a rotated key version cannot mint a new one. */
   addSession(
     token: string,
     refresh: string,
     expires: number,
     now: number,
-    user?: OrganizerUser,
-    identity?: OrganizerIdentity,
-    hostKeyVersion?: number,
+    hostKeyVersion: number,
   ): void {
-    const key = this.localOrganizerKey();
-    if (
-      (key && (user || identity || hostKeyVersion !== key.version)) ||
-      (!key && hostKeyVersion !== undefined)
-    )
+    if (this.localOrganizerKey()?.version !== hostKeyVersion)
       throw new HostError(401, "Host authentication changed. Sign in again.");
-    if (
-      (user === undefined) !== (identity === undefined) ||
-      (user && identity && !this.validIdentity(user, identity))
-    )
-      throw new HostError(401, "Organizer identity is invalid.");
     this.statement("DELETE FROM host_sessions WHERE expires<=?").run(now);
-    let method: OrganizerAuthMethod = "host-key";
-    if (identity?.provider === "saml") method = "saml";
-    else if (user) method = "local-password";
     this.statement(
-      "INSERT INTO host_sessions(token_hash,refresh_hash,user_id,identity_id,auth_method,auth_version,issued_at,last_seen,expires) VALUES (?,?,?,?,?,?,?,?,?)",
-    ).run(
-      digest(token),
-      digest(refresh),
-      user?.id ?? null,
-      identity?.id ?? null,
-      method,
-      user?.authVersion ?? hostKeyVersion ?? 0,
-      now,
-      now,
-      expires,
-    );
+      "INSERT INTO host_sessions(token_hash,refresh_hash,user_id,identity_id,auth_method,auth_version,issued_at,last_seen,expires) VALUES (?,?,NULL,NULL,'host-key',?,?,?,?)",
+    ).run(digest(token), digest(refresh), hostKeyVersion, now, now, expires);
   }
+  /**
+   * Legacy `local-password` and `saml` session rows can remain in an older database. They are
+   * rejected here, like any session whose organizer-key version is no longer current.
+   */
   authenticateAdmin(token: string, now: number): OrganizerPrincipal {
     const row = this.statement(
       "SELECT user_id AS userId,identity_id AS identityId,auth_method AS authMethod,auth_version AS authVersion,last_seen AS lastSeen,expires FROM host_sessions WHERE token_hash=?",
@@ -676,40 +522,20 @@ export class HostStore {
       | {
           userId: string | null;
           identityId: string | null;
-          authMethod: OrganizerAuthMethod;
+          authMethod: string;
           authVersion: number;
           lastSeen: number;
           expires: number;
         }
       | undefined;
-    if (!row || row.expires <= now || row.lastSeen + 15 * 60 * 1000 <= now)
-      throw new HostError(401, "Host session expired or invalid.");
-    if (row.authMethod === "host-key") {
-      if (
-        row.userId !== null ||
-        row.identityId !== null ||
-        this.localOrganizerKey()?.version !== row.authVersion
-      )
-        throw new HostError(401, "Host session expired or invalid.");
-      this.statement("UPDATE host_sessions SET last_seen=? WHERE token_hash=?").run(
-        now,
-        digest(token),
-      );
-      return authenticatedPrincipal({
-        userId: null,
-        identityId: null,
-        role: "Admin",
-        authMethod: "host-key",
-      });
-    }
-    const user = row.userId ? this.organizer(row.userId) : undefined;
-    const identity = row.identityId ? this.identityById(row.identityId) : undefined;
     if (
-      user?.status !== "active" ||
-      user.authVersion !== row.authVersion ||
-      !identity ||
-      identity.provider !== row.authMethod ||
-      !this.validIdentity(user, identity)
+      !row ||
+      row.expires <= now ||
+      row.lastSeen + 15 * 60 * 1000 <= now ||
+      row.authMethod !== "host-key" ||
+      row.userId !== null ||
+      row.identityId !== null ||
+      this.localOrganizerKey()?.version !== row.authVersion
     )
       throw new HostError(401, "Host session expired or invalid.");
     this.statement("UPDATE host_sessions SET last_seen=? WHERE token_hash=?").run(
@@ -717,22 +543,15 @@ export class HostStore {
       digest(token),
     );
     return authenticatedPrincipal({
-      userId: user.id,
-      identityId: identity.id,
-      role: user.role,
-      authMethod: row.authMethod,
+      userId: null,
+      identityId: null,
+      role: "Admin",
+      authMethod: "host-key",
     });
   }
-  revokeSession(refresh: string): OrganizerIdentityRecord | undefined {
-    return this.transaction(() => {
-      const hash = digest(refresh);
-      const principal = this.statement(`SELECT s.user_id AS userId,s.identity_id AS identityId,
-        s.auth_method AS authMethod,CASE WHEN s.auth_method='host-key' THEN 'Admin' ELSE u.role END AS role
-        FROM host_sessions s LEFT JOIN host_organizer_users u ON u.id=s.user_id
-        WHERE s.refresh_hash=?`).get(hash) as OrganizerIdentityRecord | null;
-      this.statement("DELETE FROM host_sessions WHERE refresh_hash=?").run(hash);
-      return principal ?? undefined;
-    });
+  /** A revocation handle only revokes its own session. */
+  revokeSession(refresh: string): void {
+    this.statement("DELETE FROM host_sessions WHERE refresh_hash=?").run(digest(refresh));
   }
   receipt(
     teamId: string,

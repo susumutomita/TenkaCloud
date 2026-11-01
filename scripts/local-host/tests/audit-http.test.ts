@@ -28,6 +28,8 @@ async function fixture(guardLegacyWrites = true) {
   seedLegacyAudit(store);
   if (guardLegacyWrites) rejectLegacyAuditWrites(store);
   const before = legacyAuditSnapshot(store);
+  const organizerKey = store.ensureLocalOrganizerKey().key;
+  if (!organizerKey) throw new Error("A fresh store must issue an organizer key.");
   const service = new HostingService(store, engine, key, Date.now, (message) => logs.push(message));
   const host = await startHttpHost({
     kind: "admin",
@@ -59,13 +61,9 @@ async function fixture(guardLegacyWrites = true) {
       headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
-  const bootstrap = await request("/host/bootstrap", "POST", {
-    key,
-    username: "admin",
-    password: secret,
-  });
-  expect(bootstrap.status).toBe(201);
-  const { idToken: admin } = (await bootstrap.json()) as { idToken: string };
+  const signedIn = await request("/host/login", "POST", { key: organizerKey });
+  expect(signedIn.status).toBe(200);
+  const { idToken: admin } = (await signedIn.json()) as { idToken: string };
   const enable = (enabled: boolean) =>
     request("/feature-flags", "PUT", { key: "audit", enabled }, admin);
   const newEvent = () =>
@@ -87,6 +85,7 @@ async function fixture(guardLegacyWrites = true) {
     admin,
     secret,
     key,
+    organizerKey,
     enable,
     logs,
     newEvent,
@@ -107,29 +106,10 @@ test("retired audit endpoints and enablement are unavailable while host access b
       ).status,
     ).toBe(404);
   }
-  for (const role of ["Operator", "Viewer"] as const) {
-    const username = role.toLowerCase();
-    expect(
-      (await f.request("/host/users", "POST", { username, password: f.secret, role }, f.admin))
-        .status,
-    ).toBe(201);
-    const signedIn = await f.request("/host/login", "POST", { username, password: f.secret });
-    const { idToken } = (await signedIn.json()) as { idToken: string };
-    expect((await f.request("/admin/audit-log", "GET", undefined, idToken)).status).toBe(404);
-    expect(
-      (
-        await f.request(
-          "/feature-flags",
-          "PUT",
-          { key: "challengePrerequisiteGate", enabled: true },
-          idToken,
-        )
-      ).status,
-    ).toBe(403);
-  }
   expect(
     (await f.request("/host/login", "POST", { username: "admin", password: randomToken() })).status,
   ).toBe(401);
+  expect((await f.request("/host/login", "POST", { key: f.key })).status).toBe(401);
   expect(legacyAuditSnapshot(f.store)).toEqual(f.before);
   expect(f.logs).toEqual([]);
 });
@@ -237,10 +217,7 @@ test("account verification revokes eligibility and ordinary account mutations re
 
 test("browser revocation still invalidates only the revoked session", async () => {
   const f = await fixture();
-  const signedIn = await f.request("/host/login", "POST", {
-    username: "admin",
-    password: f.secret,
-  });
+  const signedIn = await f.request("/host/login", "POST", { key: f.organizerKey });
   const session = (await signedIn.json()) as { idToken: string; refreshToken: string };
   const revoked = await fetch(`${f.host.origin}/api/host/oauth2/revoke`, {
     method: "POST",

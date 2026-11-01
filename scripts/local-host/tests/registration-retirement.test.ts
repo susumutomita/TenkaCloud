@@ -72,7 +72,7 @@ test("retired invitation and receipt APIs cannot distribute keys, even with a sa
       expect(response.body).not.toHaveProperty("invitation");
     }
     expect((await f.api("admin", "/feature-flags")).body).toEqual({
-      flags: { saml: false, audit: false, challengePrerequisiteGate: false },
+      flags: { audit: false, challengePrerequisiteGate: false },
     });
     for (const enabled of [true, false])
       expect(

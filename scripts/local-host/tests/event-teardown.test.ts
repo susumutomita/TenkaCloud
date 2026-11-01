@@ -1,12 +1,11 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
 import { id } from "../auth";
-import { apiRequest } from "../bench/state-setup";
+import { apiRequest, loginAdmin } from "../bench/state-setup";
 import type { HostedEvent, Job, Team } from "../model";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
 import { ExerciseFixture } from "./exercise-fixture";
-import { bootstrapOrganizer } from "./organizer-fixture";
 
 async function fixture(run: (f: Awaited<ReturnType<typeof setup>>) => Promise<void>) {
   const f = await setup();
@@ -69,7 +68,7 @@ async function setup() {
   store.putTeam(team);
   store.putJob(job);
   const service = new HostingService(store, engine, "synthetic-host-key");
-  const admin = await bootstrapOrganizer(service, "synthetic-host-key");
+  const admin = await loginAdmin(service);
   const request = (method: string, path = `/events/${event.eventId}`) =>
     service.admin(apiRequest({ method, path, token: admin }));
   const detail = async () =>

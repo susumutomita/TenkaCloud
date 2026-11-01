@@ -1,12 +1,8 @@
 import type { ApiRequest, ApiResponse, HostingService } from "../service";
 
 export const PROBLEM_ID = "crypto-battle";
+/** The host's session-signing key in benchmark and test databases; never an organizer login. */
 export const HOST_KEY = "bench-host-key";
-export const BENCH_ORGANIZER = {
-  username: "bench-admin",
-  // eslint-disable-next-line sonarjs/no-hardcoded-passwords -- A disposable benchmark database.
-  password: "benchmark organizer password 2026",
-} as const;
 
 export interface CreatedTeam {
   readonly teamId: string;
@@ -33,17 +29,15 @@ async function expectOk(promise: Promise<ApiResponse>, context: string): Promise
   return response;
 }
 
-async function loginAdmin(service: HostingService): Promise<string> {
-  const bootstrapCompleted = service.store.bootstrapCompleted();
+/**
+ * Sign in with the organizer key, as the local host does. A store that already has a key gets a
+ * rotated one, because only its hash is stored; rotation revokes earlier organizer sessions.
+ */
+export async function loginAdmin(service: HostingService): Promise<string> {
+  const key =
+    service.store.ensureLocalOrganizerKey().key ?? service.store.rotateLocalOrganizerKey();
   const response = await expectOk(
-    service.admin(
-      apiRequest({
-        method: "POST",
-        path: bootstrapCompleted ? "/host/login" : "/host/bootstrap",
-        token: "",
-        body: { ...(bootstrapCompleted ? {} : { key: HOST_KEY }), ...BENCH_ORGANIZER },
-      }),
-    ),
+    service.admin(apiRequest({ method: "POST", path: "/host/login", token: "", body: { key } })),
     "organizer login",
   );
   const body = response.body as { idToken: string };

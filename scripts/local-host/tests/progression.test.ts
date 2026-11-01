@@ -1,6 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { fakeFlag } from "./fake-aws";
-import { type CreatedEvent, progressionFixture } from "./progression-fixture";
+import { type CreatedEvent, GATE_PROBLEM, progressionFixture } from "./progression-fixture";
 
 const fixtures: Awaited<ReturnType<typeof progressionFixture>>[] = [];
 afterEach(async () => {
@@ -12,7 +11,7 @@ async function fixture() {
   return result;
 }
 const configuration = {
-  gateProblemId: "hello-world",
+  gateProblemId: GATE_PROBLEM,
   unlockTargetIds: ["crypto-battle"],
   defaultPolicy: "required",
   completionBonus: 50,
@@ -35,15 +34,10 @@ function progression(body: Record<string, unknown>) {
 }
 async function solve(f: Awaited<ReturnType<typeof fixture>>, event: CreatedEvent, nonce?: string) {
   const team = alpha(event);
-  const job = f.store
-    .jobs(event.eventId, team.teamId)
-    .find((job) => job.problemId === "hello-world");
-  if (!job) throw new Error("Missing job");
-  const stack = JSON.parse(job.unit ?? "{}").stackName as string;
   return f.request(
     "/portal/me/submit-flag",
     "POST",
-    { problemId: "hello-world", flag: fakeFlag(stack) },
+    { problemId: GATE_PROBLEM, flag: await f.exerciseFlag(event, team.teamId) },
     team.teamLoginKey,
     nonce,
   );
@@ -135,7 +129,7 @@ test("OFF completion and config removal retain event/team/problem ledger across 
   expect(f.store.team(a.teamId).score).toBe(100);
   await f.flag(true);
   expect(f.store.team(a.teamId).score).toBe(150);
-  const job = f.store.jobs(event.eventId, a.teamId).find((j) => j.problemId === "hello-world");
+  const job = f.store.jobs(event.eventId, a.teamId).find((j) => j.problemId === GATE_PROBLEM);
   if (!job) throw new Error("Missing job");
   await f.request(`/events/${event.eventId}/deployments/${job.jobId}`, "DELETE");
   await f.service.drain();
@@ -201,7 +195,7 @@ test("metadata and flag/hint scoring revalidate gate after asynchronous runtime 
   const reverse = {
     ...configuration,
     gateProblemId: "crypto-battle",
-    unlockTargetIds: ["hello-world"],
+    unlockTargetIds: [GATE_PROBLEM],
   };
   const view = f.engine.view.bind(f.engine);
   f.engine.view = async (context) => {
@@ -210,8 +204,11 @@ test("metadata and flag/hint scoring revalidate gate after asynchronous runtime 
     return result;
   };
   const me = await f.request("/portal/me", "GET", undefined, a.teamLoginKey);
-  expect(problems(me.body).find((p) => p.problemId === "hello-world")?.stackOutputs).toEqual({});
-  expect(problems(me.body).find((p) => p.problemId === "hello-world")?.instructions).toBe("");
+  const locked = problems(me.body).find((p) => p.problemId === GATE_PROBLEM);
+  expect(locked?.stackOutputs).toEqual({});
+  expect(locked?.instructions).toBe("");
+  expect(locked?.scoring).toBeUndefined();
+  expect(locked?.i18n).toBeUndefined();
   f.engine.view = view;
   await f.request(`/events/${event.eventId}/progression-gate`, "DELETE");
   const submit = f.engine.submit.bind(f.engine);
@@ -231,7 +228,7 @@ test("metadata and flag/hint scoring revalidate gate after asynchronous runtime 
     return result;
   };
   const result = await f.request(
-    "/portal/me/problems/hello-world/hints/hint-1/reveal",
+    `/portal/me/problems/${GATE_PROBLEM}/hints/hint-1/reveal`,
     "POST",
     {},
     a.teamLoginKey,
@@ -272,14 +269,14 @@ test("hint receipts cannot disclose a reveal after the problem becomes locked", 
   const f = await fixture(),
     event = await f.create(),
     a = alpha(event);
-  const path = "/portal/me/problems/hello-world/hints/hint-1/reveal";
+  const path = `/portal/me/problems/${GATE_PROBLEM}/hints/hint-1/reveal`;
   const first = await f.request(path, "POST", {}, a.teamLoginKey, "hint-receipt-0001");
   expect(first.status).toBe(200);
   await f.flag(true);
   await f.request(`/events/${event.eventId}/progression-gate`, "PUT", {
     ...configuration,
     gateProblemId: "crypto-battle",
-    unlockTargetIds: ["hello-world"],
+    unlockTargetIds: [GATE_PROBLEM],
   });
   const replay = await f.request(path, "POST", {}, a.teamLoginKey, "hint-receipt-0001");
   expect(replay.status).toBe(409);

@@ -32,7 +32,6 @@
     "@lezer/xml": ["prepare"],
     "@lezer/yaml": ["prepare"],
     "@marijn/find-cluster-break": ["prepare"],
-    "@node-saml/node-saml": ["prepare"],
     "@scarf/scarf": ["postinstall"],
     "@sindresorhus/is": ["prepare"],
     "@so-ric/colorspace": ["prepare"],
@@ -41,7 +40,6 @@
     "@textlint-rule/textlint-rule-no-invalid-control-character": ["prepare"],
     "@textlint-rule/textlint-rule-no-unmatched-pair": ["prepare"],
     "@textlint/regexp-string-matcher": ["prepare"],
-    "@xmldom/is-dom-node": ["prepare"],
     "acorn": ["prepare"],
     "acorn-walk": ["prepare"],
     "analyze-desumasu-dearu": ["prepare"],
@@ -103,7 +101,6 @@
     "walk-up-path": ["prepare"],
     "web-worker": ["prepare"],
     "whatwg-url": ["prepare"],
-    "workerd": ["postinstall"],
-    "xml-crypto": ["prepare"]
+    "workerd": ["postinstall"]
   }
 }

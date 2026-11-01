@@ -10,7 +10,7 @@ export const metadata = { title: "大会を最後まで運営する" };
 
 <h2 id="connect-a-competitor-account">任意の競技者アカウントを接続する</h2>
 
-AWS 問題にはアカウント、region、リソース、削除の合意が必要です。`infrastructure/templates/competitor-bootstrap.yaml` と、表示された運営アカウント、正確な role 名、保存された ExternalId を使います。各アカウントを検証してからチームへ割り当てます。参加者へ配置 role の認証情報を配布しないでください。
+AWS 問題はクラウド開催専用です。ローカル開催では競技者アカウントを接続しません。AWS 問題にはアカウント、region、リソース、削除の合意が必要です。`infrastructure/templates/competitor-bootstrap.yaml` と、表示された運営アカウント、正確な role 名、保存された ExternalId を使います。各アカウントを検証してからチームへ割り当てます。参加者へ配置 role の認証情報を配布しないでください。
 
 <h2 id="deploy-a-problem">配置・開始・採点</h2>
 
@@ -18,7 +18,7 @@ AWS 問題にはアカウント、region、リソース、削除の合意が必�
 2. 停止状態の Docker jobs の準備結果をチームごとに確認し、失敗した操作だけを所有情報に基づいて再試行します。AWS 問題は別途配置します。
 3. Schedule から開始し、正しいチームの参加者 URL とチームキーを配ります。**即座に開始**では競技時間を選びます。
 4. 参加者の Start / resume、Stop (keep data)、容量超過時の拒否、正答、誤答、ヒント、順位、チーム分離、環境障害を確認します。
-5. AWS Battle は両方の URL、採点、対象チームへの障害、revert と実際の復旧まで確認します。
+5. クラウド開催の AWS Battle では、両方の URL、採点、対象チームへの障害、revert と実際の復旧まで確認します。ローカル開催に障害注入はありません。
 
 <h2 id="finish">安全に終了する</h2>
 

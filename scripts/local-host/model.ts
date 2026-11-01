@@ -300,13 +300,6 @@ export interface RuntimeEngine {
   ): Promise<void>;
   readonly supportsOnDemand?: boolean;
   containerCost?(definition: string): import("./container-budget").ContainerCost;
-  disruptionAdapter?(): import("./disruption-model").DisruptionAdapter | undefined;
-  readonly hasAws?: boolean;
-  participantAwsAccess?(args: {
-    kind: import("./participant-aws-contract").ParticipantAwsAccess["kind"];
-    job: Job;
-    assertCurrent: () => void;
-  }): Promise<import("./participant-aws-contract").ParticipantAwsAccess>;
   catalog(): readonly Problem[];
   requiresGateway?(definition: string): boolean;
   coordinationPlugin?(problem: Problem): import("./coordination-core").HostPlugin;

@@ -9,11 +9,6 @@ import { createTemporaryDirectory, removeTemporaryDirectory } from "../temporary
 import { HistoricalCompetitionEngine as CompetitionEngine } from "./historical-competition-fixture";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
-const ACCESS_ORGANIZER = {
-  username: "access-admin",
-  // eslint-disable-next-line sonarjs/no-hardcoded-passwords -- Test-only account in a fresh local host data directory.
-  password: "Access-admin-test-only-2026!",
-} as const;
 interface AccessEvent {
   eventId: string;
   teams: { teamId: string; teamLoginKey: string }[];
@@ -25,6 +20,9 @@ export async function participantAccessFixture() {
   const masterKey = "test-only-access-signing-key";
   const clock = Date.now();
   let store = new HostStore(new Database(database));
+  // Only the key's hash is stored, so the same key signs in again after a restart.
+  const organizerKey = store.ensureLocalOrganizerKey().key;
+  if (!organizerKey) throw new Error("A fresh store must issue an organizer key.");
   let service = new HostingService(
     store,
     new CompetitionEngine(root, directory),
@@ -71,16 +69,10 @@ export async function participantAccessFixture() {
       log: (error) => errors.push(error),
       participantOrigin: participant.origin,
     });
-    const state = await api<{ bootstrapCompleted: boolean }>("admin", "/host/bootstrap-status");
-    assert.equal(state.status, 200);
-    const firstVisit = !state.body.bootstrapCompleted;
-    const login = await api<{ idToken: string }>(
-      "admin",
-      firstVisit ? "/host/bootstrap" : "/host/login",
-      "POST",
-      { ...ACCESS_ORGANIZER, ...(firstVisit ? { key: masterKey } : {}) },
-    );
-    assert.equal(login.status, firstVisit ? 201 : 200);
+    const login = await api<{ idToken: string }>("admin", "/host/login", "POST", {
+      key: organizerKey,
+    });
+    assert.equal(login.status, 200);
     adminToken = login.body.idToken;
   }
   async function detach() {

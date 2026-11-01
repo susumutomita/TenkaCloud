@@ -13,23 +13,14 @@ export async function eventHostFixture(
     eventId: string;
     clock: { now: number };
   }) => Promise<void>,
-  role: "Admin" | "Viewer" = "Viewer",
 ) {
   const store = new HostStore(new Database(":memory:"));
   const engine = new ExerciseFixture((path) => new Database(path));
   const clock = { now: 10_000 };
-  const user = {
-    id: id(1),
-    username: "viewer",
-    role,
-    status: "active" as const,
-    authVersion: 1,
-    passwordHash: randomToken(),
-    createdAt: 1,
-  };
-  const identity = store.bootstrap(user);
+  const { key } = store.ensureLocalOrganizerKey();
+  if (!key) throw new Error("A fresh store must issue an organizer key.");
   const token = randomToken();
-  store.addSession(token, randomToken(), 100_000, 1, user, identity);
+  store.addSession(token, randomToken(), 100_000, 1, store.verifyLocalOrganizerKey(key));
   const eventId = id(2);
   store.putEvent({
     eventId,

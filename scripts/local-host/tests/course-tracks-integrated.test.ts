@@ -10,7 +10,7 @@ import {
 } from "../../../apps/participant-portal/src/data/course-track";
 import type { ParticipantTeamView } from "../../../packages/portal-contracts/src/index";
 import { metadataToEntry } from "../../../packages/portal-contracts/src/problem-catalog";
-import { apiRequest, type CreatedEvent } from "../bench/state-setup";
+import { apiRequest, type CreatedEvent, loginAdmin } from "../bench/state-setup";
 import { publicMetadata } from "../browser-metadata";
 import { hostBuildDirectory } from "../build";
 import type { LocalPlaySnapshot } from "../container/state-store";
@@ -19,7 +19,6 @@ import { type HttpHost, startHttpHost } from "../http";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
 import { createTemporaryDirectory, removeTemporaryDirectory } from "../temporary-directory";
-import { bootstrapOrganizer } from "./organizer-fixture";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const FIRST = "stackstack-onboarding";
@@ -56,7 +55,7 @@ test("local HTTP/SQLite and safe catalog project assigned course checkpoints, ga
     store.close();
   }
   try {
-    const token = await bootstrapOrganizer(service, "course-test-key");
+    const token = await loginAdmin(service);
     async function admin(method: string, path: string, body: unknown = {}) {
       const result = await service.admin(apiRequest({ method, path, token, body }));
       assert.ok(result.status < 300, `${path}: ${JSON.stringify(result)}`);

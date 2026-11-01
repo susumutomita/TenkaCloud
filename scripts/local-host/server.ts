@@ -10,7 +10,6 @@ import { openLocalDatabase } from "./local-database";
 import { localJobDescription, localRuntimeFailure } from "./local-runtime-report";
 import type { AccountConnection, RuntimeEngine, SqlDatabase } from "./model";
 import type { PublicExposure } from "./options";
-import type { OrganizerPasswords } from "./organizer-passwords";
 import { PublishedWebBroker } from "./published-web-broker";
 import { HostingService } from "./service";
 import { digest, HostStore } from "./store";
@@ -88,7 +87,6 @@ export async function startLocalHost(
   announce: (message: string) => void = console.log,
   providers: {
     openDatabase?: (path: string) => Promise<SqlDatabase>;
-    passwords?: OrganizerPasswords;
   } = {},
 ): Promise<RunningLocalHost> {
   assertVpnSettings(settings);
@@ -114,8 +112,6 @@ export async function startLocalHost(
   let transportEngine: RuntimeEngine | undefined;
   let uptimeTimer: ReturnType<typeof setInterval> | undefined;
   let uptimeTick: Promise<void> | undefined;
-  let disruptionTimer: ReturnType<typeof setInterval> | undefined;
-  let disruptionTick: Promise<void> | undefined;
   let networkTimer: ReturnType<typeof setInterval> | undefined;
   let networkTick: Promise<void> | undefined;
   async function stopOwnedEnvironments(unstoppedLocal: string[]): Promise<void> {
@@ -141,12 +137,9 @@ export async function startLocalHost(
     networkTimer = undefined;
     if (uptimeTimer) clearInterval(uptimeTimer);
     uptimeTimer = undefined;
-    if (disruptionTimer) clearInterval(disruptionTimer);
-    disruptionTimer = undefined;
     // Stop accepting requests first: a deployment or teardown accepted after the drain
     // snapshot would otherwise keep writing SQLite/Docker state past store.close().
     await Promise.all([admin?.close(), participant?.close()]);
-    await disruptionTick;
     await networkTick;
     admin = undefined;
     participant = undefined;
@@ -180,15 +173,7 @@ export async function startLocalHost(
         gatewayPort(settings.gatewayPorts, gatewayOffset(job)),
       );
     }
-    service = new HostingService(
-      store,
-      engine,
-      masterKey,
-      undefined,
-      undefined,
-      undefined,
-      providers.passwords,
-    );
+    service = new HostingService(store, engine, masterKey);
     service.accountConnection = settings.accountConnection;
     service.gatewayPorts = settings.gatewayPorts;
     service.containerLimits = settings.containerLimits ?? DEFAULT_CONTAINER_LIMITS;
@@ -199,7 +184,6 @@ export async function startLocalHost(
     service.assertGatewayRange(settings.gatewayPorts);
     await service.recover();
     if (settings.vpn) await engine.auditNetworks?.();
-    const runningService = service;
     if (engine.auditNetworks)
       networkTimer = setInterval(() => {
         if (networkTick) return;
@@ -212,19 +196,6 @@ export async function startLocalHost(
             networkTick = undefined;
           });
       }, 10_000);
-    disruptionTimer = setInterval(() => {
-      if (disruptionTick) return;
-      disruptionTick = runningService.disruptions
-        .tick()
-        .catch(() =>
-          announce(
-            "Disruption processing failed; inspect durable execution history before retrying.",
-          ),
-        )
-        .finally(() => {
-          disruptionTick = undefined;
-        });
-    }, 1000);
     const surfaces = new SurfaceGateways(
       gatewayHostname,
       service,

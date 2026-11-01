@@ -22,7 +22,7 @@ function fixture(files: Record<string, string>): string {
 test("host runtime imports remain independent of both retired backends, including type edges", () => {
   const closure = hostImportClosure(resolve(import.meta.dir, "../../.."));
   expect(closure).toContain("scripts/local-host/container/scoring.ts");
-  expect(closure).toContain("scripts/lib/assume-role.ts");
+  expect(closure).toContain("scripts/lib/hosting-api.ts");
 });
 test.each([
   "import type { Data } from '../../local-play/legacy';",

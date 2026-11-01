@@ -1,10 +1,3 @@
-// Legacy account-mode fixtures still exercise the historical account/role boundary.
-export const REHEARSAL_ORGANIZER = {
-  username: "rehearsal-admin",
-  // eslint-disable-next-line sonarjs/no-hardcoded-passwords -- Test-only account in a fresh local host data directory.
-  password: "local rehearsal password 2026",
-} as const;
-
 interface HostAddress {
   admin: string;
   key: string;

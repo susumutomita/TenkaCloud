@@ -35,7 +35,7 @@ test("Local concurrent archive has one winner, retains data and rejects retries 
     } finally {
       writes.mockRestore();
     }
-  }, "Admin");
+  });
 });
 
 test("Local archive rolls back an actual save if the provider throws, then an explicit retry succeeds", async () => {
@@ -56,10 +56,10 @@ test("Local archive rolls back an actual save if the provider throws, then an ex
       write.mockRestore();
     }
     expect((await service.admin(command(eventId, token))).status).toBe(200);
-  }, "Admin");
+  });
 });
 
-test("Local archive checks status before jobs and keeps Viewer and invalid session denials", async () => {
+test("Local archive checks status before jobs and keeps invalid session denials", async () => {
   await eventHostFixture(async ({ store, service, token, eventId }) => {
     store.putEvent({ ...store.event(eventId), status: "DEPLOYING" });
     const jobs = spyOn(store, "jobs").mockImplementation(() => {
@@ -72,8 +72,5 @@ test("Local archive checks status before jobs and keeps Viewer and invalid sessi
       jobs.mockRestore();
     }
     await expect(service.admin(command(eventId, "invalid"))).rejects.toMatchObject({ status: 401 });
-  }, "Admin");
-  await eventHostFixture(async ({ service, token, eventId }) => {
-    await expect(service.admin(command(eventId, token))).rejects.toMatchObject({ status: 403 });
   });
 });

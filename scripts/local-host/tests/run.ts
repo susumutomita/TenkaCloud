@@ -20,12 +20,11 @@ import { portsFree } from "../ports";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
 import { ExerciseFixture } from "./exercise-fixture";
-import { REHEARSAL_ORGANIZER } from "./organizer-login";
 
 // eslint-disable-next-line sonarjs/no-hardcoded-ip -- RFC1918 parser test vector; no connection is made.
 const TEST_PRIVATE_ADDRESS = "192.168.1.2";
-// eslint-disable-next-line sonarjs/no-hardcoded-passwords -- Negative credential for disposable host fixtures.
-const INVALID_ORGANIZER_PASSWORD = "invalid";
+/** Well-formed but never issued, so sign-in reaches the key check and fails there. */
+const INVALID_ORGANIZER_KEY = "A".repeat(43);
 
 interface ResponseData<Body = Record<string, unknown>> {
   status: number;
@@ -98,6 +97,8 @@ async function createFixture() {
   let clock = Date.parse("2026-09-15T00:00:00Z");
   const gatewayPorts = testGatewayPorts();
   let store = new HostStore(openDatabase(databasePath));
+  // Only the key's hash is stored, so the same key signs in again after a restart.
+  const organizerKey = required(store.ensureLocalOrganizerKey().key);
   const engine = new ExerciseFixture(openDatabase);
   let service = new HostingService(
     store,
@@ -174,27 +175,8 @@ async function createFixture() {
     };
   }
   async function login(): Promise<void> {
-    const bootstrap = await request<{ bootstrapCompleted: boolean }>(
-      "admin",
-      "/api/host/bootstrap-status",
-      "GET",
-      undefined,
-      "",
-    );
-    assert.equal(bootstrap.status, 200);
-    const firstVisit = !bootstrap.body.bootstrapCompleted;
-    const response = await request(
-      "admin",
-      firstVisit ? "/api/host/bootstrap" : "/api/host/login",
-      "POST",
-      {
-        ...(firstVisit ? { key } : {}),
-        username: REHEARSAL_ORGANIZER.username,
-        password: REHEARSAL_ORGANIZER.password,
-      },
-      "",
-    );
-    assert.equal(response.status, firstVisit ? 201 : 200);
+    const response = await request("admin", "/api/host/login", "POST", { key: organizerKey }, "");
+    assert.equal(response.status, 200);
     adminToken = response.body.idToken as string;
     refreshToken = response.body.refreshToken as string;
   }
@@ -332,15 +314,8 @@ test("No automatic login, and public configuration has no host/team credentials"
     assert.equal((await f.request("admin", "/api/events", "GET", undefined, "")).status, 401);
     assert.equal((await f.request("participant", "/api/portal/me")).status, 401);
     assert.equal(
-      (
-        await f.request(
-          "admin",
-          "/api/host/login",
-          "POST",
-          { username: REHEARSAL_ORGANIZER.username, password: INVALID_ORGANIZER_PASSWORD },
-          "",
-        )
-      ).status,
+      (await f.request("admin", "/api/host/login", "POST", { key: INVALID_ORGANIZER_KEY }, ""))
+        .status,
       401,
     );
   }));
@@ -962,27 +937,13 @@ test("Session revocation, expiration and invalid-login rate limiting", () =>
     f.advance(60_001);
     for (let index = 0; index < 10; index++)
       assert.equal(
-        (
-          await f.request(
-            "admin",
-            "/api/host/login",
-            "POST",
-            { username: REHEARSAL_ORGANIZER.username, password: INVALID_ORGANIZER_PASSWORD },
-            "",
-          )
-        ).status,
+        (await f.request("admin", "/api/host/login", "POST", { key: INVALID_ORGANIZER_KEY }, ""))
+          .status,
         401,
       );
     assert.equal(
-      (
-        await f.request(
-          "admin",
-          "/api/host/login",
-          "POST",
-          { username: REHEARSAL_ORGANIZER.username, password: INVALID_ORGANIZER_PASSWORD },
-          "",
-        )
-      ).status,
+      (await f.request("admin", "/api/host/login", "POST", { key: INVALID_ORGANIZER_KEY }, ""))
+        .status,
       429,
     );
   }));
@@ -1372,13 +1333,9 @@ test("Without a Docker daemon, deployment reports that cause and retry advice", 
     const problem = required(engine.catalog()[0]);
     const session = await service.admin({
       method: "POST",
-      path: "/host/bootstrap",
+      path: "/host/login",
       query: new URLSearchParams(),
-      body: {
-        key: persistentKey(join(data, "host-key")),
-        username: REHEARSAL_ORGANIZER.username,
-        password: REHEARSAL_ORGANIZER.password,
-      },
+      body: { key: required(store.ensureLocalOrganizerKey().key) },
       token: "",
     });
     const token = String(object(session.body).idToken);

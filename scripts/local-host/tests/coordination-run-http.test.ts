@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { apiRequest, BENCH_ORGANIZER, type CreatedEvent, HOST_KEY } from "../bench/state-setup";
+import { apiRequest, type CreatedEvent, HOST_KEY, loginAdmin } from "../bench/state-setup";
 import { type HttpHost, startHttpHost } from "../http";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
@@ -50,15 +50,7 @@ for (const problemId of ["crypto-battle"]) {
       return { status: response.status, body: (await response.json()) as Record<string, unknown> };
     }
     try {
-      const login = await service.admin(
-        apiRequest({
-          method: "POST",
-          path: "/host/bootstrap",
-          token: "",
-          body: { key: HOST_KEY, ...BENCH_ORGANIZER },
-        }),
-      );
-      const admin = (login.body as { idToken: string }).idToken;
+      const admin = await loginAdmin(service);
       async function create(name: string) {
         const result = await service.admin(
           apiRequest({

@@ -1,98 +1,146 @@
 import { Database } from "bun:sqlite";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CloudFormationEngine } from "../cloudformation-engine";
+import type { HostPlugin } from "../coordination-core";
 import { type HttpHost, startHttpHost } from "../http";
+import {
+  type Context,
+  definitionKind,
+  type EngineResult,
+  type Job,
+  type Problem,
+  type RuntimeEngine,
+} from "../model";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
 import { createTemporaryDirectory, removeTemporaryDirectory } from "../temporary-directory";
-import { FakeAws } from "./fake-aws";
-import { HistoricalCompetitionEngine as CompetitionEngine } from "./historical-competition-fixture";
-import { organizerToken, REHEARSAL_ORGANIZER } from "./organizer-login";
+import { ExerciseFixture } from "./exercise-fixture";
+import { HistoricalCompetitionEngine } from "./historical-competition-fixture";
+import { organizerToken } from "./organizer-login";
 
 export const GATE = "challengePrerequisiteGate";
 export const START = Date.parse("2026-09-30T00:00:00Z");
+/** The flag-and-hint exercise every gate test unlocks the Battle with. */
+export const GATE_PROBLEM = "sqli-demo";
 export interface CreatedEvent {
   eventId: string;
   teams: { teamId: string; teamLoginKey: string }[];
 }
 
-/** Real host HTTP, SQLite, metadata and scorers. Only outbound AWS transport is replaced. */
-export async function progressionFixture(
-  options: { adminBuild?: string; participantBuild?: string } = {},
-) {
+/**
+ * Routes the Docker exercise to the test-only {@link ExerciseFixture} and the crypto Battle to the
+ * real competition engine, so gate tests need neither Docker nor AWS.
+ */
+export class GateEngine implements RuntimeEngine {
+  readonly exercise: ExerciseFixture;
+  private readonly battle: HistoricalCompetitionEngine;
+  private readonly problems: readonly Problem[];
+  constructor(root: string, data: string) {
+    this.exercise = new ExerciseFixture((path) => new Database(path));
+    this.battle = new HistoricalCompetitionEngine(root, data, false);
+    // A pinned floor keeps the exercise's wrong-answer debt from going below zero on its own.
+    const exercise = this.exercise.catalog().map((problem) => ({
+      ...problem,
+      definition: JSON.stringify({ ...JSON.parse(problem.definition), scoreFloor: 0 }),
+    }));
+    this.problems = [...exercise, ...this.battle.catalog()];
+  }
+  catalog(): readonly Problem[] {
+    return this.problems;
+  }
+  requiresGateway(): boolean {
+    return false;
+  }
+  coordinationPlugin(problem: Problem): HostPlugin {
+    return this.battle.coordinationPlugin(problem);
+  }
+  private engineFor(definition: string): RuntimeEngine {
+    return definitionKind(definition) === "compose" ? this.exercise : this.battle;
+  }
+  private part(context: Context, exercise: boolean): Context {
+    const own = (definition: string) => (definitionKind(definition) === "compose") === exercise;
+    const problems = context.event.problems.filter((problem) => own(problem.definition));
+    return {
+      ...context,
+      event: { ...context.event, problems },
+      jobs: context.jobs.filter((job) => own(job.definition)),
+    };
+  }
+  private exerciseProblem(context: Context, problemId: unknown): boolean {
+    const problem = context.event.problems.find((each) => each.problemId === problemId);
+    return problem !== undefined && definitionKind(problem.definition) === "compose";
+  }
+  start(job: Job, retain: (unit: string | null) => void): Promise<void> {
+    return this.engineFor(job.definition).start(job, retain);
+  }
+  recover(job: Job): Promise<void> {
+    return this.engineFor(job.definition).recover(job);
+  }
+  stop(job: Job): Promise<void> {
+    return this.engineFor(job.definition).stop(job);
+  }
+  pause(job: Job): Promise<void> {
+    return this.engineFor(job.definition).pause(job);
+  }
+  resume(job: Job): Promise<void> {
+    return this.engineFor(job.definition).resume(job);
+  }
+  surface(job: Job): string {
+    return this.engineFor(job.definition).surface(job);
+  }
+  async view(context: Context): Promise<Record<string, unknown>> {
+    const exercise = this.part(context, true);
+    const battle = this.part(context, false);
+    const views = await Promise.all([
+      exercise.event.problems.length ? this.exercise.view(exercise) : { problems: [] },
+      battle.event.problems.length ? this.battle.view(battle) : { problems: [] },
+    ]);
+    return { problems: views.flatMap((view) => view.problems as unknown[]) };
+  }
+  /** The exercise keeps the team's whole ledger, so Battle points survive its answers. */
+  submit(context: Context, body: Record<string, unknown>): Promise<EngineResult> {
+    return this.exerciseProblem(context, body.problemId)
+      ? this.exercise.submit(this.part(context, true), body)
+      : this.battle.submit(context, body);
+  }
+  hint(context: Context, problemId: string, hintId: string): Promise<EngineResult> {
+    return this.exerciseProblem(context, problemId)
+      ? this.exercise.hint(this.part(context, true), problemId, hintId)
+      : this.battle.hint(context, problemId, hintId);
+  }
+}
+
+/** Real host HTTP, SQLite, progression ledger and Battle plugin; only the exercise is synthetic. */
+export async function progressionFixture() {
   const root = fileURLToPath(new URL("../../../", import.meta.url));
   const data = createTemporaryDirectory(root, "tenka-progression-");
   const filename = join(data, "host.sqlite");
   let store = new HostStore(new Database(filename));
-  // Keep legacy role tests explicit; a served admin UI always uses the organizer key.
-  const organizerKey = options.adminBuild ? store.ensureLocalOrganizerKey().key : undefined;
-  const aws = new FakeAws();
-  const cloud = new CloudFormationEngine(root, {
-    region: "ap-northeast-1",
-    externalId: "host-test-external-id",
-    operatorAccountId: async () => "999999999999",
-    sts: aws.sts as never,
-    cloudFormation: aws.cloudFormation as never,
-    team: (job) => store.team(job.teamId),
-    sleep: async () => undefined,
-    pollIntervalMs: 0,
-    timeoutMs: 60_000,
-  });
-  const engine = new CompetitionEngine(root, data, false, cloud);
+  // Only the key's hash is stored, so the same key signs in again after a restart.
+  const organizerKey = store.ensureLocalOrganizerKey().key;
+  if (!organizerKey) throw new Error("A fresh store must issue an organizer key.");
+  const engine = new GateEngine(root, data);
   let service = new HostingService(store, engine, "gate-test-host-key", () => START);
   let admin: HttpHost;
   let portal: HttpHost;
   let token = "";
   async function start() {
-    service.accountConnection = {
-      region: "ap-northeast-1",
-      operatorAccountId: "999999999999",
-      externalId: "host-test-external-id",
-      verify: async (accountId, roleName) => {
-        await aws.sts.send(
-          new (await import("@aws-sdk/client-sts")).AssumeRoleCommand({
-            RoleArn: `arn:aws:iam::${accountId}:role/${roleName}`,
-            ExternalId: "host-test-external-id",
-            RoleSessionName: "gate-test-verify",
-          }),
-        );
-      },
-    };
     portal = await startHttpHost({
       kind: "participant",
       hostname: "127.0.0.1",
       port: 0,
-      staticRoot: options.participantBuild ?? data,
+      staticRoot: data,
       service,
     });
     admin = await startHttpHost({
       kind: "admin",
       hostname: "127.0.0.1",
       port: 0,
-      staticRoot: options.adminBuild ?? data,
+      staticRoot: data,
       service,
       participantOrigin: portal.origin,
     });
-    token = await loginAdmin();
-    for (const awsAccountId of ["111111111111", "222222222222"]) {
-      if (store.accounts().some((account) => account.awsAccountId === awsAccountId)) continue;
-      const registered = await request("/admin/competitor-accounts", "POST", { awsAccountId });
-      if (registered.status !== 201) throw new Error("Account registration failed.");
-      const verified = await request(`/admin/competitor-accounts/${awsAccountId}/verify`, "POST");
-      if (verified.status !== 200) throw new Error("Account verification failed.");
-    }
-  }
-  async function loginAdmin(): Promise<string> {
-    if (organizerKey) return organizerToken({ admin: admin.origin, key: organizerKey });
-    const firstVisit = !store.bootstrapCompleted();
-    const login = await request(firstVisit ? "/host/bootstrap" : "/host/login", "POST", {
-      ...REHEARSAL_ORGANIZER,
-      ...(firstVisit ? { key: "gate-test-host-key" } : {}),
-    });
-    if (login.status !== (firstVisit ? 201 : 200) || typeof login.body.idToken !== "string")
-      throw new Error("Legacy organizer fixture login failed.");
-    return login.body.idToken;
+    token = await organizerToken({ admin: admin.origin, key: organizerKey ?? "" });
   }
   async function request(
     path: string,
@@ -125,12 +173,7 @@ export async function progressionFixture(
   return {
     root,
     data,
-    aws,
     engine,
-    get organizerKey() {
-      if (!organizerKey) throw new Error("This fixture is not in key-only browser mode.");
-      return organizerKey;
-    },
     get store() {
       return store;
     },
@@ -151,10 +194,10 @@ export async function progressionFixture(
       const made = await request("/events", "POST", {
         name,
         teams: [
-          { internalSlug: `alpha-${name.replaceAll(" ", "-")}`, awsAccountId: "111111111111" },
-          { internalSlug: `beta-${name.replaceAll(" ", "-")}`, awsAccountId: "222222222222" },
+          { internalSlug: `alpha-${name.replaceAll(" ", "-")}` },
+          { internalSlug: `beta-${name.replaceAll(" ", "-")}` },
         ],
-        problems: [{ problemId: "hello-world" }, { problemId: "crypto-battle" }],
+        problems: [{ problemId: GATE_PROBLEM }, { problemId: "crypto-battle" }],
       });
       if (made.status !== 201) throw new Error(JSON.stringify(made));
       const event = made.body as unknown as CreatedEvent;
@@ -162,6 +205,21 @@ export async function progressionFixture(
       await service.drain();
       await request(`/events/${event.eventId}/schedule`, "PATCH", { startNow: true });
       return event;
+    },
+    /** Solve the running exercise the way a participant does, through its login form. */
+    async exerciseFlag(event: CreatedEvent, teamId: string): Promise<string> {
+      const job = store
+        .jobs(event.eventId, teamId)
+        .find((candidate) => candidate.problemId === GATE_PROBLEM);
+      if (!job) throw new Error("Missing exercise job");
+      const response = await fetch(`${engine.exercise.surface(job)}/login`, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ username: "admin' --", password: "" }).toString(),
+      });
+      const { flag } = (await response.json()) as { flag?: unknown };
+      if (typeof flag !== "string") throw new Error("The exercise did not reveal its flag.");
+      return flag;
     },
     flag(enabled: boolean) {
       return request("/feature-flags", "PUT", { key: GATE, enabled });
@@ -175,6 +233,7 @@ export async function progressionFixture(
     },
     async close() {
       await stop();
+      await engine.exercise.close();
       removeTemporaryDirectory(root, data);
     },
   };

@@ -6,9 +6,9 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   apiRequest,
-  BENCH_ORGANIZER,
   type CreatedTeam,
   HOST_KEY,
+  loginAdmin,
   PROBLEM_ID,
   setupMatch,
 } from "../bench/state-setup";
@@ -150,10 +150,7 @@ test("End Event, lock and teardown write their tick without waiting for the inte
   const { clock, store, service, created } = await startedMatch(2);
   const [first] = created.teams;
   if (!first) throw new Error("Expected a team.");
-  const session = await service.admin(
-    apiRequest({ method: "POST", path: "/host/login", token: "", body: BENCH_ORGANIZER }),
-  );
-  const token = (session.body as { idToken: string }).idToken;
+  const token = await loginAdmin(service);
   const admin = (method: string, action: string) =>
     service.admin(apiRequest({ method, path: `/events/${created.eventId}${action}`, token }));
   clock.now += 5_000;

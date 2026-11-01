@@ -5,7 +5,6 @@ import { hostRuntimeImportClosure } from "./host-imports.js";
 const entries = [
   "scripts/local-host/hosting-domain.ts",
   "scripts/lib/hosting-api.ts",
-  "scripts/local-host/organizer-passwords.ts",
   "scripts/local-host/organizer-principal.ts",
 ];
 function moduleReference(node: ts.Node): ts.Node | undefined {
@@ -127,7 +126,7 @@ export function assertPortableDomain(root: string, roots = entries): readonly st
 
 if (import.meta.main) {
   const files = assertPortableDomain(process.cwd());
-  if (!files.includes("scripts/local-host/participant-aws-contract.ts"))
-    throw new Error("Portable domain runtime graph is missing participant AWS contracts.");
+  if (!files.includes("scripts/local-host/organizer-access.ts"))
+    throw new Error("Portable domain runtime graph is missing organizer permissions.");
   console.log(`Portable domain: ${files.length} runtime source files checked.`);
 }

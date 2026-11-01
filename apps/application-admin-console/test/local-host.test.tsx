@@ -48,7 +48,7 @@ describe("loadConfig in the local hosting build", () => {
     expect(config.cognitoDomain).toBe(`${origin}/api/host`);
     expect(config.participantPortalUrl).toBe("http://127.0.0.1:5175");
     expect(config.features).toMatchObject({
-      redTeam: true,
+      redTeam: false,
       samlSso: false,
       nonAwsRuntime: false,
       challengePrerequisiteGate: false,

@@ -91,7 +91,10 @@ const state = new HostStore(openDatabase(join(directory, "hosting.sqlite")));
 try {
   assert.equal(state.teams(eventId).length, 2);
   assert.equal(state.event(eventId).status, "ARCHIVED");
-  assert.ok(state.organizerByUsername("preserved-admin")?.passwordHash.startsWith("$argon2id$"));
+  const legacy = state
+    .statement("SELECT password_hash AS hash FROM host_organizer_users WHERE username=?")
+    .get("preserved-admin") as { hash: string } | undefined;
+  assert.ok(legacy?.hash.startsWith("$argon2id$"));
 } finally {
   state.close();
 }

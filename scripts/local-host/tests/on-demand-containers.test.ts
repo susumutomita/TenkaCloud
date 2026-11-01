@@ -5,6 +5,7 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { loginAdmin } from "../bench/state-setup";
 import { boundedCompose } from "../container-budget";
 import { type DockerDefinition, loadDockerCatalog } from "../docker-catalog";
 import { DockerHostingEngine } from "../docker-engine";
@@ -12,7 +13,6 @@ import { listen, startHttpHost } from "../http";
 import type { Context, Job } from "../model";
 import { type ApiRequest, HostingService } from "../service";
 import { HostStore } from "../store";
-import { bootstrapOrganizer } from "./organizer-fixture";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 // These fixtures replace the native lifecycle; fingerprint the immutable test catalog once.
@@ -118,7 +118,7 @@ async function fixture(
   service.containerLimits = { perTeam: 3, global: 5, memoryMiB: 65_536 };
   service.gatewayPorts = { start: 5200, end: 5239 };
   try {
-    const admin = await bootstrapOrganizer(service, "synthetic-host-key");
+    const admin = await loginAdmin(service);
     const created = await service.admin(
       request("POST", "/events", admin, {
         name: "5 exercises × 20 teams",

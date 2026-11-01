@@ -18,15 +18,12 @@ test("Node and Bun preserve the same SQLite event/session/key state and opaque l
   const hash = await Bun.password.hash(randomToken(), { algorithm: "argon2id" });
   let store = new HostStore(new Database(path, { strict: true }));
   const { key } = store.ensureLocalOrganizerKey();
-  store.insertOrganizer({
-    id: "preserved-admin",
-    username: "preserved-admin",
-    role: "Admin",
-    status: "active",
-    authVersion: 1,
-    passwordHash: hash,
-    createdAt: 1,
-  });
+  // An organizer account from an older revision stays stored; it cannot sign in any more.
+  store
+    .statement(
+      "INSERT INTO host_organizer_users(id,username,role,status,auth_version,password_hash,created_at) VALUES ('preserved-admin','preserved-admin','Admin','active',1,?,1)",
+    )
+    .run(hash);
   store.close();
   try {
     const build = spawnSync(process.execPath, ["run", "scripts/local-host/build-node.ts"], {
@@ -46,7 +43,11 @@ test("Node and Bun preserve the same SQLite event/session/key state and opaque l
     expect(result.stdout).toContain("durable restart PASS");
     store = new HostStore(new Database(path, { strict: true }));
     try {
-      expect(store.organizerByUsername("preserved-admin")?.passwordHash).toBe(hash);
+      expect(
+        store
+          .statement("SELECT password_hash AS hash FROM host_organizer_users WHERE username=?")
+          .get("preserved-admin"),
+      ).toEqual({ hash });
       expect(store.events().map((event) => event.name)).toContain("Node persistent event");
       expect(store.events().find((event) => event.name === "Node persistent event")?.status).toBe(
         "ARCHIVED",

@@ -12,7 +12,6 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DisruptionStore } from "../disruption-store";
 import { InternetGrantStore } from "../internet-grant-store";
 import { clearManagedLocal } from "../local";
 import { clearLocalHistory, type LocalClearIo, parseLocalClearOptions } from "../local-clear";
@@ -71,8 +70,19 @@ function setup() {
   store.ensureLocalOrganizerKey();
   createLegacyAuditSchema(store);
   store.statement("INSERT INTO host_audit_status(id) VALUES (1)").run();
-  const disruptions = new DisruptionStore(store);
-  expect(disruptions).toBeDefined();
+  // Disruption history written by an older revision; current hosts no longer create these tables.
+  store.database.exec(`
+    CREATE TABLE host_disruption_requests (
+      event_id TEXT NOT NULL REFERENCES host_events(id), request_id TEXT NOT NULL,
+      body TEXT NOT NULL, PRIMARY KEY(event_id, request_id)
+    ) STRICT;
+    CREATE TABLE host_disruption_executions (
+      id TEXT PRIMARY KEY, event_id TEXT NOT NULL, request_id TEXT NOT NULL,
+      terminal INTEGER NOT NULL, due_at INTEGER NOT NULL, body TEXT NOT NULL,
+      FOREIGN KEY(event_id,request_id) REFERENCES host_disruption_requests(event_id,request_id)
+    ) STRICT;
+    CREATE INDEX host_disruption_due ON host_disruption_executions(terminal,due_at);
+  `);
   store.statement("INSERT INTO host_accounts VALUES('fixture-account', '{}')").run();
   store.database.exec(`
     INSERT INTO host_audit_records(occurred_at,operation_id,phase,actor,action,resource_kind,resource_id,outcome,body)

@@ -5,7 +5,6 @@ import { type StackUnit, type UptimeStackDefinition, unitOf } from "./cloud-runt
 import {
   gate,
   HostError,
-  type HostedEvent,
   type Job,
   type Team,
   type UptimeObservation,
@@ -17,13 +16,8 @@ import { probePublicEndpoint, publicEndpointUrl } from "./public-probe";
 import { projectedScore } from "./score";
 import { digest, type HostStore } from "./store";
 
-interface DisruptionHook {
-  captureTriggers(event: HostedEvent): void;
-}
-
 interface Hooks {
   readonly progression: HostProgression;
-  readonly disruptions: DisruptionHook;
 }
 
 interface Snapshot {
@@ -316,7 +310,6 @@ export class LocalUptime {
         this.store.putUptimeState(snapshot.eventId, snapshot.teamId, snapshot.problemId, nextState);
         this.store.putUptimeObservation(observation);
         this.hooks().progression.captureTeam(updatedTeam);
-        this.hooks().disruptions.captureTriggers(event);
       });
     });
   }

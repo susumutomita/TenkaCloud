@@ -74,7 +74,7 @@ test("HTTP benchmark starts the production host and signs in repeatedly with its
       const token = await adminLogin(host.info.adminOrigin, host.info.hostKey);
       expect((await apiCall(host.info.adminOrigin, "/host/me", "GET", token)).status).toBe(200);
     }
-    const publicStatus = await fetch(`${host.info.participantOrigin}/api/host/bootstrap-status`);
+    const publicStatus = await fetch(`${host.info.participantOrigin}/api/host/me`);
     expect(publicStatus.status).toBe(404);
     await publicStatus.text();
     await host.stop();

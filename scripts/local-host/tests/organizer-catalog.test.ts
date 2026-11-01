@@ -6,7 +6,6 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomToken } from "../auth";
 import { apiRequest } from "../bench/state-setup";
-import { cloudFormationCatalog } from "../cloudformation-engine";
 import { CompetitionEngine as SelectedCompetitionEngine } from "../competition-engine";
 import { type OrganizerProblemContent, organizerProblemContent } from "../model";
 import { HostingService } from "../service";
@@ -154,8 +153,14 @@ test("only organizers receive catalog descriptions and goals from the existing a
   }
 });
 
-test("reviewed cloud catalog keeps the same organizer text without including solutions", () => {
-  for (const problem of cloudFormationCatalog(root)) {
+test("the local catalog keeps organizer text without including solutions", () => {
+  const directory = mkdtempSync(join(tmpdir(), "tenka-organizer-text-"));
+  const described = new SelectedCompetitionEngine(root, directory)
+    .catalog()
+    .filter((problem) => problem.organizerContent);
+  rmSync(directory, { recursive: true, force: true });
+  expect(described.length).toBeGreaterThan(0);
+  for (const problem of described) {
     expect(Object.keys(problem.organizerContent ?? {}).sort()).toEqual(
       problem.organizerContent?.i18n
         ? ["description", "i18n", "learningGoals"]

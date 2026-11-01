@@ -1,18 +1,17 @@
 import { Database } from "bun:sqlite";
-import { expect, spyOn, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import { issueLocalOrganizerSession, issueOrganizerSession, randomToken } from "../auth";
+import { issueLocalOrganizerSession, randomToken } from "../auth";
 import { apiRequest } from "../bench/state-setup";
 import { HostError } from "../model";
 import { startLocalHost } from "../server";
 import { HostingService } from "../service";
 import { digest, HostStore } from "../store";
 import { ExerciseFixture } from "./exercise-fixture";
-import { bootstrapOrganizer, TEST_ORGANIZER_PASSWORD } from "./organizer-fixture";
 
 const sessionSchema = z.object({
   idToken: z.string(),
@@ -59,17 +58,15 @@ function enable(store: HostStore): string {
   return key;
 }
 
-test("key-only login uses a separate hashed key and disables account and SAML routes", async () => {
+test("key-only login uses a separate hashed key and offers no account or SAML routes", async () => {
   const f = fixture();
   try {
     const key = enable(f.store);
     expect(key === f.signingKey).toBe(false);
     expect(/^[A-Za-z0-9_-]{43}$/u.test(key)).toBe(true);
-    expect((await f.call("GET", "/host/bootstrap-status")).body).toEqual({
-      bootstrapCompleted: true,
-      authMode: "host-key",
+    expect(f.store.statement("SELECT count(*) AS count FROM host_organizer_users").get()).toEqual({
+      count: 0,
     });
-    expect(f.store.organizers()).toEqual([]);
     const session = await f.login(key);
     expect(session.idToken === session.accessToken).toBe(true);
     expect((await f.call("GET", "/host/me", {}, session.idToken)).body).toEqual({
@@ -85,27 +82,33 @@ test("key-only login uses a separate hashed key and disables account and SAML ro
     for (const body of [
       { key: f.signingKey },
       { key: randomToken() },
-      { username: "admin", password: TEST_ORGANIZER_PASSWORD },
+      { username: "admin", password: randomToken() },
       { key, username: "admin" },
     ])
       expect(await rejectedStatus(f.call("POST", "/host/login", body))).toBe(401);
     for (const [method, path] of [
+      ["GET", "/host/bootstrap-status"],
       ["POST", "/host/bootstrap"],
       ["GET", "/host/users"],
       ["POST", "/host/users"],
       ["PATCH", "/host/users/01K6F7MNN00000000000000000"],
+      ["GET", "/host/saml"],
       ["POST", "/host/saml/start"],
       ["POST", "/host/saml/complete"],
       ["GET", "/host/saml/provider"],
       ["PUT", "/host/saml/provider"],
-    ] as const)
+    ] as const) {
+      expect(await rejectedStatus(f.call(method, path, {}))).toBe(401);
       expect(await rejectedStatus(f.call(method, path, {}, session.idToken))).toBe(404);
-    expect((await f.call("GET", "/host/saml")).body).toEqual({ enabled: false });
+    }
     expect(
       await rejectedStatus(
         f.call("PUT", "/feature-flags", { key: "saml", enabled: true }, session.idToken),
       ),
-    ).toBe(404);
+    ).toBe(400);
+    expect((await f.call("GET", "/feature-flags", {}, session.idToken)).body).toEqual({
+      flags: { audit: false, challengePrerequisiteGate: false },
+    });
     expect(
       await rejectedStatus(
         f.call("PUT", "/feature-flags", { key: "audit", enabled: true }, session.idToken),
@@ -127,10 +130,11 @@ test("key-only login uses a separate hashed key and disables account and SAML ro
   }
 });
 
-test("migration and rotation retain participants, event progress and historical organizer records", async () => {
+test("rotation retains participants and event progress and revokes every earlier session", async () => {
   const f = fixture();
   try {
-    const oldToken = await bootstrapOrganizer(f.service, f.signingKey);
+    const key = enable(f.store);
+    const oldSession = await f.login(key);
     const created = await f.call(
       "POST",
       "/events",
@@ -139,7 +143,7 @@ test("migration and rotation retain participants, event progress and historical 
         teams: [{ internalSlug: "alpha" }],
         problems: [{ problemId: "sqli-demo" }],
       },
-      oldToken,
+      oldSession.idToken,
     );
     const eventId = z.object({ eventId: z.string() }).parse(created.body).eventId;
     const team = f.store.teams(eventId)[0];
@@ -151,8 +155,6 @@ test("migration and rotation retain participants, event progress and historical 
     f.store.putCoordination(eventId, "sqli-demo", JSON.stringify({ turn: 4 }));
     f.store.putUptimeState(eventId, team.teamId, "sqli-demo", { revision: 7 });
     f.store.putReceipt(team.teamId, "nonce", "fingerprint", 200, { accepted: true });
-    f.store.setFeatureFlag("saml", true);
-    const historical = f.store.organizers();
     const before = {
       event: f.store.event(eventId),
       team: f.store.team(team.teamId),
@@ -160,9 +162,6 @@ test("migration and rotation retain participants, event progress and historical 
       uptime: f.store.uptimeState(eventId, team.teamId, "sqli-demo"),
       receipt: f.store.receipt(team.teamId, "nonce", "fingerprint"),
     };
-    const key = enable(f.store);
-    expect(await rejectedStatus(f.call("GET", "/events", {}, oldToken))).toBe(401);
-    const oldSession = await f.login(key);
     const oldVersion = f.store.verifyLocalOrganizerKey(key);
     const oldSessionRow = f.store
       .statement("SELECT * FROM host_sessions WHERE token_hash=?")
@@ -188,14 +187,6 @@ test("migration and rotation retain participants, event progress and historical 
         oldSessionRow.expires ?? null,
       );
     expect(await rejectedStatus(f.call("GET", "/events", {}, oldSession.idToken))).toBe(401);
-    const user = f.store.organizerByUsername("fixture-admin");
-    const identity = user ? f.store.localIdentity(user.id) : undefined;
-    if (!user || !identity) throw new Error("Historical organizer was lost.");
-    expect(() => {
-      issueOrganizerSession(f.store, f.signingKey, user, Date.now(), identity);
-    }).toThrow();
-    expect(f.store.organizers()).toEqual(historical);
-    expect(f.store.featureFlags().saml).toBe(false);
     const retained = {
       event: f.store.event(eventId),
       team: f.store.authenticateTeam(team.loginKey),
@@ -273,38 +264,6 @@ test.each(["invalid-json", JSON.stringify({ hash: "invalid", version: 1 })])(
   },
 );
 
-test("password verification already in flight cannot mint a session after migration", async () => {
-  const f = fixture();
-  await bootstrapOrganizer(f.service, f.signingKey);
-  const original = Bun.password.verify;
-  const reached = Promise.withResolvers<undefined>();
-  const release = Promise.withResolvers<undefined>();
-  const verifier = spyOn(Bun.password, "verify").mockImplementation(async (...args) => {
-    const valid = await original(...args);
-    reached.resolve(undefined);
-    await release.promise;
-    return valid;
-  });
-  try {
-    const pending = f.call("POST", "/host/login", {
-      username: "fixture-admin",
-      password: TEST_ORGANIZER_PASSWORD,
-    });
-    await reached.promise;
-    enable(f.store);
-    f.store.rotateLocalOrganizerKey();
-    release.resolve(undefined);
-    expect(await rejectedStatus(pending)).toBe(401);
-    expect(f.store.statement("SELECT count(*) AS count FROM host_sessions").get()).toEqual({
-      count: 0,
-    });
-  } finally {
-    release.resolve(undefined);
-    verifier.mockRestore();
-    f.store.close();
-  }
-});
-
 test("host-key sessions enforce idle and absolute expiry", async () => {
   const f = fixture();
   try {
@@ -319,25 +278,6 @@ test("host-key sessions enforce idle and absolute expiry", async () => {
     }
     f.advance(10 * 60_000);
     expect(await rejectedStatus(f.call("GET", "/events", {}, absolute.idToken))).toBe(401);
-  } finally {
-    f.store.close();
-  }
-});
-
-test("legacy bootstrap already hashing a password cannot create an organizer after migration", async () => {
-  const f = fixture();
-  try {
-    const pending = f.call("POST", "/host/bootstrap", {
-      key: f.signingKey,
-      username: "late-admin",
-      password: TEST_ORGANIZER_PASSWORD,
-    });
-    enable(f.store);
-    expect(await rejectedStatus(pending)).toBe(409);
-    expect(f.store.organizers()).toEqual([]);
-    expect(f.store.statement("SELECT count(*) AS count FROM host_sessions").get()).toEqual({
-      count: 0,
-    });
   } finally {
     f.store.close();
   }
@@ -370,13 +310,14 @@ test("production startup always enables key-only HTTP login and live rotation le
       });
       return { status: response.status, body: await response.json() };
     };
-    expect((await api("/host/bootstrap-status")).body).toMatchObject({ authMode: "host-key" });
     const session = sessionSchema.parse((await api("/host/login", "POST", { key })).body);
     for (const [method, path] of [
       ["GET", "/host/saml/metadata"],
       ["POST", "/host/saml/acs"],
-    ] as const)
-      expect((await api(path, method)).status).toBe(404);
+    ] as const) {
+      expect((await api(path, method)).status).toBe(401);
+      expect((await api(path, method, undefined, session.idToken)).status).toBe(404);
+    }
     const next = host.rotateOrganizerKey();
     expect((await api("/events", "GET", undefined, session.idToken)).status).toBe(401);
     expect((await api("/host/login", "POST", { key })).status).toBe(401);

@@ -3,7 +3,7 @@ import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
 import { parse } from "yaml";
 import { id } from "../auth";
-import { apiRequest } from "../bench/state-setup";
+import { apiRequest, loginAdmin } from "../bench/state-setup";
 import type { DockerDefinition } from "../docker-catalog";
 import { InternetGrantStore } from "../internet-grant-store";
 import { requiredNetworkValue } from "../local-network";
@@ -11,7 +11,6 @@ import { HostError } from "../model";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
 import { networkEngineFixture } from "./network-engine-fixture";
-import { bootstrapOrganizer, createOrganizerSession } from "./organizer-fixture";
 
 async function fixture() {
   const f = networkEngineFixture();
@@ -37,7 +36,7 @@ async function fixture() {
   f.store.putEvent(eventA);
   f.store.putEvent(eventB);
   const service = new HostingService(f.store, f.engine, "synthetic-host-key");
-  const token = await bootstrapOrganizer(service, "synthetic-host-key");
+  const token = await loginAdmin(service);
   const api = (eventId: string, method = "GET", body?: unknown, key = token, suffix = "") =>
     service
       .admin(
@@ -55,28 +54,16 @@ async function fixture() {
   return { ...f, service, eventA, eventB, problem, request, api, token };
 }
 
-test("organizer Internet API checks roles, individual requests and event isolation", async () => {
+test("organizer Internet API checks individual requests and event isolation", async () => {
   const f = await fixture();
   try {
-    const viewer = await createOrganizerSession(f.service, f.token, "internet-viewer", "Viewer");
-    const operator = await createOrganizerSession(
-      f.service,
-      f.token,
-      "internet-operator",
-      "Operator",
-    );
+    const operator = { token: f.token };
     const suffix = `/${f.problem.problemId}`;
-    const read = await f.api(f.eventA.eventId, "GET", undefined, viewer.token);
+    const read = await f.api(f.eventA.eventId, "GET", undefined, f.token);
     expect(read.status).toBe(200);
     expect(JSON.stringify(read.body)).toContain(f.request.destination);
     expect(JSON.stringify(read.body)).toContain('"grant":null');
-    expect(
-      (await f.api(f.eventA.eventId, "PUT", { requestIds: ["upstream"] }, viewer.token, suffix))
-        .status,
-    ).toBe(403);
-    expect((await f.api(f.eventA.eventId, "DELETE", undefined, viewer.token, suffix)).status).toBe(
-      403,
-    );
+    expect((await f.api(f.eventA.eventId, "GET", undefined, "invalid")).status).toBe(401);
     for (const requestIds of [[], ["unknown"], ["upstream", "upstream"]])
       expect(
         (await f.api(f.eventA.eventId, "PUT", { requestIds }, operator.token, suffix)).status,

@@ -7,16 +7,19 @@ import { fileURLToPath } from "node:url";
 import type { SkillEvidenceInput } from "../../../apps/application-admin-console/src/lib/skill-evidence";
 import { buildSkillEvidence } from "../../../apps/application-admin-console/src/lib/skill-evidence";
 import type { ProbeFn } from "../../lib/http-probe-client";
-import { apiRequest, HOST_KEY } from "../bench/state-setup";
-import { CloudFormationEngine } from "../cloudformation-engine";
+import { id } from "../auth";
+import { apiRequest, HOST_KEY, loginAdmin } from "../bench/state-setup";
 import { CompetitionEngine } from "../competition-engine";
 import { startHttpHost } from "../http";
 import { probePublicEndpoint, publicEndpointUrl } from "../public-probe";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
-import { DisruptionAws } from "./disruption-fixture";
-import { FakeAws } from "./fake-aws";
-import { bootstrapOrganizer } from "./organizer-fixture";
+import {
+  LEGACY_FLAG_STACK,
+  LEGACY_UPTIME_STACK,
+  legacyStackProblem,
+  seedLegacyAwsEvent,
+} from "./legacy-aws-fixture";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 
@@ -41,7 +44,7 @@ test("production uptime transport rejects local, metadata, and credentialed URLs
   );
 });
 
-test("Battle endpoint registration scores the current minute once after EC2 readiness", async () => {
+test("Battle endpoint registration on a saved uptime stack scores the current minute once after EC2 readiness", async () => {
   const directory = mkdtempSync(join(tmpdir(), "tenka-uptime-"));
   const databasePath = join(directory, "host.sqlite");
   let store = new HostStore(new Database(databasePath));
@@ -49,7 +52,6 @@ test("Battle endpoint registration scores the current minute once after EC2 read
   let clock = Date.parse("2026-09-30T00:00:00.000Z");
   let ready = false;
   let frontendHealthy = true;
-  const disruption = new DisruptionAws();
   let holdFrontend: Promise<void> | undefined;
   let frontendSeen: (() => void) | undefined;
   const calls: string[] = [];
@@ -59,25 +61,23 @@ test("Battle endpoint registration scores the current minute once after EC2 read
       frontendSeen?.();
       await holdFrontend;
     }
-    const ok = url.includes("ec2-")
-      ? ready && (url.includes(":8080") || disruption.running.get("i-0123456789abcdef0") !== false)
-      : !url.includes("frontend") || frontendHealthy;
+    const ok = url.includes("ec2-") ? ready : !url.includes("frontend") || frontendHealthy;
     return { ok, status: ok ? 200 : 503, responseTimeMs: 1 };
   };
-  const aws = new FakeAws();
-  const cloud = new CloudFormationEngine(root, {
-    region: "ap-northeast-1",
-    externalId: "host-external-id-0123456789",
-    operatorAccountId: async () => "999999999999",
-    sts: aws.sts as never,
-    cloudFormation: aws.cloudFormation as never,
-    team: (job) => store.team(job.teamId),
-    sleep: async () => undefined,
-    pollIntervalMs: 0,
-    timeoutMs: 60_000,
+  // Local hosting no longer deploys stacks; the job is the running stack an older revision saved.
+  const engine = new CompetitionEngine(root, directory, false);
+  const { event, team } = seedLegacyAwsEvent(store, {
+    eventId: id(clock),
+    teamId: id(clock),
+    now: clock,
+    problems: [legacyStackProblem(LEGACY_UPTIME_STACK), legacyStackProblem(LEGACY_FLAG_STACK)],
+    outputs: {
+      FrontendUrl: "",
+      ApiUrl: "",
+      Ec2HostHint: "ec2-203-0-113-10.example.com",
+      InstanceId: "i-0123456789abcdef0",
+    },
   });
-  const engine = new CompetitionEngine(root, directory, false, cloud);
-  engine.disruptionAdapter = () => disruption.adapter();
   const service = new HostingService(
     store,
     engine,
@@ -86,39 +86,8 @@ test("Battle endpoint registration scores the current minute once after EC2 read
     () => undefined,
     probe,
   );
-  service.accountConnection = {
-    region: "ap-northeast-1",
-    operatorAccountId: "999999999999",
-    externalId: "host-external-id-0123456789",
-    verify: async () => undefined,
-  };
   try {
-    const admin = await bootstrapOrganizer(service, HOST_KEY);
-    const request = (method: string, path: string, body: Record<string, unknown> = {}) =>
-      service.admin(apiRequest({ method, path, token: admin, body }));
-    expect(
-      (await request("POST", "/admin/competitor-accounts", { awsAccountId: "111111111111" }))
-        .status,
-    ).toBe(201);
-    expect((await request("POST", "/admin/competitor-accounts/111111111111/verify")).status).toBe(
-      200,
-    );
-    const created = await request("POST", "/events", {
-      name: "uptime",
-      teams: [{ internalSlug: "alpha", awsAccountId: "111111111111" }],
-      problems: [{ problemId: "hello-world-battle" }, { problemId: "hello-world" }],
-    });
-    expect(created.status).toBe(201);
-    const event = created.body as {
-      eventId: string;
-      teams: { teamId: string; teamLoginKey: string }[];
-    };
-    const team = event.teams[0];
-    if (!team) throw new Error("Missing fixture team");
-    await request("POST", `/events/${event.eventId}/deploy`);
-    await service.drain();
-    expect(store.event(event.eventId).status).toBe("READY");
-    await request("PATCH", `/events/${event.eventId}/schedule`, { startNow: true });
+    const admin = await loginAdmin(service);
     listener = await startHttpHost({
       kind: "participant",
       hostname: "127.0.0.1",
@@ -131,7 +100,7 @@ test("Battle endpoint registration scores the current minute once after EC2 read
       const response = await fetch(`${listener?.origin}${path}`, {
         method,
         headers: {
-          Authorization: `Bearer ${team.teamLoginKey}`,
+          Authorization: `Bearer ${team.loginKey}`,
           ...(body ? { "Content-Type": "application/json" } : {}),
         },
         ...(body ? { body: JSON.stringify(body) } : {}),
@@ -255,53 +224,22 @@ test("Battle endpoint registration scores the current minute once after EC2 read
       (await configure("/feature-flags", { key: "challengePrerequisiteGate", enabled: false }))
         .status,
     ).toBe(200);
-    const fired = await restarted.admin(
-      apiRequest({
-        method: "POST",
-        path: `/events/${event.eventId}/disruptions/fire`,
-        token: admin,
-        body: {
-          problemId: "hello-world-battle",
-          disruptionId: "frontend-down",
-          scope: "all",
-          requestId: "uptime-disruption-integration",
-        },
-      }),
-    );
-    expect(fired.status).toBe(202);
-    disruption.now = clock;
-    await restarted.disruptions.tick();
-    disruption.applyEffects();
-    expect(disruption.commands).toHaveLength(1);
     clock += 60_000;
-    disruption.now = clock;
     await restarted.uptime.tick();
+    expect(store.team(team.teamId).score).toBe(200);
     expect(
       store.uptimeState(event.eventId, team.teamId, "hello-world-battle").hostHintHealth,
-    ).toMatchObject({ frontend: false, api: true });
-    expect(store.team(team.teamId).score).toBe(200);
+    ).toMatchObject({ frontend: true, api: true });
     expect(
       JSON.parse(
         store.uptimeState(event.eventId, team.teamId, "hello-world-battle").endpointsHealth ?? "{}",
       ),
     ).toMatchObject({ frontend: { ok: true }, api: { ok: true } });
-    clock += 600_000;
-    disruption.now = clock;
-    await restarted.disruptions.tick();
-    disruption.applyEffects();
-    await restarted.disruptions.tick();
-    expect(disruption.commands).toHaveLength(2);
-    expect(restarted.disruptions.store.executions(event.eventId)[0]?.status).toBe(
-      "revert_command_completed",
-    );
-    await restarted.uptime.tick();
-    expect(
-      store.uptimeState(event.eventId, team.teamId, "hello-world-battle").hostHintHealth,
-    ).toMatchObject({ frontend: true, api: true });
+    // A failure after the score write rolls the whole minute back; the next tick retries it.
     clock += 60_000;
     const beforeRollback = store.team(team.teamId).scoreEvents.length;
-    const captureTriggers = restarted.disruptions.captureTriggers.bind(restarted.disruptions);
-    restarted.disruptions.captureTriggers = () => {
+    const captureTeam = restarted.progression.captureTeam.bind(restarted.progression);
+    restarted.progression.captureTeam = () => {
       throw new Error("fixture capture failure");
     };
     await restarted.uptime.tick();
@@ -314,7 +252,7 @@ test("Battle endpoint registration scores the current minute once after EC2 read
         Math.floor(clock / 60_000),
       ),
     ).toBe(false);
-    restarted.disruptions.captureTriggers = captureTriggers;
+    restarted.progression.captureTeam = captureTeam;
     await restarted.uptime.tick();
     expect(store.team(team.teamId).scoreEvents).toHaveLength(beforeRollback + 1);
   } finally {

@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BENCH_ORGANIZER, HOST_KEY, PROBLEM_ID } from "../bench/state-setup";
+import { HOST_KEY, loginAdmin, PROBLEM_ID } from "../bench/state-setup";
 import type { HostPlugin } from "../coordination-core";
 import { startHttpHost } from "../http";
 import { HostingService } from "../service";
@@ -77,11 +77,7 @@ async function fixture() {
     });
     return { status: response.status, body: (await response.json()) as Record<string, unknown> };
   }
-  const login = await call(admin.origin, "/host/bootstrap", "", "POST", {
-    key: HOST_KEY,
-    ...BENCH_ORGANIZER,
-  });
-  const organizer = String(login.body.idToken);
+  const organizer = await loginAdmin(service);
   const created = await call(admin.origin, "/events", organizer, "POST", {
     name: "timing",
     teams: [{ internalSlug: "alpha" }, { internalSlug: "beta" }],

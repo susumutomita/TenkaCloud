@@ -1,5 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { digest, type HostStore, type OrganizerIdentity, type OrganizerUser } from "./store";
+import { digest, type HostStore } from "./store";
 export const randomToken = (): string => randomBytes(32).toString("base64url");
 const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 /** Existing event routes use ULID wire identifiers. */
@@ -21,43 +21,21 @@ export function sameSecret(left: string, right: string): boolean {
   return timingSafeEqual(Buffer.from(digest(left)), Buffer.from(digest(right)));
 }
 
-export function issueOrganizerSession(
-  store: HostStore,
-  masterKey: string,
-  user: OrganizerUser,
-  now: number,
-  identity: OrganizerIdentity,
-) {
-  return createSession(store, masterKey, now, user, identity);
-}
-
 export function issueLocalOrganizerSession(
   store: HostStore,
   masterKey: string,
   now: number,
   keyVersion: number,
 ) {
-  return createSession(store, masterKey, now, undefined, undefined, keyVersion);
-}
-
-function createSession(
-  store: HostStore,
-  masterKey: string,
-  now: number,
-  user?: OrganizerUser,
-  identity?: OrganizerIdentity,
-  keyVersion?: number,
-) {
   const expiresAt = now + 8 * 60 * 60 * 1000;
   const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
   const payload = `${encode({ alg: "HS256", typ: "JWT" })}.${encode({
-    sub: user?.id ?? "local-host",
+    sub: "local-host",
     jti: randomToken(),
     iss: "tenkacloud-local-host",
     aud: "host-console",
-    "custom:userRole": user?.role === "Viewer" ? "TenantViewer" : "TenantAdmin",
-    "custom:organizerRole": user?.role ?? "Admin",
-    ...(user ? { email: user.username } : {}),
+    "custom:userRole": "TenantAdmin",
+    "custom:organizerRole": "Admin",
     "custom:tenantId": "local-host",
     "custom:tenantName": "Local competition",
     iat: Math.floor(now / 1000),
@@ -66,7 +44,7 @@ function createSession(
   const idToken = `${payload}.${createHmac("sha256", masterKey).update(payload).digest("base64url")}`;
   const refreshToken = randomToken();
   // Exact issued-token membership is the authority; accepting arbitrary client JWT claims is not.
-  store.addSession(idToken, refreshToken, expiresAt, now, user, identity, keyVersion);
+  store.addSession(idToken, refreshToken, expiresAt, now, keyVersion);
   return {
     idToken,
     accessToken: idToken,

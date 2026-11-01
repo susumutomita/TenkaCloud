@@ -1,8 +1,6 @@
 import type { ProbeFn } from "../lib/http-probe-client";
-import { bunOrganizerPasswords } from "./bun-passwords";
 import { HostingDomain } from "./hosting-domain";
 import type { RuntimeEngine } from "./model";
-import type { OrganizerPasswords } from "./organizer-passwords";
 import type { HostStore } from "./store";
 
 export type { ApiRequest, ApiResponse } from "../lib/hosting-api";
@@ -16,8 +14,7 @@ export class HostingService extends HostingDomain {
     now: () => number = Date.now,
     log: (message: string) => void = console.error,
     uptimeProbe?: ProbeFn,
-    passwords: OrganizerPasswords = bunOrganizerPasswords,
   ) {
-    super(store, engine, masterKey, now, log, uptimeProbe, passwords);
+    super(store, engine, masterKey, now, log, uptimeProbe);
   }
 }

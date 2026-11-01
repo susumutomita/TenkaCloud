@@ -97,7 +97,6 @@ export function localCompetitionEngine(
     root,
     directory,
     !options.public && docker.available,
-    undefined,
     options.dockerNetworkPool,
     options.submissionCatalogPath,
     options.competitionNetwork,

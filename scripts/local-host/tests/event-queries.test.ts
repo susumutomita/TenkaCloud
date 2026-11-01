@@ -32,11 +32,8 @@ test("Local list/detail preserve IDs, DTO, read-time lifecycle persistence and f
   });
 });
 
-test("Local read permission remains separate from key disclosure; invalid/expired sessions and missing IDs fail", async () => {
+test("Local invalid/expired sessions and missing IDs fail", async () => {
   await eventHostFixture(async ({ service, token, eventId, clock }) => {
-    await expect(
-      service.admin(eventRequest(`/events/${eventId}`, token, "withTeamLoginKeys=true")),
-    ).rejects.toMatchObject({ status: 403 });
     await expect(service.admin(eventRequest("/events", "invalid"))).rejects.toMatchObject({
       status: 401,
     });

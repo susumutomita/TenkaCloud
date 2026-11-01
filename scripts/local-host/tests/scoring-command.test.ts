@@ -31,7 +31,7 @@ test("Local concurrent same-target commands commit once and retries retain times
     } finally {
       writes.mockRestore();
     }
-  }, "Admin");
+  });
 });
 
 test("Local failed save rolls back, propagates once, and a caller retry can succeed", async () => {
@@ -50,21 +50,16 @@ test("Local failed save rolls back, propagates once, and a caller retry can succ
       save.mockRestore();
     }
     expect((await service.admin(mutation(eventId, token, true))).status).toBe(200);
-  }, "Admin");
+  });
 });
 
-test("Local status check precedes idempotency and Viewer commands remain forbidden", async () => {
+test("Local status check precedes idempotency", async () => {
   await eventHostFixture(async ({ store, service, token, eventId }) => {
     store.putEvent({ ...store.event(eventId), status: "DRAFT", scoringLocked: false });
     await expect(service.admin(mutation(eventId, token, false))).rejects.toMatchObject({
       status: 409,
     });
     expect(store.event(eventId).status).toBe("DRAFT");
-  }, "Admin");
-  await eventHostFixture(async ({ service, token, eventId }) => {
-    await expect(service.admin(mutation(eventId, token, true))).rejects.toMatchObject({
-      status: 403,
-    });
   });
 });
 
@@ -81,5 +76,5 @@ test("Local historical missing lock field still commits an explicit unlock", asy
     } finally {
       writes.mockRestore();
     }
-  }, "Admin");
+  });
 });

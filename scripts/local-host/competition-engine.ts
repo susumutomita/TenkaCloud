@@ -1,4 +1,3 @@
-import type { CloudFormationEngine } from "./cloudformation-engine";
 import {
   coordinationCatalog,
   coordinationProblemView,
@@ -17,7 +16,6 @@ import {
   type Job,
   type Problem,
 } from "./model";
-import type { ParticipantAwsAccess } from "./participant-aws-access";
 import { projectedScore } from "./score";
 import {
   submissionCatalog,
@@ -32,22 +30,20 @@ function problemKinds(event: HostedEvent): ReadonlyMap<string, DefinitionKind> {
   );
 }
 
+/**
+ * Saved events from an older hosting revision can contain CloudFormation jobs. Local hosting
+ * keeps their state and refuses every operation on them; it never changes AWS resources.
+ */
+function retiredAwsJob(): never {
+  throw new HostError(
+    503,
+    "This event contains AWS resources from an older hosting revision. They are not operated by local hosting. Keep their state and use the reviewed cloud or legacy cleanup workflow; no AWS resources were changed.",
+    "aws_not_configured",
+  );
+}
+
 /** Runtime dispatch only; cryptography and scoring rules belong to the catalog plugin. */
 export class CompetitionEngine extends DockerHostingEngine {
-  get hasAws(): boolean {
-    return this.cloud !== undefined;
-  }
-
-  participantAwsAccess(args: {
-    kind: ParticipantAwsAccess["kind"];
-    job: Job;
-    assertCurrent: () => void;
-  }): Promise<ParticipantAwsAccess> {
-    if (definitionKind(args.job.definition) !== "cloudformation")
-      throw new HostError(409, "This environment has no AWS access.", "not_ready");
-    return this.aws().participantAwsAccess(args);
-  }
-
   private readonly battles: Problem[];
   private readonly submissions: readonly Problem[];
   private readonly loader: LocalPluginLoader;
@@ -56,8 +52,6 @@ export class CompetitionEngine extends DockerHostingEngine {
     dataDirectory: string,
     /** False in a container: Docker Compose problems publish on a loopback it cannot reach. */
     private readonly dockerProblems = true,
-    /** Explicit adapter seam for cloud contracts and legacy-state rehearsals; never enabled by make local. */
-    private readonly cloud?: CloudFormationEngine,
     networkPool?: string,
     submissionCatalogPath?: string,
     competitionNetwork = false,
@@ -69,26 +63,17 @@ export class CompetitionEngine extends DockerHostingEngine {
     const ids = [
       ...(dockerProblems ? super.catalog() : []),
       ...this.battles,
-      ...(cloud?.catalog() ?? []),
       ...this.submissions,
     ].map((problem) => problem.problemId);
     if (new Set(ids).size !== ids.length) throw new Error("Duplicate problem catalog identity.");
     this.loader = new LocalPluginLoader(dataDirectory);
-  }
-  disruptionAdapter() {
-    return this.cloud?.disruptionAdapter();
   }
   override catalog(): readonly Problem[] {
     return this.catalogEntries();
   }
   /** Complete compatibility registry; saved events execute their persisted definitions. */
   protected catalogEntries(): readonly Problem[] {
-    return [
-      ...(this.dockerProblems ? super.catalog() : []),
-      ...this.battles,
-      ...this.submissions,
-      ...(this.cloud?.catalog() ?? []),
-    ];
+    return [...(this.dockerProblems ? super.catalog() : []), ...this.battles, ...this.submissions];
   }
   /** Decided by kind alone, so slot allocation still works for old cloud jobs without AWS. */
   requiresGateway(definition: string): boolean {
@@ -109,7 +94,7 @@ export class CompetitionEngine extends DockerHostingEngine {
   override async start(job: Job, retain: (unit: string | null) => void): Promise<void> {
     const kind = definitionKind(job.definition);
     if (kind === "compose") return super.start(job, retain);
-    if (kind === "cloudformation") return this.aws().start(job, retain);
+    if (kind === "cloudformation") retiredAwsJob();
     if (kind === "submission") {
       submissionDefinition(job);
       retain(JSON.stringify({ kind, eventId: job.eventId, problemId: job.problemId }));
@@ -123,7 +108,7 @@ export class CompetitionEngine extends DockerHostingEngine {
   override async recover(job: Job): Promise<void> {
     const kind = definitionKind(job.definition);
     if (kind === "compose") return super.recover(job);
-    if (kind === "cloudformation") return this.aws().recover(job);
+    if (kind === "cloudformation") retiredAwsJob();
     if (kind === "submission") {
       submissionDefinition(job);
       return;
@@ -133,12 +118,12 @@ export class CompetitionEngine extends DockerHostingEngine {
   override async pause(job: Job): Promise<void> {
     const kind = definitionKind(job.definition);
     if (kind === "compose") return super.pause(job);
-    if (kind === "cloudformation") return this.aws().pause();
+    if (kind === "cloudformation") retiredAwsJob();
   }
   override async resume(job: Job): Promise<void> {
     const kind = definitionKind(job.definition);
     if (kind === "compose") return super.resume(job);
-    if (kind === "cloudformation") return this.aws().resume(job);
+    if (kind === "cloudformation") retiredAwsJob();
     if (kind === "submission") {
       submissionDefinition(job);
       return;
@@ -148,23 +133,14 @@ export class CompetitionEngine extends DockerHostingEngine {
   override async stop(job: Job): Promise<void> {
     const kind = definitionKind(job.definition);
     if (kind === "compose") return super.stop(job);
-    if (kind === "cloudformation") return this.aws().stop(job);
+    if (kind === "cloudformation") retiredAwsJob();
     // Shared match state and scores survive a team's stop/restart/teardown.
   }
   override surface(job: Job): string {
     const kind = definitionKind(job.definition);
     if (kind === "compose") return super.surface(job);
-    if (kind === "cloudformation") return this.aws().surface(job);
+    if (kind === "cloudformation") retiredAwsJob();
     return noCoordinationSurface();
-  }
-  private aws(): CloudFormationEngine {
-    if (!this.cloud)
-      throw new HostError(
-        503,
-        "This event contains AWS resources from an older hosting revision. They are not operated by local hosting. Keep their state and use the reviewed cloud or legacy cleanup workflow; no AWS resources were changed.",
-        "aws_not_configured",
-      );
-    return this.cloud;
   }
   private only(
     context: Context,
@@ -203,19 +179,14 @@ export class CompetitionEngine extends DockerHostingEngine {
     const submissions = context.event.problems
       .filter((problem) => kinds.get(problem.problemId) === "submission")
       .map((problem) => submissionProblemView(problem, context));
-    const cloud = this.only(context, kinds, "cloudformation");
-    const stacks = cloud.event.problems.length ? await this.aws().view(cloud) : { problems: [] };
+    if (context.event.problems.some((problem) => kinds.get(problem.problemId) === "cloudformation"))
+      retiredAwsJob();
     return {
       ...base,
       ...(context.event.problems.every((problem) => problem.publicCatalog)
         ? { problemCatalog: context.event.problems.map((problem) => problem.publicCatalog) }
         : {}),
-      problems: [
-        ...(base.problems as unknown[]),
-        ...battles,
-        ...submissions,
-        ...(stacks.problems as unknown[]),
-      ],
+      problems: [...(base.problems as unknown[]), ...battles, ...submissions],
     };
   }
   /**
@@ -258,8 +229,7 @@ export class CompetitionEngine extends DockerHostingEngine {
   override async submit(context: Context, body: Record<string, unknown>): Promise<EngineResult> {
     const kinds = problemKinds(context.event);
     if (kinds.get(String(body.problemId)) === "submission") return submitStudy(context, body);
-    if (kinds.get(String(body.problemId)) === "cloudformation")
-      return this.aws().submit(context, body);
+    if (kinds.get(String(body.problemId)) === "cloudformation") retiredAwsJob();
     return this.combined(
       await super.submit(this.only(context, kinds, "compose"), body),
       context,
@@ -270,8 +240,7 @@ export class CompetitionEngine extends DockerHostingEngine {
     const kinds = problemKinds(context.event);
     if (kinds.get(problemId) === "submission")
       throw new HostError(404, "Submission problems have no platform hints.");
-    if (kinds.get(problemId) === "cloudformation")
-      return this.aws().hint(context, problemId, hintId);
+    if (kinds.get(problemId) === "cloudformation") retiredAwsJob();
     return this.combined(
       await super.hint(this.only(context, kinds, "compose"), problemId, hintId),
       context,

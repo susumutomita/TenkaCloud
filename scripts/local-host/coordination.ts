@@ -117,7 +117,6 @@ export class LocalCoordination {
       this.host.store.putCoordination(event.eventId, problem.problemId, body);
       this.award(event, problem, result.deltas);
       this.host.progression.captureEvent(event.eventId);
-      this.host.disruptions.captureTriggers(event);
       receipt?.();
     });
     row.body = body;
