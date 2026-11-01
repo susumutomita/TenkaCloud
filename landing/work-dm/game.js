@@ -1,5 +1,5 @@
-import { COPY, shareHref } from "./copy.js?v=02506211be";
-import { choose, elapse, hits, ROUND_MS, score, start, TASKS } from "./model.js?v=02506211be";
+import { COPY, shareHref } from "./copy.js?v=f21bf31672";
+import { choose, elapse, hits, ROUND_MS, score, start, TASKS } from "./model.js?v=f21bf31672";
 
 let lang = new URLSearchParams(location.search).get("lang") === "en" ? "en" : "ja";
 let state = start();
@@ -18,7 +18,6 @@ function canActivate(action, event, moved) {
   if (action.type === "begin" && event.detail > 1) return false;
   if (action.type !== "fire") return true;
   if (event.detail > 1 || performance.now() < (shotReadyAt.get(action.id) || 0)) {
-    $("feedback").textContent = COPY[lang].releaseHint;
     return false;
   }
   return true;
@@ -123,14 +122,23 @@ function cover(id, t, key = id) {
     "aria-label",
     `${t.media[TASKS[id].medium]} · ${t.peel}: ${t.covers[id]}。${t.previews[id]}`,
   );
-  if (TASKS[id].medium === "phone")
+  if (key === "practice") {
+    b.classList.add("intro-cover");
+    b.append(
+      node("span", "▤", "intro-document"),
+
+      node("span", "☝", "gesture-hand"),
+      node("small", t.introRub),
+    );
+  } else if (TASKS[id].medium === "phone")
     b.append(node("span", "☏", "call-icon"), node("small", t.caller));
   else b.append(node("span", "↗", "rub-icon"));
-  b.append(
-    node("strong", t.covers[id]),
-    node("span", t.previews[id], "contact-quote"),
-    node("small", t.peelHint),
-  );
+  if (key !== "practice")
+    b.append(
+      node("strong", t.covers[id]),
+      node("span", t.previews[id], "contact-quote"),
+      node("small", t.peelHint),
+    );
   let x = null,
     progress = 0;
   b.addEventListener("pointerdown", (event) => {
@@ -156,9 +164,20 @@ function cover(id, t, key = id) {
   });
   return b;
 }
-function payload(id, t) {
+function payload(id, t, training = false) {
   const task = TASKS[id];
   const p = node("div", "", "payload");
+  if (training) {
+    p.classList.add("intro-payload");
+    p.append(
+      node("span", "▣", "intro-browser"),
+      node("small", t.introOfficial),
+      node("span", "↕", "intro-compare"),
+      node("span", "⚙", "intro-app"),
+      node("strong", t.introRequest),
+    );
+    return p;
+  }
   p.append(node("small", t.route[task.medium], "route-label"));
   p.append(
     node("span", task.kind === "APP" ? "⚙" : "▣", "payload-icon"),
@@ -179,7 +198,14 @@ function revealedTile(e, id, key, t, spent, correct, training) {
   target.disabled = spent;
   const waiting = performance.now() < (shotReadyAt.get(key) || 0);
   target.setAttribute("aria-disabled", String(spent || waiting));
-  target.append(payload(id, t), node("small", waiting ? t.releaseHint : t.directFire, "shot-hint"));
+  target.append(
+    payload(id, t, training),
+    node(
+      "small",
+      training ? (waiting ? "…" : t.introTap) : waiting ? t.releaseHint : t.directFire,
+      "shot-hint",
+    ),
+  );
   e.append(target);
   if (spent)
     e.append(
@@ -292,27 +318,69 @@ function pauseDialog(t) {
   });
   return d;
 }
+function messageKey() {
+  if (state.outcome) return "ended";
+  if (state.phase === "practice") {
+    if (state.practiceShot) return "practiceDone";
+    return state.practiceRevealed ? "practiceOpen" : "practiceStart";
+  }
+  if (state.revealed.length === 4) {
+    if (state.notice === "hit" || state.notice === "miss") return `${state.notice}Finish`;
+    return "finish";
+  }
+  if (state.notice === "hit" || state.notice === "miss") return state.notice;
+  return state.notice === "revealed" ? "open" : "start";
+}
+function statusBar(t) {
+  const status = node("div", "", "status");
+  status.append(node("span", `${t.progress} ${hits(state)}/2`));
+  status.append(node("strong", `${t.score}: ${score(state)}/100`));
+  const pause = button("pause", "Ⅱ", { type: "pause" }, "pause");
+  pause.setAttribute("aria-label", t.pause);
+  status.append(pause);
+  return status;
+}
+function messageWindow(t) {
+  const training = state.phase === "practice" && !state.outcome;
+  const box = node("section", "", "message-window");
+  box.id = "message-window";
+  box.setAttribute("aria-label", t.flowLabel);
+  const speaker = node(
+    "small",
+    training && !state.practiceRevealed ? t.introSender : t.flowGuide,
+    "message-speaker",
+  );
+  const key = messageKey();
+  const text = node("p", t.flow[key]);
+  text.id = "message-text";
+  text.setAttribute("role", "status");
+  text.setAttribute("aria-live", "polite");
+  box.append(speaker, text);
+  if (!training && !state.outcome) box.append(reference(t), statusBar(t));
+  if (state.outcome && state.outcome !== "held")
+    box.append(node("p", `${t.score}: ${score(state)} / 100 ${t.unit}`, "result-score"));
+  return box;
+}
 function lesson(t) {
-  const p = node("section", "", "practice-panel");
-  const hint = state.practiceShot
-    ? t.practiceDone
-    : state.practiceRevealed
-      ? t.practiceCompare
-      : t.practicePeel;
-  p.append(node("p", hint, "lesson-hint"), tile("application", t, true));
-  if (state.practiceShot) p.append(button("begin", t.begin, { type: "begin" }, "primary begin"));
+  const p = node("section", "", "practice-panel first-contact");
+  const trace = node("div", "", "intro-trace");
+  trace.setAttribute("aria-label", t.introContext);
+  trace.append(
+    node("span", "▧"),
+    node("span", "···"),
+    node("span", "▤"),
+    node("span", "···"),
+    node("span", "▦ ✓"),
+  );
+  p.append(trace, tile("application", t, true));
+  if (state.practiceShot)
+    p.append(button("begin", `${t.introNext} →`, { type: "begin" }, "primary begin"));
   return p;
 }
 function play(t) {
   const p = node("div", "", "play");
   const training = state.phase === "practice";
-  const status = node("div", "", "status");
-  status.append(node("span", training ? t.practiceLabel : `${t.progress} ${hits(state)}/2`));
-  if (!training) status.append(node("strong", `${score(state)}/100`));
-  const pause = button("pause", "Ⅱ", { type: "pause" }, "pause");
-  pause.setAttribute("aria-label", t.pause);
-  status.append(pause);
-  p.append(conversation(t), reference(t), status);
+  p.append(messageWindow(t));
   if (training) {
     p.append(lesson(t));
     return p;
@@ -334,13 +402,14 @@ function result(t) {
   const title = state.outcome === "complete" && score(state) === 100 ? t.cleared : t[state.outcome];
   r.append(heading(title, "result-title"));
   if (state.outcome === "held") r.append(node("p", t.heldNote));
-  else r.append(node("p", `${t.score}: ${score(state)} / 100 ${t.unit}`, "result-score"));
   r.append(button("retry", t.retry, { type: "retry" }, "primary"));
   const share = node("a", t.share, "share");
   share.href = shareHref(state, lang, location.href, score(state), hits(state));
   share.target = "_blank";
   share.rel = "noopener noreferrer";
-  r.append(share, node("h3", t.review));
+  r.append(share);
+  const evidence = node("details", "", "result-review");
+  evidence.append(node("summary", t.review));
   for (const id of ["application", "upload", "calendar", "task"]) {
     const e = node("div", "", "result-evidence");
     e.append(
@@ -348,11 +417,15 @@ function result(t) {
       node("p", `${TASKS[id].kind} · ${TASKS[id].site}.example`),
       node("p", t.explanations[TASKS[id].mismatch || "normal"]),
     );
-    r.append(e);
+    evidence.append(e);
   }
+  r.append(evidence);
   const details = node("details");
   details.append(node("summary", t.more), node("p", t.safeNext));
   r.append(details);
+  const history = node("details");
+  history.append(node("summary", t.historyTitle), conversation(t));
+  r.append(history);
   return r;
 }
 function render() {
@@ -360,12 +433,15 @@ function render() {
   document.documentElement.lang = lang;
   document.title = `${t.title} | TenkaCloud`;
   for (const id of ["title", "instruction", "safety", "games"]) $(id).textContent = t[id];
-  $("format").textContent =
-    state.phase === "practice" && !state.outcome ? t.practiceLabel : t.format;
+  const training = state.phase === "practice" && !state.outcome;
+  document.body.classList.toggle("intro-mode", training);
+  $("instruction").textContent = "";
+  $("format").textContent = training ? "" : t.format;
+  $("safety").textContent = training ? t.introMock : t.safety;
   $("games").href = `../portal-demo/?demo=1&goto=${encodeURIComponent(`/problems?lang=${lang}`)}`;
   for (const l of ["ja", "en"]) $(l).setAttribute("aria-pressed", String(lang === l));
-  $("feedback").textContent = t.notices[state.notice] || "";
-  $("app").replaceChildren(state.outcome ? result(t) : play(t));
+  $("feedback").textContent = "";
+  $("app").replaceChildren(...(state.outcome ? [messageWindow(t), result(t)] : [play(t)]));
   if (state.paused) {
     const d = pauseDialog(t);
     $("app").append(d);
@@ -373,7 +449,7 @@ function render() {
   }
   paint();
 }
-function paint() {
+function releaseShotInputs() {
   for (const [id, until] of shotReadyAt) {
     if (performance.now() < until) continue;
     shotReadyAt.delete(id);
@@ -381,9 +457,13 @@ function paint() {
     if (target && !target.disabled) {
       target.setAttribute("aria-disabled", "false");
       const hint = target.querySelector(".shot-hint");
-      if (hint) hint.textContent = COPY[lang].directFire;
+      if (hint)
+        hint.textContent = state.phase === "practice" ? COPY[lang].introTap : COPY[lang].directFire;
     }
   }
+}
+function paint() {
+  releaseShotInputs();
   const e = $("request-window");
   if (!e) return;
   e.style.setProperty("--used", `${100 * (1 - state.remaining / ROUND_MS)}%`);
