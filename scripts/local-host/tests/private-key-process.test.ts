@@ -96,7 +96,7 @@ test("a failed private reader preserves its error and releases caller-owned desc
 });
 
 test("collecting private-pipe children cannot close later SQLite descriptors", async () => {
-  // Bun 1.3.11's node:child_process extra pipes have two owners. Once a child
+  // Before Bun 1.4, node:child_process extra pipes had two owners. Once a child
   // exits, GC can close its old descriptor number after SQLite has reused it.
   const privateTargets: string[] = [];
   for (let index = 0; index < 12; index++) {

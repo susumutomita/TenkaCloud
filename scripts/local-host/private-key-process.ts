@@ -3,9 +3,9 @@ import { Readable } from "node:stream";
 import { finished } from "node:stream/promises";
 
 /**
- * Bun 1.3.11's node:child_process adapter gives extra pipes two fd owners: the
- * Node socket and the native subprocess. After the socket closes, later GC can
- * close an unrelated file that reused its fd. Bun.file borrows fd 3 without
+ * Up to Bun 1.3.11, the node:child_process adapter gave extra pipes two fd
+ * owners: the Node socket and the native subprocess. After the socket closes,
+ * later GC can close an unrelated file that reused its fd. Bun.file borrows fd 3 without
  * introducing a second socket owner. Since Bun 1.4, reading child.stdio on
  * POSIX transfers extra pipe ownership to the caller, so release it explicitly
  * after its reader settles. Older Bun versions retain native ownership.

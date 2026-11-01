@@ -22,11 +22,11 @@
   },
   "dependencies": {
     "@tenkacloud/problem-runtime": "workspace:*",
-    "zod": "^4.6.5",
+    "zod": "^4.6.7",
     "@tenkacloud/portal-contracts": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^26.1.0",
+    "@types/node": "^26.6.6",
     "http-status-codes": "^2.3.0",
     "typescript": "^6.0.3",
     "vitest": "^5.0.3"
