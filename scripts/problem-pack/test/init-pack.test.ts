@@ -150,7 +150,7 @@ describe("writePackScaffold (#2089) — validator-passing output", () => {
 
     const readme = fs.readFileSync(path.join(targetRoot, "README.md"), "utf-8");
     // `bun --cwd infrastructure run pack ...` does not run the pack script on the
-    // pinned bun 1.3.11 (bun prints the script listing instead) — the scaffolded
+    // older Bun (1.3.x; bun prints the script listing instead) — the scaffolded
     // README must never hand that broken command to pack authors.
     expect(readme).not.toContain("--cwd infrastructure run pack");
     expect(readme).toContain("make pack-validate");

@@ -88,7 +88,6 @@ export function installTerminalTransport(
     maxPayload: TERMINAL_MAX_FRAME_BYTES,
     perMessageDeflate: false,
   });
-  let hadUpgrade = false;
   let closing = false;
   server.on("upgrade", (request, socket, head) => {
     try {
@@ -99,7 +98,6 @@ export function installTerminalTransport(
       const authorize = () => authorizePeer?.(request.socket.remoteAddress ?? "", grant);
       authorize();
       wss.handleUpgrade(request, socket, head, (accepted) => {
-        hadUpgrade = true;
         void terminals
           .attach(grant, terminalSocket(accepted, authorize))
           .catch(() => accepted.terminate());
@@ -115,9 +113,6 @@ export function installTerminalTransport(
       const cleanup = terminals.closeAll();
       for (const socket of wss.clients) socket.terminate();
       wss.close();
-      // Bun 1.3.11 retains upgraded sockets in the HTTP listener's connection list.
-      // Called only during listener shutdown, before service drain/flush.
-      if (hadUpgrade) server.closeAllConnections();
       await cleanup;
     },
   };

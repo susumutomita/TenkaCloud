@@ -325,7 +325,7 @@ describe("dev-mock fixtures", () => {
     for (const body of [drill?.description, drill?.i18n?.en?.description]) {
       expect(body).toContain("`make local`");
       expect(body).toContain("make install");
-      expect(body).toContain("Bun 1.3.11");
+      expect(body).toContain("Bun 1.4.4");
       expect(body).not.toContain("--recurse-submodules");
       expect(body).toContain("catalog-sources.json");
       expect(body).toContain("ref: main");
