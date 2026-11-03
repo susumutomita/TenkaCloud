@@ -105,6 +105,7 @@ function main() {
   // mix incompatible releases. Normalize generated versions before hashing to stay idempotent.
   stampCloudMaster(join(landing, "cloud-master"));
   stampCloudMaster(join(landing, "mail-detective"));
+  stampCloudMaster(join(landing, "work-dm"));
   const versions = currentVersions();
   const targets = readdirSync(landing).filter((name) => name.endsWith(".html"));
   for (const name of targets) {
