@@ -291,3 +291,15 @@ MCP はリクエストごとのステートレス処理です。セッション�
 隔離テストで実署名の JWT、issuer／audience／scope／client の拒否、委任期限・失効、
 他チーム・削除・期限切れ META 行の拒否、SDK 接続・提出、2025 年の initialize、
 IaC の専用 client／scope を確認します。実 pool の変更、実 grant 発行や接続はテストしていません。
+
+### クラウドを使わない HTTP シミュレーション
+
+リポジトリで `bun run --cwd infrastructure test --run test/problem-deploy/mcp-http-simulator.test.ts` を実行します（Node 24）。
+loopback 上の実 HTTP サーバーを起動し、実 MCP SDK クライアントが未認証 challenge、initialize、tools/list、演習一覧・本文、誤答／正答／重複提出、採点履歴まで操作します。
+検証用 RSA 署名 JWT を発行し、模擬 Cognito JWKS を HTTP 取得して、実 JOSE 検証器で署名・issuer・audience・client・scope・期限を確認します。
+実参加者ルート・サービス・不変 snapshot の整合性読み取り・実 in-memory SQLite を通し、同じ操作を DynamoDB repository の隔離 fake でも検証します。
+他チーム、未認証、不正署名、運営用 client、read-only scope、削除済みと live の混在、teardown 後 FAILED、認可後の teardown 競合による採点拒否も確認します。
+
+この模擬環境は Lambda の公開 HTTPS URL を loopback gateway で再現し、JWKS と保存用 artifact は fixture に置き換えます。
+実 AWS、実 Cognito、Turso、課金リソースには接続しません。公開 TLS／DNS、Cognito Hosted UI、認可コード＋PKCE／resource の交換、refresh／実プロバイダーでの失効、ChatGPT・Claude Code・Grok Bot の実ログインはこのシミュレーションの検証対象外です。
+クラウド演習は主催者が準備済みの状態を fixture で再現し、AWS 環境の作成・演習開始 API は追加しません。
