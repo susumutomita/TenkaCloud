@@ -1,5 +1,7 @@
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { StatusCodes } from "http-status-codes";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mcpConfigFixture } from "./mcp-oauth-fixture";
 
 /**
  * Issue #1424: participant-handler の Hono app (index.ts) を route-wiring 層として pin する。
@@ -15,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  */
 const mocks = vi.hoisted(() => ({
   lookupTeamByLoginKey: vi.fn(),
+  verifyMcpAccessToken: vi.fn(),
   listScoreEvents: vi.fn(),
   getConsoleSigninUrl: vi.fn(),
   getCliCredentials: vi.fn(),
@@ -38,6 +41,9 @@ vi.mock("../../lib/problem-deploy/handlers/participant-handler/shared", () => ({
   // #2283: getJobPrerequisiteBlock (jobId 経路の Progression Gate guard) が team 行を引く。
   // 空 = 該当行なし → guard 素通し (= 各 route 本来の outcome を検証する既存テストを保つ)。
   queryTeamItems: vi.fn(async () => []),
+}));
+vi.mock("../../lib/problem-deploy/handlers/participant-handler/mcp-oauth", () => ({
+  verifyMcpAccessToken: mocks.verifyMcpAccessToken,
 }));
 vi.mock("../../lib/problem-deploy/handlers/participant-handler/lookup", () => ({
   lookupTeamByLoginKey: mocks.lookupTeamByLoginKey,
@@ -524,5 +530,283 @@ describe("coordination routes are no longer served by the participant-portal Lam
   });
   it("should 404 GET /portal/me/coordination/projection (moved to the dedicated dispatcher)", async () => {
     expect((await get("/portal/me/coordination/projection")).status).toBe(StatusCodes.NOT_FOUND);
+  });
+});
+
+describe("remote participant MCP on the existing Function URL", () => {
+  const keyA = "A".repeat(43);
+  const keyB = "B".repeat(43);
+  const active = new Set<string>();
+  const clients: Client[] = [];
+  const scores = new Map<string, unknown[]>();
+  const view = (key: string) => ({
+    team: { teamId: key === keyA ? "team-a" : "team-b" },
+    problems: [{ problemId: "p-1", status: "READY" }],
+    problemCatalog: [{ id: "p-1", instructions: "Synthetic exercise data" }],
+  });
+  const keyOf = (scoped: { mcpTeam: { binding: { subject: string } } }) =>
+    scoped.mcpTeam.binding.subject.endsWith("1") ? keyA : keyB;
+  beforeEach(() => {
+    vi.stubEnv("MCP_OAUTH_CONFIG", JSON.stringify(mcpConfigFixture()));
+    vi.stubEnv("MCP_OAUTH_CLIENT_ID", "mcp-test-client");
+    mocks.verifyMcpAccessToken.mockReset().mockImplementation(async (token) => {
+      if (!active.has(token)) throw new Error("Invalid synthetic access token");
+      const binding = mcpConfigFixture().bindings[0];
+      return {
+        binding: {
+          ...binding,
+          subject:
+            token === keyA
+              ? "00000000-0000-4000-8000-000000000001"
+              : "00000000-0000-4000-8000-000000000002",
+        },
+        expiresAt: Date.now() / 1000 + 300,
+        allowSubmit: true,
+      };
+    });
+    active.clear();
+    active.add(keyA);
+    active.add(keyB);
+    scores.clear();
+    mocks.lookupTeamByLoginKey
+      .mockReset()
+      .mockImplementation(async (scoped) =>
+        active.has(keyOf(scoped)) ? view(keyOf(scoped)) : undefined,
+      );
+    mocks.listScoreEvents.mockReset().mockImplementation(async (scoped) => ({
+      kind: "ok",
+      response: { entries: scores.get(keyOf(scoped)) ?? [] },
+    }));
+    mocks.submitFlag.mockReset().mockImplementation(async (scoped, _map, _key, _problem, flag) => {
+      scores.set(keyOf(scoped), [{ result: flag === "right" ? "ok" : "wrong" }]);
+      return { kind: flag === "right" ? "ok" : "wrong", scoreDelta: 100, totalScore: 100 };
+    });
+  });
+  afterEach(async () => {
+    await Promise.all(clients.splice(0).map((client) => client.close()));
+    vi.unstubAllEnvs();
+  });
+  async function connectRemote(key: string) {
+    const client = new Client({ name: "remote-isolated-test", version: "1" });
+    clients.push(client);
+    const transport = new StreamableHTTPClientTransport(
+      new URL("https://participant.example.test/mcp"),
+      {
+        requestInit: { headers: { authorization: `Bearer ${key}` } },
+        fetch: (input, init) => app.fetch(new Request(input, init)),
+      },
+    );
+    await client.connect(transport);
+    return client;
+  }
+  function resultData(value: Awaited<ReturnType<Client["callTool"]>>) {
+    const contents = value.content as { text: string }[];
+    return JSON.parse(contents[0]?.text ?? "{}");
+  }
+  it("initializes, lists only supported cloud tools and submits using the authenticated team's routes", async () => {
+    const a = await connectRemote(keyA);
+    const b = await connectRemote(keyB);
+    expect((await a.listTools()).tools.map((tool) => tool.name)).toEqual([
+      "list_problems",
+      "get_problem",
+      "get_score_events",
+      "submit_flag",
+    ]);
+    const detail = resultData(
+      await a.callTool({ name: "get_problem", arguments: { problem_id: "p-1" } }),
+    );
+    expect(detail.data.team.teamId).toBe("team-a");
+    expect(detail.data.problemCatalog[0].instructions).toBe("Synthetic exercise data");
+    expect(
+      resultData(await a.callTool({ name: "get_problem", arguments: { problem_id: "hidden" } }))
+        .status,
+    ).toBe(404);
+    expect(
+      (
+        await a.callTool({
+          name: "get_problem",
+          arguments: { problem_id: "p-1", teamId: "team-b" },
+        })
+      ).isError,
+    ).toBe(true);
+    await expect(
+      a.callTool({ name: "start_exercise", arguments: { problem_id: "p-1" } }),
+    ).rejects.toThrow("not found");
+    expect(
+      resultData(
+        await a.callTool({
+          name: "submit_flag",
+          arguments: { problem_id: "p-1", flag: "right", flag_id: "checkpoint" },
+        }),
+      ).data.totalScore,
+    ).toBe(100);
+    expect(mocks.submitFlag).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      "",
+      "p-1",
+      "right",
+      "checkpoint",
+    );
+    expect(
+      resultData(await a.callTool({ name: "get_score_events", arguments: {} })).data.entries,
+    ).toHaveLength(1);
+    expect(
+      resultData(await b.callTool({ name: "get_score_events", arguments: {} })).data.entries,
+    ).toHaveLength(0);
+    const before = mocks.submitFlag.mock.calls.length;
+    expect(
+      (
+        await a.callTool({
+          name: "submit_flag",
+          arguments: { problem_id: "p-1", flag: "right", token: keyB },
+        })
+      ).isError,
+    ).toBe(true);
+    expect(mocks.submitFlag).toHaveBeenCalledTimes(before);
+    active.delete(keyA);
+    await expect(a.listTools()).rejects.toThrow();
+    expect(
+      resultData(await b.callTool({ name: "list_problems", arguments: {} })).data.team.teamId,
+    ).toBe("team-b");
+  });
+  it("rejects missing, malformed, revoked and organizer credentials before MCP discovery", async () => {
+    for (const headers of [
+      {},
+      { authorization: "Bearer organizer.jwt.signature" },
+      { authorization: `Bearer ${"C".repeat(43)}` },
+    ]) {
+      const response = await app.request("https://participant.example.test/mcp", {
+        method: "POST",
+        headers: { ...headers, "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+      });
+      expect(response.status).toBe(401);
+      expect(response.headers.get("www-authenticate")).toContain("Bearer");
+    }
+  });
+  it("rejects browser cross-origin requests, session methods, invalid JSON and oversized requests", async () => {
+    const headers = {
+      authorization: `Bearer ${keyA}`,
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+    };
+    expect(
+      (
+        await app.request("https://participant.example.test/mcp", {
+          method: "POST",
+          headers: { ...headers, origin: "https://attacker.example.test" },
+          body: "{}",
+        })
+      ).status,
+    ).toBe(403);
+    for (const method of ["GET", "DELETE"])
+      expect(
+        (await app.request("https://participant.example.test/mcp", { method, headers })).status,
+      ).toBe(405);
+    expect(
+      (
+        await app.request("https://participant.example.test/mcp", {
+          method: "POST",
+          headers,
+          body: "not JSON",
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await app.request("https://participant.example.test/mcp", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ oversized: "x".repeat(65 * 1024) }),
+        })
+      ).status,
+    ).toBe(413);
+    expect(mocks.submitFlag).not.toHaveBeenCalled();
+  });
+  it("redacts JSON-escaped credentials in values and property names", async () => {
+    const encoded = `\\u0041${keyA.slice(1)}`;
+    mocks.lookupTeamByLoginKey.mockImplementation(async () =>
+      JSON.parse(`{"problems":[],"${encoded}":"${encoded}"}`),
+    );
+    const a = await connectRemote(keyA);
+    const result = await a.callTool({ name: "list_problems", arguments: {} });
+    expect(JSON.stringify(result)).not.toContain(keyA);
+    expect(resultData(result).data["[REDACTED]"]).toBe("[REDACTED]");
+  });
+  it("does not replay rejected submissions and preserves existing event gates", async () => {
+    mocks.submitFlag.mockResolvedValue({ kind: "scoring_not_started" });
+    const a = await connectRemote(keyA);
+    const result = await a.callTool({
+      name: "submit_flag",
+      arguments: { problem_id: "p-1", flag: "right" },
+    });
+    expect(result.isError).toBe(true);
+    expect(resultData(result).status).toBe(409);
+    expect(mocks.submitFlag).toHaveBeenCalledTimes(1);
+  });
+  it("publishes resource discovery and refuses unconfigured or read-only access safely", async () => {
+    const metadata = await app.request(
+      "https://participant.example.test/.well-known/oauth-protected-resource/mcp",
+    );
+    expect(metadata.status).toBe(200);
+    expect(await metadata.json()).toMatchObject({
+      resource: "https://participant.example.test/mcp",
+      authorization_servers: ["https://cognito-idp.us-east-1.amazonaws.com/us-east-1_TestPool"],
+    });
+    const implementation = mocks.verifyMcpAccessToken.getMockImplementation();
+    mocks.verifyMcpAccessToken.mockImplementation(async (...args) => ({
+      ...(await implementation?.(...args)),
+      allowSubmit: false,
+    }));
+    const a = await connectRemote(keyA);
+    expect((await a.listTools()).tools.map((tool) => tool.name)).not.toContain("submit_flag");
+    await expect(
+      a.callTool({ name: "submit_flag", arguments: { problem_id: "p-1", flag: "right" } }),
+    ).rejects.toThrow("not found");
+    expect(mocks.submitFlag).not.toHaveBeenCalled();
+    vi.stubEnv("MCP_OAUTH_CONFIG", undefined);
+    expect(
+      (await app.request("https://participant.example.test/mcp", { method: "POST" })).status,
+    ).toBe(503);
+    vi.stubEnv("MCP_OAUTH_CONFIG", "malformed");
+    expect(
+      (await app.request("https://participant.example.test/mcp", { method: "POST" })).status,
+    ).toBe(503);
+  });
+  it("serves the 2025 initialize handshake without creating a persistent session", async () => {
+    const headers = {
+      authorization: `Bearer ${keyA}`,
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+      "mcp-protocol-version": "2025-03-26",
+    };
+    const initialized = await app.request("https://participant.example.test/mcp", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-03-26",
+          capabilities: {},
+          clientInfo: { name: "legacy-test", version: "1" },
+        },
+      }),
+    });
+    expect(initialized.status).toBe(200);
+    expect(initialized.headers.get("mcp-session-id")).toBeNull();
+    const initializedText = await initialized.text();
+    const dataLine = initializedText.split("\n").find((line) => line.startsWith("data: "));
+    expect(dataLine).toBeDefined();
+    expect(JSON.parse(dataLine?.slice(6) ?? "{}").result.protocolVersion).toBe("2025-03-26");
+    const listed = await app.request("https://participant.example.test/mcp", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }),
+    });
+    expect(listed.status).toBe(200);
+    expect(await listed.text()).toContain("list_problems");
   });
 });

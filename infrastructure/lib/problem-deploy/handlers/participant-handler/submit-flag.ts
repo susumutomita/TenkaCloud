@@ -170,6 +170,7 @@ async function scoreCorrectMultiFlag(
   // [Issue #2441 / Phase B2] `applyMultiFlagCorrectScore` folds the CCF into
   // `conflict` (no probe) instead of throwing.
   if (outcome.outcome !== "updated") {
+    if (await lostMcpJobAccess(shared, jobId)) return { kind: "unauthorized" };
     return { kind: "already_scored", totalScore: Number(item.score ?? 0) + entry.points };
   }
   const totalScore = Number(outcome.record?.score ?? Number(item.score ?? 0) + entry.points);
@@ -194,6 +195,7 @@ async function scoreWrongMultiFlag(
   const repository: DeploymentsScoringPort = await resolveDeploymentsRepository(shared);
   const outcome = await repository.applyMultiFlagWrongPenalty(jobId, penalty, entry.id, now);
   if (outcome.outcome !== "updated") {
+    if (await lostMcpJobAccess(shared, jobId)) return { kind: "unauthorized" };
     return { kind: "already_scored", totalScore: Number(item.score ?? 0) };
   }
   const rawScore = Number(outcome.record?.score ?? 0);
@@ -250,6 +252,7 @@ async function scoreWrongFlag(
   const repository: DeploymentsScoringPort = await resolveDeploymentsRepository(shared);
   const outcome = await repository.applyFlagWrongPenalty(jobId, penalty, wrongNow);
   if (outcome.outcome !== "updated") {
+    if (await lostMcpJobAccess(shared, jobId)) return { kind: "unauthorized" };
     return { kind: "already_scored", totalScore: Number(item.score ?? 0) };
   }
   const rawScore = Number(outcome.record?.score ?? 0);
@@ -284,6 +287,7 @@ async function scoreCorrectFlag(
   const repository: DeploymentsScoringPort = await resolveDeploymentsRepository(shared);
   const outcome = await repository.applyFlagCorrectScore(jobId, scoring.points, now);
   if (outcome.outcome !== "updated") {
+    if (await lostMcpJobAccess(shared, jobId)) return { kind: "unauthorized" };
     return { kind: "already_scored", totalScore: Number(item.score ?? 0) + scoring.points };
   }
   const totalScore = Number(outcome.record?.score ?? scoring.points);
@@ -321,4 +325,12 @@ async function writeFlagScoreEvent(
       occurredAt,
     ),
   );
+}
+
+/** A teardown racing the admission read is a denial, not a successful replay. */
+async function lostMcpJobAccess(
+  shared: ParticipantSharedResources,
+  jobId: string,
+): Promise<boolean> {
+  return !!shared.mcpTeam && !(await queryTeamItems(shared, "")).some((row) => row.jobId === jobId);
 }

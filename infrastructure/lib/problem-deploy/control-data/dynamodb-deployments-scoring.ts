@@ -19,6 +19,17 @@ import type {
   ScoreEventRecord,
 } from "./types.js";
 
+// Fence the same META item atomically with scoring; missing rows must not be recreated.
+const FLAG_LIVE_CONDITION =
+  "attribute_exists(PK) AND attribute_not_exists(teardownRequestedAt) AND " +
+  "(attribute_not_exists(#flagStatus) OR NOT (#flagStatus IN (:deleting, :deleted, :expired, :autoDeleted)))";
+const FLAG_LIVE_VALUES = {
+  ":deleting": "DELETING",
+  ":deleted": "DELETED",
+  ":expired": "EXPIRED",
+  ":autoDeleted": "AUTO_DELETED",
+};
+
 /**
  * [#2527 Slice 3] DynamoDB {@link DeploymentsScoringPort} adapter — score mutations plus the score-event and inbox sub-aggregates,
  * moved verbatim from the pre-split `DynamoDbDeploymentsRepository`. Engine
@@ -80,9 +91,10 @@ export class DynamoDbDeploymentsScoring implements DeploymentsScoringPort {
       {
         UpdateExpression:
           "ADD score :pts, solvedFlagIds :flagIdSet SET lastScoredAt = :now, updatedAt = :now",
-        ConditionExpression:
-          "attribute_not_exists(solvedFlagIds) OR NOT contains(solvedFlagIds, :flagId)",
+        ConditionExpression: `${FLAG_LIVE_CONDITION} AND (attribute_not_exists(solvedFlagIds) OR NOT contains(solvedFlagIds, :flagId))`,
+        ExpressionAttributeNames: { "#flagStatus": "status" },
         ExpressionAttributeValues: {
+          ...FLAG_LIVE_VALUES,
           ":pts": points,
           ":flagIdSet": new Set([flagId]),
           ":flagId": flagId,
@@ -104,9 +116,10 @@ export class DynamoDbDeploymentsScoring implements DeploymentsScoringPort {
       jobId,
       {
         UpdateExpression: "ADD wrongAnswerCount :one, score :neg SET updatedAt = :now",
-        ConditionExpression:
-          "attribute_not_exists(solvedFlagIds) OR NOT contains(solvedFlagIds, :flagId)",
+        ConditionExpression: `${FLAG_LIVE_CONDITION} AND (attribute_not_exists(solvedFlagIds) OR NOT contains(solvedFlagIds, :flagId))`,
+        ExpressionAttributeNames: { "#flagStatus": "status" },
         ExpressionAttributeValues: {
+          ...FLAG_LIVE_VALUES,
           ":one": 1,
           ":neg": -penalty,
           ":flagId": flagId,
@@ -127,8 +140,15 @@ export class DynamoDbDeploymentsScoring implements DeploymentsScoringPort {
       jobId,
       {
         UpdateExpression: "ADD wrongAnswerCount :one, score :neg SET updatedAt = :now",
-        ConditionExpression: "attribute_not_exists(flagSubmitted) OR flagSubmitted = :false",
-        ExpressionAttributeValues: { ":one": 1, ":neg": -penalty, ":false": false, ":now": at },
+        ConditionExpression: `${FLAG_LIVE_CONDITION} AND (attribute_not_exists(flagSubmitted) OR flagSubmitted = :false)`,
+        ExpressionAttributeNames: { "#flagStatus": "status" },
+        ExpressionAttributeValues: {
+          ...FLAG_LIVE_VALUES,
+          ":one": 1,
+          ":neg": -penalty,
+          ":false": false,
+          ":now": at,
+        },
         ReturnValues: "ALL_NEW",
       },
       "conflict",
@@ -145,8 +165,10 @@ export class DynamoDbDeploymentsScoring implements DeploymentsScoringPort {
       {
         UpdateExpression:
           "ADD score :pts SET flagSubmitted = :true, lastScoredAt = :now, updatedAt = :now",
-        ConditionExpression: "attribute_not_exists(flagSubmitted) OR flagSubmitted = :false",
+        ConditionExpression: `${FLAG_LIVE_CONDITION} AND (attribute_not_exists(flagSubmitted) OR flagSubmitted = :false)`,
+        ExpressionAttributeNames: { "#flagStatus": "status" },
         ExpressionAttributeValues: {
+          ...FLAG_LIVE_VALUES,
           ":pts": points,
           ":true": true,
           ":false": false,

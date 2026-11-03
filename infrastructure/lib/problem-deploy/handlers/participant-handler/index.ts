@@ -2,13 +2,15 @@ import { type Context, Hono } from "hono";
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { StatusCodes } from "http-status-codes";
+import { readCatalogBlob } from "../../../utils/read-catalog-blob.js";
 import { createDefaultControlDataRuntime } from "../../control-data/runtime-repositories.js";
+import { mcpIssuer, parseMcpOAuthConfig } from "../../mcp-oauth-config.js";
 import {
   deleteProblemEndpointOverride,
   listProblemEndpoints,
   upsertProblemEndpointOverride,
 } from "../problem-endpoints-handler/endpoints.js";
-import { RATE_LIMITS } from "../shared/rate-limiter.js";
+import { participantRateLimiter, RATE_LIMITS } from "../shared/rate-limiter.js";
 import { secureApiHeaders } from "../shared/secure-headers.js";
 import { BATTLE_ATTACKS_SINCE_MIN_DEFAULT, listBattleAttacks } from "./battle-attacks.js";
 import { castEvent, INBOX_SINCE_MS_MAX, readInbox } from "./cast-event.js";
@@ -26,6 +28,8 @@ import {
 import { getLeaderboard } from "./leaderboard.js";
 import { getLeaderboardScoreEvents } from "./leaderboard-score-events.js";
 import { lookupTeamByLoginKey } from "./lookup.js";
+import { participantMcpHandler } from "./mcp.js";
+import { verifyMcpAccessToken } from "./mcp-oauth.js";
 import { listNotifications, NOTIFICATIONS_DEFAULT_LIMIT } from "./notifications.js";
 import { revealHint } from "./reveal-hint.js";
 import {
@@ -112,6 +116,109 @@ function respondPrerequisiteBlock(c: Context, block: PrerequisiteBlock) {
 }
 
 app.get("/portal/healthz", (c) => c.json({ ok: true }));
+
+async function mcpSubmit(
+  c: Context,
+  scoped: import("./shared.js").ParticipantSharedResources,
+  principal: Awaited<ReturnType<typeof verifyMcpAccessToken>>,
+  body: unknown,
+): Promise<Response> {
+  const writing = participantRateLimiter.take(
+    `${principal.binding.subject}|mcp-submit`,
+    RATE_LIMITS.WRITE_VERY_LOW,
+  );
+  if (!writing.allowed) return c.json({ error: "rate_limited" }, 429);
+  const parsed = SubmitFlagBodySchema.safeParse(body);
+  if (!parsed.success) return c.json({ error: "invalid_submission" }, 400);
+  return respondSubmitFlagOutcome(
+    c,
+    await submitFlag(
+      scoped,
+      scoped.problemsScoring,
+      "",
+      parsed.data.problemId,
+      parsed.data.flag,
+      parsed.data.flagId,
+    ),
+  );
+}
+
+function mcpConfiguration() {
+  return parseMcpOAuthConfig(readCatalogBlob("MCP_OAUTH_CONFIG"));
+}
+
+app.get("/.well-known/oauth-protected-resource/mcp", (c) => {
+  try {
+    const config = mcpConfiguration();
+    if (!config) return c.json({ error: "mcp_oauth_not_configured" }, 503);
+    return c.json({
+      resource: config.resourceUrl,
+      authorization_servers: [mcpIssuer(config)],
+      scopes_supported: [`${config.resourceUrl}/read`, `${config.resourceUrl}/submit`],
+      bearer_methods_supported: ["header"],
+    });
+  } catch {
+    return c.json({ error: "mcp_oauth_misconfigured" }, 503);
+  }
+});
+
+// No raw team keys or organizer credentials are accepted at this OAuth-only entry.
+app.all("/mcp", async (c) => {
+  if (c.req.method !== "POST")
+    return c.json({ error: "method_not_allowed" }, 405, { Allow: "POST" });
+  const origin = c.req.header("origin");
+  if (origin && origin !== new URL(c.req.url).origin)
+    return c.json({ error: "untrusted_origin" }, 403);
+  let config: ReturnType<typeof mcpConfiguration>;
+  try {
+    config = mcpConfiguration();
+  } catch {
+    return c.json({ error: "mcp_oauth_misconfigured" }, 503);
+  }
+  const clientId = process.env.MCP_OAUTH_CLIENT_ID;
+  if (!config || !clientId) return c.json({ error: "mcp_oauth_not_configured" }, 503);
+  if (new URL(c.req.url).origin !== new URL(config.resourceUrl).origin)
+    return c.json({ error: "wrong_resource_origin" }, 403);
+  const challenge = `Bearer resource_metadata="${new URL("/.well-known/oauth-protected-resource/mcp", config.resourceUrl).href}", scope="${config.resourceUrl}/read"`;
+  const token = /^Bearer ([^\s]{1,8192})$/i.exec(c.req.header("authorization") ?? "")?.[1];
+  if (!token) return c.json({ error: "unauthorized" }, 401, { "WWW-Authenticate": challenge });
+  let principal: Awaited<ReturnType<typeof verifyMcpAccessToken>>;
+  try {
+    principal = await verifyMcpAccessToken(token, config, clientId);
+  } catch {
+    return c.json({ error: "unauthorized" }, 401, { "WWW-Authenticate": challenge });
+  }
+  const limit = participantRateLimiter.take(
+    `${mcpIssuer(config)}|${principal.binding.subject}|mcp`,
+    RATE_LIMITS.READ_MID,
+  );
+  if (!limit.allowed)
+    return c.json({ error: "rate_limited" }, 429, { "Retry-After": String(limit.retryAfterSec) });
+  const scoped = { ...shared, mcpTeam: principal };
+  if (!(await lookupTeamByLoginKey(scoped, "")))
+    return c.json({ error: "team_delegation_unavailable" }, 403);
+  const handler = participantMcpHandler(
+    token,
+    async (path, body) => {
+      if (path === "/portal/me") {
+        const view = await lookupTeamByLoginKey(scoped, "");
+        return view ? c.json(view) : c.json({ error: "unauthorized" }, 403);
+      }
+      if (path === "/portal/me/score-events") {
+        const outcome = await listScoreEvents(scoped, "");
+        return outcome.kind === "ok"
+          ? c.json(outcome.response)
+          : c.json({ error: "unauthorized" }, 403);
+      }
+      if (path === "/portal/me/submit-flag" && principal.allowSubmit)
+        return mcpSubmit(c, scoped, principal, body);
+
+      return c.json({ error: "forbidden" }, 403);
+    },
+    principal.allowSubmit,
+  );
+  return handler.fetch(c.req.raw);
+});
 
 app.get("/portal/me", (c) =>
   withBearerAuth(c, "lookup", async (token) => {

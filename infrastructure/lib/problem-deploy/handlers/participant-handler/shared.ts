@@ -16,6 +16,7 @@ import type { NotificationsRepository } from "../../control-data/notifications-r
 import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { loadSavedCatalog, type ResolvedExecutionCatalog } from "../shared/execution-catalog.js";
+import { isFlagSubmissionLive } from "../shared/flag-submission-liveness.js";
 import {
   resolveSavedCatalogContext,
   type SavedCatalogLoader,
@@ -29,6 +30,8 @@ import {
  * 必要最小限の shape を独自に定義する。
  */
 export interface ParticipantSharedResources {
+  /** Trusted server-created OAuth principal, never populated from request headers or body. */
+  readonly mcpTeam?: import("./mcp-oauth.js").McpTeamPrincipal;
   /** [#2527 Slice 4] Injected control-data runtime (from the Lambda entrypoint's instance). */
   readonly runtime: ControlDataRuntime;
   readonly tableName: string;
@@ -148,6 +151,27 @@ export async function queryTeamItems(
   teamLoginKey: string,
 ): Promise<Partial<DeploymentItem>[]> {
   const repository: DeploymentsQueryPort = await resolveDeploymentsRepository(shared);
+  if (shared.mcpTeam) {
+    const principal = shared.mcpTeam;
+    if (teamLoginKey !== "" || principal.expiresAt <= Date.now() / 1000) return [];
+    const rows = await Promise.all(
+      principal.binding.jobIds.map((jobId) =>
+        repository.getDeployment(jobId, { consistentRead: true }),
+      ),
+    );
+    const permitted = rows.filter(
+      (row): row is NonNullable<typeof row> =>
+        !!row &&
+        row.tenantId === principal.binding.tenantId &&
+        row.eventId === principal.binding.eventId &&
+        row.teamId === principal.binding.teamId &&
+        row.expiresAt > Date.now() / 1000,
+    );
+    if (permitted.length !== rows.length) return [];
+    return permitted
+      .filter(isFlagSubmissionLive)
+      .map((row) => rehydrateDeploymentKeys({ ...row, teamLoginKey: undefined }, ""));
+  }
   const queried = await repository.listByTeamLoginKey(teamLoginKey);
   // GSI results can lag key rotation/deletion. Pinned production requests always
   // authorize against the current META row before resolving immutable content.
