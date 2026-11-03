@@ -6,10 +6,20 @@ import { installTursoCli } from "./cli/turso-cli-installer";
 import { runTursoLiveCommand, terminalConfirm, terminalPrompt } from "./cli/turso-live-command";
 import { runCloudCli } from "./cloud-hosting/cli";
 import { systemCloudIo } from "./cloud-hosting/process";
+import { runParticipantMcp } from "./local-host/mcp";
 import { runPackCli } from "./problem-pack/pack-cli";
 
 const [command, ...args] = process.argv.slice(2);
-if (command === "pack") {
+if (command === "mcp") {
+  try {
+    await runParticipantMcp(process.env);
+  } catch {
+    console.error(
+      "MCP startup failed. Set TENKACLOUD_PARTICIPANT_API_URL and TENKACLOUD_TEAM_KEY; see docs/mcp.md.",
+    );
+    process.exitCode = 1;
+  }
+} else if (command === "pack") {
   process.exitCode = runPackCli(args, (line) => console.log(line));
 } else if (command === "turso-live" && args[0] === "reset") {
   process.exitCode = await runCloudCli(["turso-reset", ...args.slice(1)], systemCloudIo(), {
@@ -42,7 +52,7 @@ if (command === "pack") {
   }
 } else {
   console.log(
-    'Usage: tenkacloud pack <command>\nHost a competition with: make local [LOCAL_ARGS=...]\nStop it with: make down [LOCAL_ARGS=...]\nCloud hosting: make deploy / make destroy [CLOUD_ARGS=...]\nCloud setup: make env-init / make turso-live\nTurso credentials: make turso-token-rotate [ROTATE_ARGS=...]\nTurso competition data only: make turso-clear [CLOUD_ARGS="--plan|--yes"] (nonblank process-only TURSO_AUTH_TOKEN, otherwise configured SSM; --credentials <direct|ssm> overrides)\nAll control data, including account/IdP settings: make turso-reset [CLOUD_ARGS=...] or tenkacloud turso-live reset [--plan|--yes]',
+    'Usage: tenkacloud pack <command>\nParticipant MCP (stdio): tenkacloud mcp (see docs/mcp.md)\nHost a competition with: make local [LOCAL_ARGS=...]\nStop it with: make down [LOCAL_ARGS=...]\nCloud hosting: make deploy / make destroy [CLOUD_ARGS=...]\nCloud setup: make env-init / make turso-live\nTurso credentials: make turso-token-rotate [ROTATE_ARGS=...]\nTurso competition data only: make turso-clear [CLOUD_ARGS="--plan|--yes"] (nonblank process-only TURSO_AUTH_TOKEN, otherwise configured SSM; --credentials <direct|ssm> overrides)\nAll control data, including account/IdP settings: make turso-reset [CLOUD_ARGS=...] or tenkacloud turso-live reset [--plan|--yes]',
   );
   process.exitCode = command === undefined || command === "--help" || command === "help" ? 0 : 1;
 }

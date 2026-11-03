@@ -69,6 +69,7 @@
     "@aws-sdk/client-ssm": "3.1161.0",
     "@aws-sdk/client-sts": "3.1161.0",
     "@aws-sdk/lib-dynamodb": "3.1161.0",
+    "@modelcontextprotocol/server": "2.4.0",
     "@node-saml/node-saml": "5.1.0",
     "@tenkacloud/coordination-plugin-sdk": "workspace:*",
     "@xmldom/xmldom": "0.9.12",
@@ -82,6 +83,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.4",
+    "@modelcontextprotocol/client": "2.4.0",
     "@textlint-ja/textlint-rule-preset-ai-writing": "^1.7.0",
     "@types/bun": "^1.4.4",
     "@types/ws": "^8.18.2",

@@ -9,6 +9,8 @@
 
 TenkaCloud is a self-hostable, Apache-2.0 platform for hands-on cloud competitions. Organizers manage events, teams, problem environments, scoring and hints from one console. Participants solve local exercises or AWS scenarios with their own team keys.
 
+Participants can also use a local AI agent through the [stdio MCP server](./docs/mcp.md): discover problems, start prepared Docker exercises, submit answers, and check scores.
+
 <table>
 <tr>
 <td width="50%" align="center" valign="top">
