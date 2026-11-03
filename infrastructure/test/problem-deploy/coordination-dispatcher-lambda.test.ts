@@ -67,12 +67,15 @@ describe("CoordinationDispatcherLambda", () => {
     ["participant portal", synthParticipantPortalLambdaOnly],
   ])(
     "allows browser mutation preflights with an idempotency key on the %s Function URL",
-    (_name, synth) => {
+    (name, synth) => {
       synth().hasResourceProperties("AWS::Lambda::Url", {
         Cors: {
           AllowOrigins: ["*"],
           AllowMethods: Match.arrayWith(["POST"]),
-          AllowHeaders: ["content-type", "authorization", "idempotency-key"],
+          AllowHeaders:
+            name === "participant portal"
+              ? ["content-type", "authorization", "idempotency-key", "mcp-protocol-version"]
+              : ["content-type", "authorization", "idempotency-key"],
           MaxAge: 600,
         },
       });

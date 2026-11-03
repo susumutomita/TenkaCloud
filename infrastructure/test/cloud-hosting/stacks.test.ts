@@ -6,6 +6,7 @@ import { Match, Template } from "aws-cdk-lib/assertions";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { CLOUD_COMPOSITION, composeCloudHosting } from "../../lib/cloud-hosting/compose.js";
 import { cloudDeploymentTarget } from "../../lib/cloud-hosting/regions.js";
+import { mcpConfigFixture } from "../problem-deploy/mcp-oauth-fixture.js";
 
 const directory = mkdtempSync(join(tmpdir(), "tenkacloud-restored-synth-"));
 const target = { ACCOUNT_ID: "123456789012", REGION: "us-east-1", CDK_PARAM_ENVIRONMENT: "test" };
@@ -71,6 +72,57 @@ function fixture(index = 0) {
 }
 
 describe("restored single-installation cloud composition", () => {
+  it("wires opt-in OAuth to the participant Lambda on both durable backends without creating another pool", () => {
+    for (const backendKind of ["dynamodb", "turso"]) {
+      const config = mcpConfigFixture();
+      const app = new App({
+        outdir: join(directory, `oauth-${backendKind}`),
+        context: { "aws:cdk:bundling-stacks": [] },
+      });
+      const { backend } = composeCloudHosting(
+        app,
+        {
+          ...target,
+          TENKACLOUD_MCP_OAUTH_CONFIG: JSON.stringify(config),
+          ...(backendKind === "turso"
+            ? {
+                CDK_PARAM_CONTROL_DATA_BACKEND: "turso",
+                CDK_PARAM_TURSO_DATABASE_URL: "libsql://synthetic.turso.io",
+                CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME: "/TenkaCloud/test/turso/token",
+              }
+            : {}),
+        },
+        {
+          sourceBucketName: "synthetic-source-bucket",
+          sourceObjectKey: "source.zip",
+          problemsCatalog: {},
+          problemsScoring: {},
+          problemsEndpoints: {},
+        },
+      );
+      const template = Template.fromStack(backend);
+      expect(Object.keys(template.findResources("AWS::Cognito::UserPoolClient"))).toHaveLength(1);
+      template.resourceCountIs("AWS::Cognito::UserPool", 0);
+      template.hasResourceProperties("AWS::Cognito::UserPoolClient", {
+        UserPoolId: config.userPoolId,
+        AllowedOAuthFlows: ["code"],
+      });
+      template.hasResourceProperties("AWS::Lambda::Function", {
+        Environment: {
+          Variables: Match.objectLike({ MCP_OAUTH_CLIENT_ID: { Ref: Match.anyValue() } }),
+        },
+      });
+      template.hasOutput("ParticipantMcpOAuthClientId", { Value: { Ref: Match.anyValue() } });
+    }
+  });
+  it("outputs the MCP URL on the existing participant Function URL for every storage profile", () => {
+    for (const current of fixtures) {
+      const outputs = current.backend.toJSON().Outputs;
+      expect(outputs.ParticipantMcpUrl.Value).toEqual({
+        "Fn::Join": ["", [outputs.ParticipantPortalApiUrl.Value, "mcp"]],
+      });
+    }
+  });
   it("synthesizes cloud names by default and preserves the selected existing Lite names", () => {
     for (const index of [0, 1, 2])
       expect(fixture(index).names).toEqual([

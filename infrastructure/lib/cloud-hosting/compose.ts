@@ -4,6 +4,7 @@ import { resolveFeatures } from "../app-config/index.js";
 import { DestroyPolicySetter } from "../cdk-aspect/destroy-policy-setter.js";
 import { DynamoDbLowCapacity } from "../cdk-aspect/dynamodb-low-capacity.js";
 import { LogGroupRetention } from "../cdk-aspect/log-group-retention.js";
+import { parseMcpOAuthConfig } from "../problem-deploy/mcp-oauth-config.js";
 import {
   ProblemDeployBackendStack,
   type ProblemDeployBackendStackProps,
@@ -59,6 +60,7 @@ export function composeCloudHosting(app: App, env: NodeJS.ProcessEnv, inputs: Ba
   };
   const backend = new ProblemDeployBackendStack(app, names.backend, {
     ...inputs,
+    mcpOAuth: parseMcpOAuthConfig(env.TENKACLOUD_MCP_OAUTH_CONFIG),
     ...shared,
     environmentName: environment,
     synthesizer: standardSynthesizer(),

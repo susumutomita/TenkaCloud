@@ -24,6 +24,7 @@ import type { OpsMonitoringConfig } from "./ops-monitoring.js";
 import type { ParticipantPortalRuntimeConfig } from "./participant-portal-hosting.js";
 
 export interface ProblemDeployBackendStackProps extends cdk.StackProps {
+  readonly mcpOAuth?: import("./mcp-oauth-config.js").McpOAuthConfig;
   readonly executionArtifacts?: CloudExecutionArtifactInput;
   /**
    * SBT ControlPlane の EventBus ARN。Deploy 系イベントを流す。
@@ -475,6 +476,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     // build-participant-portal-subsystem.ts. Same `if (props.participantPortal)` guard as before.
     if (props.participantPortal) {
       const portalSubsystem = buildParticipantPortalSubsystem(this, {
+        mcpOAuth: props.mcpOAuth,
         deploymentsTable: tables.deployments?.table,
         eventsTable: tables.events?.table,
         // Issue #2442: 純 SQL backend では table 自体が無いので undefined を渡す (env/grant/IAM を

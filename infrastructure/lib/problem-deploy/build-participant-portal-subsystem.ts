@@ -17,6 +17,7 @@ import {
 import { ParticipantPortalLambda } from "./participant-portal-lambda.js";
 
 export interface BuildParticipantPortalSubsystemArgs {
+  readonly mcpOAuth?: import("./mcp-oauth-config.js").McpOAuthConfig;
   readonly executionArtifactBucket?: IBucket;
   /**
    * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`) のとき
@@ -114,6 +115,7 @@ export function buildParticipantPortalSubsystem(
   args: BuildParticipantPortalSubsystemArgs,
 ): ParticipantPortalSubsystemOutputs {
   const portalLambda = new ParticipantPortalLambda(scope, "ParticipantPortalLambda", {
+    mcpOAuth: args.mcpOAuth,
     deploymentsTable: args.deploymentsTable,
     eventsTable: args.eventsTable,
     endpointsTable: args.endpointsTable,
@@ -135,6 +137,11 @@ export function buildParticipantPortalSubsystem(
   new CfnOutput(scope, "ParticipantPortalApiUrl", {
     value: portalLambda.url.url,
     description: "Participant Portal Lambda Function URL (auth via teamLoginKey bearer).",
+  });
+  new CfnOutput(scope, "ParticipantMcpUrl", {
+    value: `${portalLambda.url.url}mcp`,
+    description:
+      "Participant Streamable HTTP MCP URL (Cognito OAuth; configure explicitly before use).",
   });
 
   const coordinationBucket =

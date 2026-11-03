@@ -16,8 +16,10 @@ import { Construct } from "constructs";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 import { controlDataBackendEnv, grantTursoAuthTokenRead } from "./control-data-backend-env.js";
 import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
+import { participantMcpCognito } from "./participant-mcp-cognito.js";
 
 export interface ParticipantPortalLambdaProps {
+  readonly mcpOAuth?: import("./mcp-oauth-config.js").McpOAuthConfig;
   /**
    * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env も
@@ -111,6 +113,7 @@ export class ParticipantPortalLambda extends Construct {
   constructor(scope: Construct, id: string, props: ParticipantPortalLambdaProps) {
     super(scope, id);
     const stack = Stack.of(this);
+    const mcp = participantMcpCognito(this, props.mcpOAuth);
     const ssmArn = buildExternalIdParameterArnPattern(
       stack.region,
       stack.account,
@@ -326,6 +329,7 @@ export class ParticipantPortalLambda extends Construct {
           ? { TURSO_AUTH_TOKEN_PARAMETER_NAME: props.tursoAuthTokenParameterName }
           : {}),
         NODE_OPTIONS: "--enable-source-maps",
+        ...mcp.environment,
         // Issue #2291: deploy-logs.ts が runtime に process.env で読む job log group 名 (= jobId stream
         // の親 group)。 deployViaLambda ON のときだけ注入し、 flag OFF では env そのものが無い
         // (= deploy-logs.ts は従来どおり empty entries を返す = byte 互換)。 esbuild define ではなく
@@ -343,6 +347,7 @@ export class ParticipantPortalLambda extends Construct {
       // scoring / writeups はカタログと共に育ち、 実測 130 / 239 KiB で argv の
       // 1 引数上限 128 KiB を跨いだ (#2891)。 define ではなく bundle 同梱ファイルで運ぶ。
       bundledData: {
+        ...mcp.bundledData,
         BATTLE_PROBLEMS_SCORING: JSON.stringify(props.problemsScoring),
         BATTLE_PROBLEMS_WRITEUPS: JSON.stringify(props.problemsWriteups ?? {}),
         COORDINATION_PROBLEM_IDS: JSON.stringify(Object.keys(props.problemsCoordination ?? {})),
@@ -359,7 +364,12 @@ export class ParticipantPortalLambda extends Construct {
         allowedOrigins: ["*"],
         // DELETE は endpoint override 解除 (default に戻す) で必要。
         allowedMethods: [HttpMethod.GET, HttpMethod.PATCH, HttpMethod.POST, HttpMethod.DELETE],
-        allowedHeaders: ["content-type", "authorization", "idempotency-key"],
+        allowedHeaders: [
+          "content-type",
+          "authorization",
+          "idempotency-key",
+          "mcp-protocol-version",
+        ],
         maxAge: Duration.minutes(10),
       },
     });
