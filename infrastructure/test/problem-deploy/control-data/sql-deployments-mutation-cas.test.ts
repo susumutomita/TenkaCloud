@@ -200,3 +200,38 @@ describe("SQL deployment payload CAS (#3194)", () => {
     ).toEqual({ outcome: "not_found" });
   });
 });
+
+describe("flag scoring teardown CAS", () => {
+  it.each(["correct", "wrong", "multiCorrect", "multiWrong"] as const)(
+    "rejects %s when teardown wins after SELECT before UPDATE",
+    async (kind) => {
+      const sql = makeSqliteExecutor();
+      const winner = new SqlDeploymentsRepository(sql);
+      await winner.putDeployment(DEPLOYMENT);
+      const racing = new SqlDeploymentsRepository(
+        raceAfterRead(sql, async (reads) => {
+          if (reads === 1)
+            await winner.markDeleting(
+              DEPLOYMENT.jobId,
+              DEPLOYMENT.tenantId,
+              AT,
+              DEPLOYMENT.expiresAt,
+            );
+        }),
+      );
+      const mutations = {
+        correct: () => racing.applyFlagCorrectScore(DEPLOYMENT.jobId, 10, AT),
+        wrong: () => racing.applyFlagWrongPenalty(DEPLOYMENT.jobId, 2, AT),
+        multiCorrect: () => racing.applyMultiFlagCorrectScore(DEPLOYMENT.jobId, 10, "part", AT),
+        multiWrong: () => racing.applyMultiFlagWrongPenalty(DEPLOYMENT.jobId, 2, "part", AT),
+      };
+      const outcome = await mutations[kind]();
+      expect(outcome.outcome).toBe("conflict");
+      const record = await winner.getDeployment(DEPLOYMENT.jobId);
+      expect(record).toMatchObject({ status: "DELETING", teardownRequestedAt: AT, score: 0 });
+      expect(record?.wrongAnswerCount).toBeUndefined();
+      expect(record?.solvedFlagIds).toBeUndefined();
+      expect(record?.flagSubmitted).toBeUndefined();
+    },
+  );
+});

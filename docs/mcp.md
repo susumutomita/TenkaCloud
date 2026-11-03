@@ -272,7 +272,8 @@ Protected Resource Metadata を利用します。`/.well-known/oauth-protected-r
 
 委任は既存の Turso／DynamoDB の現在の deployment META 行を操作ごとに読み、
 tenant・event・team と期限を照合します。DynamoDB は consistent read を使います。
-削除済み・他チームへ移った・期限切れの対象にはアクセスできず、別のチームキーへのフォールバックもしません。
+削除中・削除済み・teardown 要求済み（後から FAILED になった場合も含む）・他チームへ移った・期限切れの対象にはアクセスできず、別のチームキーへのフォールバックもしません。
+同じ委任内に有効な演習が残っていても削除済みの演習は操作できません。採点書込み時にも現在の削除状態を条件として確認し、認可確認後の teardown との競合による加点・減点を拒否します。
 採点と進行条件の検証は既存処理を利用します。書き込みは token の提出 scope と
 主催者の `allowSubmit` の双方で制限します。
 

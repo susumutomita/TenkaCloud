@@ -1,4 +1,5 @@
 import { ulid } from "ulid";
+import { isFlagSubmissionLive } from "../handlers/shared/flag-submission-liveness.js";
 import { buildScoreEventRecord } from "../handlers/shared/score-event.js";
 import type { MutableDeploymentRecord } from "./sql-deployments-core.js";
 import {
@@ -98,7 +99,9 @@ export class SqlDeploymentsScoring implements DeploymentsScoringPort {
   ): Promise<DeploymentMutationOutcome> {
     return this.core.mutateExisting({
       jobId,
-      predicate: (record) => !getSolvedFlagSet(record as MutableDeploymentRecord).has(flagId),
+      predicate: (record) =>
+        isFlagSubmissionLive(record) &&
+        !getSolvedFlagSet(record as MutableDeploymentRecord).has(flagId),
       mutate: (record) => {
         record.score = ensureNumber(record.score) + points;
         record.solvedFlagIds = new Set([...getSolvedFlagSet(record), flagId]);
@@ -118,7 +121,9 @@ export class SqlDeploymentsScoring implements DeploymentsScoringPort {
   ): Promise<DeploymentMutationOutcome> {
     return this.core.mutateExisting({
       jobId,
-      predicate: (record) => !getSolvedFlagSet(record as MutableDeploymentRecord).has(flagId),
+      predicate: (record) =>
+        isFlagSubmissionLive(record) &&
+        !getSolvedFlagSet(record as MutableDeploymentRecord).has(flagId),
       mutate: (record) => {
         record.wrongAnswerCount = ensureNumber(record.wrongAnswerCount) + 1;
         record.score = ensureNumber(record.score) - penalty;
@@ -136,7 +141,7 @@ export class SqlDeploymentsScoring implements DeploymentsScoringPort {
   ): Promise<DeploymentMutationOutcome> {
     return this.core.mutateExisting({
       jobId,
-      predicate: (record) => record.flagSubmitted !== true,
+      predicate: (record) => isFlagSubmissionLive(record) && record.flagSubmitted !== true,
       mutate: (record) => {
         record.wrongAnswerCount = ensureNumber(record.wrongAnswerCount) + 1;
         record.score = ensureNumber(record.score) - penalty;
@@ -154,7 +159,7 @@ export class SqlDeploymentsScoring implements DeploymentsScoringPort {
   ): Promise<DeploymentMutationOutcome> {
     return this.core.mutateExisting({
       jobId,
-      predicate: (record) => record.flagSubmitted !== true,
+      predicate: (record) => isFlagSubmissionLive(record) && record.flagSubmitted !== true,
       mutate: (record) => {
         record.score = ensureNumber(record.score) + points;
         record.flagSubmitted = true;

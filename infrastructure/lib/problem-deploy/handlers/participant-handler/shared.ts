@@ -16,6 +16,7 @@ import type { NotificationsRepository } from "../../control-data/notifications-r
 import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { loadSavedCatalog, type ResolvedExecutionCatalog } from "../shared/execution-catalog.js";
+import { isFlagSubmissionLive } from "../shared/flag-submission-liveness.js";
 import {
   resolveSavedCatalogContext,
   type SavedCatalogLoader,
@@ -167,7 +168,9 @@ export async function queryTeamItems(
         row.expiresAt > Date.now() / 1000,
     );
     if (permitted.length !== rows.length) return [];
-    return permitted.map((row) => rehydrateDeploymentKeys({ ...row, teamLoginKey: undefined }, ""));
+    return permitted
+      .filter(isFlagSubmissionLive)
+      .map((row) => rehydrateDeploymentKeys({ ...row, teamLoginKey: undefined }, ""));
   }
   const queried = await repository.listByTeamLoginKey(teamLoginKey);
   // GSI results can lag key rotation/deletion. Pinned production requests always

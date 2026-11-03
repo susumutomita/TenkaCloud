@@ -494,7 +494,10 @@ describe("DynamoDbDeploymentsRepository writes — participant scoring", () => {
     expect(updates(commands)[0].input).toMatchObject({
       UpdateExpression:
         "ADD score :pts SET flagSubmitted = :true, lastScoredAt = :now, updatedAt = :now",
-      ConditionExpression: "attribute_not_exists(flagSubmitted) OR flagSubmitted = :false",
+      ConditionExpression: expect.stringContaining(
+        "AND (attribute_not_exists(flagSubmitted) OR flagSubmitted = :false)",
+      ),
+      ExpressionAttributeNames: { "#flagStatus": "status" },
       ReturnValues: "ALL_NEW",
     });
 
@@ -508,7 +511,10 @@ describe("DynamoDbDeploymentsRepository writes — participant scoring", () => {
     expect(wrong.outcome === "updated" && wrong.record?.wrongAnswerCount).toBe(1);
     expect(updates(commands)[0].input).toMatchObject({
       UpdateExpression: "ADD wrongAnswerCount :one, score :neg SET updatedAt = :now",
-      ConditionExpression: "attribute_not_exists(flagSubmitted) OR flagSubmitted = :false",
+      ConditionExpression: expect.stringContaining(
+        "AND (attribute_not_exists(flagSubmitted) OR flagSubmitted = :false)",
+      ),
+      ExpressionAttributeNames: { "#flagStatus": "status" },
       ReturnValues: "ALL_NEW",
     });
   });
@@ -526,8 +532,10 @@ describe("DynamoDbDeploymentsRepository writes — participant scoring", () => {
     expect(updates(commands)[0].input).toMatchObject({
       UpdateExpression:
         "ADD score :pts, solvedFlagIds :flagIdSet SET lastScoredAt = :now, updatedAt = :now",
-      ConditionExpression:
-        "attribute_not_exists(solvedFlagIds) OR NOT contains(solvedFlagIds, :flagId)",
+      ConditionExpression: expect.stringContaining(
+        "AND (attribute_not_exists(solvedFlagIds) OR NOT contains(solvedFlagIds, :flagId))",
+      ),
+      ExpressionAttributeNames: { "#flagStatus": "status" },
       ReturnValues: "ALL_NEW",
     });
 
