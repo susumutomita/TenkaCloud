@@ -105,6 +105,13 @@ describe("Cognito participant MCP authorization", () => {
       { resourceUrl: "http://example.test/mcp" },
       { bindings: [...config.bindings, ...config.bindings] },
       { bindings: [] },
+      { bindings: config.bindings.map((entry) => ({ ...entry, expiresAt: entry.notBefore })) },
+      {
+        bindings: config.bindings.map((entry) => ({
+          ...entry,
+          jobIds: [...entry.jobIds, ...entry.jobIds],
+        })),
+      },
       { callbackUrls: ["http://attacker.example.test/callback"] },
     ])
       expect(() => parseMcpOAuthConfig(JSON.stringify({ ...config, ...changes }))).toThrow();

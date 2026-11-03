@@ -288,6 +288,7 @@ for (const backend of ["sqlite", "dynamodb"] as const) {
   describe(`remote MCP over real loopback HTTP with simulated Cognito JWKS and ${backend}`, () => {
     beforeEach(async () => {
       participantRateLimiter.reset();
+      vi.stubEnv("MCP_OAUTH_CONFIG", JSON.stringify(config));
       repository =
         backend === "sqlite"
           ? new SqlDeploymentsRepository(makeSqliteExecutor())
@@ -337,6 +338,13 @@ for (const backend of ["sqlite", "dynamodb"] as const) {
       ).toBe("already_scored");
       expect((await call(client, "get_score_events")).value.data.entries).toHaveLength(2);
       expect((await repository.getDeployment(jobId("sim-live")))?.score).toBe(8);
+      const limited = await call(client, "submit_flag", {
+        problem_id: "sim-live",
+        flag: "simulator-answer",
+      });
+      expect(limited.isError).toBe(true);
+      expect(limited.value.status).toBe(429);
+      expect((await repository.getDeployment(jobId("sim-live")))?.score).toBe(8);
       expect(jwksReads).toBeGreaterThan(0);
       expect(httpRequests).toBeGreaterThan(10);
     });
@@ -371,6 +379,58 @@ for (const backend of ["sqlite", "dynamodb"] as const) {
       expect((await repository.getDeployment(jobId("sim-live")))?.score).toBe(0);
       expect((await call(client, "get_score_events")).value.data.entries).toEqual([]);
     });
+    it("fails closed for missing or invalid deployment configuration and the wrong resource origin", async () => {
+      for (const raw of [undefined, "malformed"]) {
+        vi.stubEnv("MCP_OAUTH_CONFIG", raw);
+        expect(
+          (await fetch(new URL("/.well-known/oauth-protected-resource/mcp", endpoint))).status,
+        ).toBe(503);
+        expect((await initialize()).status).toBe(503);
+      }
+      vi.stubEnv(
+        "MCP_OAUTH_CONFIG",
+        JSON.stringify({ ...config, resourceUrl: "https://other.example.test/mcp" }),
+      );
+      expect((await initialize(await signedToken())).status).toBe(403);
+    });
+    it("rejects a pinned deployment whose current owner is another team", async () => {
+      await repository.putDeployment(deployment("sim-race", "foreign-team"));
+      expect((await initialize(await signedToken())).status).toBe(403);
+      expect((await repository.getDeployment(jobId("sim-live")))?.score).toBe(0);
+    });
+    it("limits authenticated reads without returning more team data", async () => {
+      const token = await signedToken();
+      for (let i = 0; i < 60; i++) expect((await initialize(token)).status).toBe(200);
+      const limited = await initialize(token);
+      expect(limited.status).toBe(429);
+      expect(limited.headers.get("Retry-After")).toBeTruthy();
+    });
+    it.each(["list_problems", "get_score_events"])(
+      "denies %s if teardown wins between preflight and the read",
+      async (tool) => {
+        const client = await connect(await signedToken());
+        const base = repository;
+        await base.markDeleted(jobId("sim-retired"), AT);
+        await base.markDeleted(jobId("sim-race"), AT);
+        let reads = 0;
+        repository = new Proxy(base, {
+          get(target, property) {
+            if (property === "getDeployment")
+              return async (...args: Parameters<DeploymentsRepository["getDeployment"]>) => {
+                if (args[0] === jobId("sim-live") && ++reads === 2)
+                  await base.markDeleting(args[0], binding.tenantId, AT, EXPIRES);
+                return base.getDeployment(...args);
+              };
+            const value = Reflect.get(target, property);
+            return typeof value === "function" ? value.bind(target) : value;
+          },
+        });
+        const result = await call(client, tool);
+        expect(result.isError).toBe(true);
+        expect(result.value.status).toBe(403);
+        expect((await base.getDeployment(jobId("sim-live")))?.score).toBe(0);
+      },
+    );
     it("denies retained deleted and teardown-FAILED jobs mixed with a live job through HTTP tools", async () => {
       await repository.markDeleted(jobId("sim-retired"), AT);
       await repository.markDeleting(jobId("sim-race"), binding.tenantId, AT, EXPIRES);
