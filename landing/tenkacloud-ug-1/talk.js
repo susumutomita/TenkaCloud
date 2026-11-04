@@ -30,11 +30,42 @@
     deck.style.height = `${height * scale}px`;
   }
 
+  for (const player of document.querySelectorAll("[data-youtube-id]")) {
+    const button = player.querySelector(".demo-play");
+    button.addEventListener("click", () => {
+      const iframe = document.createElement("iframe");
+      const url = new URL(`https://www.youtube-nocookie.com/embed/${player.dataset.youtubeId}`);
+      url.search = new URLSearchParams({
+        start: player.dataset.youtubeStart ?? "0",
+        end: player.dataset.youtubeEnd ?? "60",
+        autoplay: "1",
+        rel: "0",
+        cc_lang_pref: "ja",
+        cc_load_policy: "1",
+      }).toString();
+      iframe.src = url.href;
+      iframe.title = button.getAttribute("aria-label");
+      iframe.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
+      iframe.allowFullscreen = true;
+      iframe.referrerPolicy = "strict-origin-when-cross-origin";
+      iframe.addEventListener("load", fitSlide);
+      button.hidden = true;
+      player.append(iframe);
+    });
+  }
+
   function syncVisibility() {
     slides.forEach((slide, slideIndex) => {
       const hidden = slideIndex !== index;
       slide.hidden = hidden;
       slide.setAttribute("aria-hidden", String(hidden));
+      if (hidden) {
+        for (const video of slide.querySelectorAll("video")) video.pause();
+        for (const player of slide.querySelectorAll("[data-youtube-id]")) {
+          player.querySelector("iframe")?.remove();
+          player.querySelector(".demo-play").hidden = false;
+        }
+      }
     });
   }
 
@@ -43,7 +74,7 @@
     syncVisibility();
     previous.disabled = index === 0;
     next.disabled = index === slides.length - 1;
-    position.textContent = `${index + 1} / ${slides.length}`;
+    position.textContent = slides[index].dataset.slideLabel ?? `${index + 1} / ${slides.length}`;
     if (changeHash) history.replaceState(null, "", `#${index + 1}`);
     requestAnimationFrame(fitSlide);
   }
