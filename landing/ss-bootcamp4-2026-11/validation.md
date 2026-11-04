@@ -30,7 +30,7 @@ Headless Chromium 154 on Linux, static server rooted at `landing/`:
 - Native MP4: actual playback advances at both sizes; no media error; moving to another slide pauses playback.
 - YouTube: clicking creates the expected privacy-enhanced embed with start 0 / end 60; leaving the slide removes the iframe and restores the button. Actual remote playback is not verified here.
 - Print: all 14 slides display; both posters load and display; video players hide. Chromium PDF has 14 pages.
-- Main four slide sections compared with Git HEAD: identical after removing only the permitted numbering and label metadata. Cover draft notice retained.
+- Main four slide sections compared with Git HEAD: identical after removing the permitted numbering and label metadata, plus the subsequently requested logo images/classes. Cover draft notice retained.
 - Existing UG #1: original `1 / 14` counter and keyboard navigation preserved. Automated regressions cover counters, deep links and media stopping.
 - Video copy: SHA-256 matches source; 45 one-second OCR frames have no detected URL, 12-digit account ID or AWS access-key pattern. Contact sheet and enlarged poster inspected; existing key/access-URL masks retained.
 
@@ -39,6 +39,14 @@ Headless Chromium 154 on Linux, static server rooted at `landing/`:
 - `make before-commit`: passed with Bun 1.4.4 and frozen-lockfile dependencies installed with lifecycle scripts disabled. Markdown/prose/format/ESLint and dead-code checks passed; the changed-file suite ran 968 tests with zero failures.
 - Focused presentation regression suite: 3 passed, 15 assertions.
 - `git diff --check`: passed.
+
+## Logo follow-up
+
+The user requested the logo after reviewing the Appendix. Reused the unmodified `landing/assets/svg/tenkacloud-mark.svg`: its mark matches the existing LP header and favicon. No alternative brand mark or third-party logo was introduced.
+
+The cover title has a prominent mark next to its existing text. Every slide footer has the same small mark. Empty image alternatives avoid repeating the adjacent TenkaCloud text for screen readers. The SVG keeps its aspect ratio and original colors.
+
+Verified all 14 slides at 1440 × 900 and 390 × 844: logo images loaded, no horizontal overflow. The first four sections match the previous commit after removing only the newly added logo images and classes. In print all 15 logo instances display, both video posters remain visible, and the PDF remains 14 pages.
 
 ## Remaining external verification
 
