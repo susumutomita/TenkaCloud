@@ -1,0 +1,65 @@
+import { afterEach, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { JSDOM } from "jsdom";
+
+const script = readFileSync("landing/tenkacloud-ug-1/talk.js", "utf8");
+const windows: JSDOM[] = [];
+afterEach(() => {
+  for (const dom of windows.splice(0)) dom.window.close();
+});
+
+function openDeck(path: string, hash = "") {
+  const dom = new JSDOM(readFileSync(path, "utf8"), {
+    url: `https://tenkacloud.com/${hash}`,
+    runScripts: "outside-only",
+    pretendToBeVisual: true,
+  });
+  windows.push(dom);
+  const paused: HTMLMediaElement[] = [];
+  dom.window.HTMLMediaElement.prototype.pause = function () {
+    paused.push(this);
+  };
+  dom.window.eval(script);
+  return { dom, document: dom.window.document, paused };
+}
+
+const appendixPath = "landing/ss-bootcamp4-2026-11/index.html";
+
+test("the shared controller keeps the existing UG deck counter and keyboard controls", () => {
+  const { dom, document } = openDeck("landing/tenkacloud-ug-1/index.html");
+  expect(document.querySelector("#position")?.textContent).toBe("1 / 14");
+  document.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowRight" }));
+  expect(document.querySelector("#position")?.textContent).toBe("2 / 14");
+  expect(document.querySelectorAll('.slide[aria-hidden="false"]')).toHaveLength(1);
+});
+
+test("the closing slide leads to a distinctly numbered Appendix and supports deep links", () => {
+  const { document } = openDeck(appendixPath, "#4");
+  expect(document.querySelector("#position")?.textContent).toBe("本編 4 / 4");
+  document.querySelector<HTMLButtonElement>("#next")?.click();
+  expect(document.querySelector("#position")?.textContent).toBe("Appendix 1 / 10");
+  expect(document.querySelector(".slide:not([hidden]) h2")?.textContent).toBe("ここから Appendix");
+  const last = openDeck(appendixPath, "#14");
+  expect(last.document.querySelector("#position")?.textContent).toBe("Appendix 10 / 10");
+  expect(last.document.querySelector<HTMLButtonElement>("#next")?.disabled).toBe(true);
+});
+
+test("leaving a video slide stops media and restores the YouTube play button", () => {
+  const { document, paused } = openDeck(appendixPath, "#9");
+  const video = document.querySelector("video");
+  expect(paused).not.toContain(video);
+  document.querySelector<HTMLButtonElement>("#next")?.click();
+  expect(paused).toContain(video);
+  const youtube = openDeck(appendixPath, "#12");
+  const play = youtube.document.querySelector<HTMLButtonElement>(".demo-play");
+  expect(youtube.document.querySelector("iframe")).toBeNull();
+  play?.click();
+  const frame = youtube.document.querySelector("iframe");
+  expect(frame?.src).toContain(
+    "https://www.youtube-nocookie.com/embed/o39ZWxEbrzA?start=0&end=60&",
+  );
+  expect(frame?.title).toBe(play?.getAttribute("aria-label") ?? "");
+  youtube.document.querySelector<HTMLButtonElement>("#next")?.click();
+  expect(youtube.document.querySelector("iframe")).toBeNull();
+  expect(play?.hidden).toBe(false);
+});
