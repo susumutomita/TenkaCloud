@@ -878,7 +878,12 @@
     "bulk_outcome_created": "Registered",
     "bulk_outcome_duplicate": "Already registered",
     "bulk_outcome_invalid": "Invalid input",
-    "bulk_outcome_failed": "Failed"
+    "bulk_outcome_failed": "Failed",
+    "simulator_header": "Local Simulator connection",
+    "simulator_body": "This connection uses a same-machine Simulator, not real AWS. Do not deploy an AWS bootstrap stack or share the host ExternalId.",
+    "simulator_verify": "Start make local with --simulator-bootstrap to prepare the local role, then register this account and verify it here. Remote participants and multi-account tenancy are not supported. This limited bootstrap is validated for Hello World only; other AWS catalog entries do not guarantee Simulator compatibility.",
+    "simulator_invalid": "Simulator connection metadata is invalid. No AWS setup or credential-sharing links are available.",
+    "secret_missing": "Bootstrap connection details are missing. No AWS setup or credential-sharing links are available."
   },
   "team_cloud_credentials": {
     "title": "Team credentials",

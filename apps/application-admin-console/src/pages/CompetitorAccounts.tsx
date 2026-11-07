@@ -25,12 +25,14 @@ import { CloudConnectionModal } from "./competitor-accounts/CloudConnectionModal
 import { CompetitorAccountDeleteModal } from "./competitor-accounts/CompetitorAccountDeleteModal";
 import { CompetitorAccountsTable } from "./competitor-accounts/CompetitorAccountsTable";
 import { SecretRevealModal } from "./competitor-accounts/SecretRevealModal";
+import { SimulatorConnectionNotice } from "./competitor-accounts/SimulatorConnectionNotice";
 import { useCompetitorAccounts } from "./competitor-accounts/useCompetitorAccounts";
 
 export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
   const t = useT();
   const {
     items,
+    simulator,
     error,
     verifyInFlight,
     deleteInFlight,
@@ -122,23 +124,36 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
 
       <ExpandableSection defaultExpanded headerText={t("cloud_connections.aws_accounts")}>
         <SpaceBetween size="m">
-          <Button disabled={!canMutateTenant} onClick={() => setBulkModalVisible(true)}>
+          <Button
+            disabled={!canMutateTenant || !!simulator}
+            onClick={() => setBulkModalVisible(true)}
+          >
             {t("competitor_accounts.bulk_button")}
           </Button>
-          {!isLocalHost(config) && isBootstrapUrlMissing(config.competitorBootstrapTemplateUrl) && (
-            <Alert type="warning" header={t("competitor_accounts.bootstrap_url_missing_header")}>
-              {t("competitor_accounts.bootstrap_url_missing_body")}
+          {!simulator &&
+            !isLocalHost(config) &&
+            isBootstrapUrlMissing(config.competitorBootstrapTemplateUrl) && (
+              <Alert type="warning" header={t("competitor_accounts.bootstrap_url_missing_header")}>
+                {t("competitor_accounts.bootstrap_url_missing_body")}
+              </Alert>
+            )}
+
+          {simulator ? (
+            <SimulatorConnectionNotice simulator={simulator} />
+          ) : (
+            <Alert type="info" header={t("competitor_accounts.host_bootstrap_header")}>
+              <SpaceBetween size="xs">
+                {t("competitor_accounts.host_bootstrap_info")}
+                <a
+                  href={COMPETITOR_ACCOUNT_ONBOARDING_URL}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                >
+                  {t("competitor_accounts.bootstrap_guide_link")}
+                </a>
+              </SpaceBetween>
             </Alert>
           )}
-
-          <Alert type="info" header={t("competitor_accounts.host_bootstrap_header")}>
-            <SpaceBetween size="xs">
-              {t("competitor_accounts.host_bootstrap_info")}
-              <a href={COMPETITOR_ACCOUNT_ONBOARDING_URL} target="_blank" rel="noreferrer noopener">
-                {t("competitor_accounts.bootstrap_guide_link")}
-              </a>
-            </SpaceBetween>
-          </Alert>
 
           <CompetitorAccountsTable
             items={items ?? []}
@@ -156,10 +171,11 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
       {addModalVisible && (
         <CloudConnectionModal
           config={config}
+          simulator={simulator}
           onDismiss={() => setAddModalVisible(false)}
           onSuccess={(res) => {
             setAddModalVisible(false);
-            setShowSecret(res);
+            setShowSecret(simulator ? { ...res, simulator } : res);
             void reload();
           }}
         />
@@ -192,6 +208,7 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
             updatedAt: "",
             externalId: res.externalId,
             tenkaCloudAccountId: res.tenkaCloudAccountId,
+            simulator: res.simulator ?? simulator,
           });
         }}
       />

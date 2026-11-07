@@ -14,6 +14,7 @@
   "scripts": {
     "start": "bun run scripts/local-host/main.ts",
     "bench:host": "bun run scripts/local-host/bench/capacity.ts",
+    "test:simulator-hello": "bun run scripts/local-host/integration/simulator-hello.ts",
     "test:host": "bun run check:portable-domain && bun test ./scripts/local-host/tests/*.test.ts ./scripts/local-host/container/*.test.ts ./scripts/lib/*.test.ts && bun run scripts/local-host/tests/run.ts",
     "typecheck:host": "tsc --noEmit -p tsconfig.host.json",
     "tenkacloud": "bun run scripts/tenkacloud.ts",

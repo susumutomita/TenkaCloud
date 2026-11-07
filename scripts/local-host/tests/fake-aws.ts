@@ -2,6 +2,7 @@ import {
   CreateStackCommand,
   type CreateStackCommandInput,
   DeleteStackCommand,
+  DescribeStackEventsCommand,
   DescribeStacksCommand,
   type Tag,
 } from "@aws-sdk/client-cloudformation";
@@ -64,6 +65,23 @@ export class FakeAws {
       if (command instanceof CreateStackCommand) return this.create(command.input);
       if (command instanceof DescribeStacksCommand)
         return this.describe(String(command.input.StackName));
+      if (command instanceof DescribeStackEventsCommand) {
+        const stack = this.find(String(command.input.StackName));
+        return {
+          StackEvents: stack
+            ? [
+                {
+                  StackId: stack.stackId,
+                  EventId: `${stack.stackId}-${stack.status}`,
+                  Timestamp: new Date("2026-01-01T00:00:00Z"),
+                  LogicalResourceId: stack.name,
+                  ResourceType: "AWS::CloudFormation::Stack",
+                  ResourceStatus: stack.status,
+                },
+              ]
+            : [],
+        };
+      }
       if (command instanceof DeleteStackCommand) {
         const stack = this.find(String(command.input.StackName));
         if (stack) {

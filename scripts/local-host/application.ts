@@ -1,11 +1,13 @@
 import { fileURLToPath } from "node:url";
 import { assertHostCatalogBuild, buildHosting } from "./build";
+import type { CloudFormationEngine } from "./cloudformation-engine";
 import { CompetitionEngine } from "./competition-engine";
 import { dockerAvailability } from "./container/compose-cli";
 import { DEFAULT_GATEWAY_PORTS, formatGatewayPorts } from "./gateway-ports";
 import { parseOptions, vpnListener } from "./options";
 import { openOrganizerKeyDisplay } from "./organizer-key-output";
 import { type RunningLocalHost, startLocalHost } from "./server";
+import { connectSimulatorHosting } from "./simulator-hosting";
 import { loadVpnPeerPlan } from "./vpn/config";
 import { NativeVpnIngress } from "./vpn/native-ingress";
 
@@ -33,6 +35,10 @@ export function announceHost(
   },
   stopLocalEnvironments: boolean,
 ): void {
+  if (options.simulator)
+    console.log(
+      `AWS simulator: ${options.simulator.endpoint} (${options.simulator.region}); AWS console federation is unavailable. Local competitor account: 000000000000; deployment role: TenkaCloud-SimulatorDeploy-Role.`,
+    );
   if (options.consoleAppliance) {
     console.log(
       `\nHost console: ${host.admin.origin}\nParticipant portal: ${host.participant.origin}\nWeb broker upstream: http://127.0.0.1:${options.consoleAppliance.webPort}\nState: ${host.databasePath}\n`,
@@ -92,12 +98,13 @@ export function localCompetitionEngine(
   directory: string,
   options: ReturnType<typeof parseOptions>,
   docker: ReturnType<typeof dockerAvailability> = { available: true },
+  cloud?: CloudFormationEngine,
 ): CompetitionEngine {
   const engine = new CompetitionEngine(
     root,
     directory,
     !options.public && docker.available,
-    undefined,
+    cloud,
     options.dockerNetworkPool,
     options.submissionCatalogPath,
     options.competitionNetwork,
@@ -121,7 +128,7 @@ export async function runLocalHost(
   const options = parseOptions(args, root);
   if (options.help) {
     console.log(
-      `TenkaCloud local competition hosting\n\nmake local LOCAL_ARGS="[--data <directory>] [--no-build]"\n  --submission-catalog <file>  Organizer-owned fixed-edition answer / self-report catalog\n  --admin-port 5174       Host console; loopback unless using public origins\n  --participant-port 5175 Participant portal\n  --gateway-ports ${DEFAULT_GATEWAY_PORTS}  Exercise gateways, leased only by active local environments\n  --max-active-per-team 3  Per-team local environment limit\n  --max-active-environments 12  Host-wide active environment limit\n  --container-memory-mib 4096  Sum of container memory caps, not a hardware benchmark\n  --docker-network-pool <CIDR>  Explicit private /16–/24 pool for compact project networks; must not overlap LAN/VPN routes\n  --competition-network  Fail-closed native Linux 28.4.x team isolation (requires pool, root firewall/nsenter access)\n  --console-origin https://play.example --web-origin-template https://{target}.labs.example  Native console-only appliance behind an operator-managed TLS proxy\n  --web-port 5176 --web-services web  Loopback Web broker and declared HTTP service IDs\n  --vpn-peers <root-owned-json>  Preconfigured dedicated Linux WireGuard ingress (requires boot seal service)\n  --lan <private-ip> --unsafe-lan  Explicit unencrypted hosting; Docker exercises require native isolation unless --unsafe-docker-lan is given\n  --unsafe-docker-lan     With --lan --unsafe-lan only: run Docker exercises with no team network isolation, for trusted participants (new events only)\n  --public-admin-origin https://… --public-participant-origin https://…  Behind a TLS-terminating proxy that passes the original Host header\n  --behind-proxy          Rate-limit by the proxy-appended X-Forwarded-For entry\n\nCodespaces automatically selects exact HTTPS forwarding origins for native public mode; keep organizer port 5174 Private. Port visibility is never changed.\nThe local host uses Bun, or the Node 24 development entry with built interfaces and SQLite. The local Challenge catalog requires Docker Compose. AWS service problems are available only with cloud hosting.\nmake local opens the unified competition console. make down stops local environments while retaining their data.`,
+      `TenkaCloud local competition hosting\n\nmake local LOCAL_ARGS="[--data <directory>] [--no-build]"\n  --simulator-endpoint http://127.0.0.1:PORT --simulator-token-file <private-file> --simulator-region ap-northeast-1  Explicit local AWS simulator, never real AWS\n  --simulator-bootstrap  Explicitly create/reuse this installation's limited local Hello World deployment role\n  --submission-catalog <file>  Organizer-owned fixed-edition answer / self-report catalog\n  --admin-port 5174       Host console; loopback unless using public origins\n  --participant-port 5175 Participant portal\n  --gateway-ports ${DEFAULT_GATEWAY_PORTS}  Exercise gateways, leased only by active local environments\n  --max-active-per-team 3  Per-team local environment limit\n  --max-active-environments 12  Host-wide active environment limit\n  --container-memory-mib 4096  Sum of container memory caps, not a hardware benchmark\n  --docker-network-pool <CIDR>  Explicit private /16–/24 pool for compact project networks; must not overlap LAN/VPN routes\n  --competition-network  Fail-closed native Linux 28.4.x team isolation (requires pool, root firewall/nsenter access)\n  --console-origin https://play.example --web-origin-template https://{target}.labs.example  Native console-only appliance behind an operator-managed TLS proxy\n  --web-port 5176 --web-services web  Loopback Web broker and declared HTTP service IDs\n  --vpn-peers <root-owned-json>  Preconfigured dedicated Linux WireGuard ingress (requires boot seal service)\n  --lan <private-ip> --unsafe-lan  Explicit unencrypted hosting; Docker exercises require native isolation unless --unsafe-docker-lan is given\n  --unsafe-docker-lan     With --lan --unsafe-lan only: run Docker exercises with no team network isolation, for trusted participants (new events only)\n  --public-admin-origin https://… --public-participant-origin https://…  Behind a TLS-terminating proxy that passes the original Host header\n  --behind-proxy          Rate-limit by the proxy-appended X-Forwarded-For entry\n\nCodespaces automatically selects exact HTTPS forwarding origins for native public mode; keep organizer port 5174 Private. Port visibility is never changed.\nThe local host uses Bun, or the Node 24 development entry with built interfaces and SQLite. The local Challenge catalog requires Docker Compose. AWS service problems require cloud hosting or explicit local simulator configuration.\nmake local opens the unified competition console. make down stops local environments while retaining their data.`,
     );
     return;
   }
@@ -136,11 +143,22 @@ export async function runLocalHost(
   const vpn = options.vpnPeerPath
     ? new NativeVpnIngress(loadVpnPeerPlan(options.vpnPeerPath))
     : undefined;
-  const settings = { ...options, ...(vpn ? { ...vpnListener(options, vpn.plan), vpn } : {}) };
+  const connection = await connectSimulatorHosting(root, options.dataDirectory, options.simulator);
+  const settings = {
+    ...options,
+    ...(connection ? { accountConnection: connection } : {}),
+    ...(vpn ? { ...vpnListener(options, vpn.plan), vpn } : {}),
+  };
   const docker = options.public ? { available: false } : dockerAvailability();
   if ("reason" in docker && docker.reason) console.warn(docker.reason);
-  const host = await startLocalHost(root, settings, (directory) =>
-    localCompetitionEngine(root, directory, options, docker),
+  const host = await startLocalHost(root, settings, (directory, store) =>
+    localCompetitionEngine(
+      root,
+      directory,
+      options,
+      docker,
+      connection?.engine((job) => store.team(job.teamId)),
+    ),
   );
   try {
     lifecycle.onReady?.(host);

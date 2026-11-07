@@ -74,6 +74,40 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks());
 
 describe("pure helpers", () => {
+  it("exports the validated simulator endpoint without relying on ambient AWS configuration", () => {
+    const snippet = buildShellExport(
+      creds({ simulator: true, endpointUrl: "http://127.0.0.1:4566/" }),
+    );
+    expect(snippet).toContain("export AWS_ENDPOINT_URL='http://127.0.0.1:4566'");
+    expect(snippet).toContain("export AWS_IGNORE_CONFIGURED_ENDPOINT_URLS=false");
+    expect(snippet).toContain("export AWS_DEFAULT_REGION=ap-northeast-1");
+    for (const service of ["STS", "SSM", "CLOUDFORMATION", "IAM"])
+      expect(snippet).toContain(`export AWS_ENDPOINT_URL_${service}='http://127.0.0.1:4566'`);
+  });
+
+  it("fails closed for simulator credentials without a valid endpoint", () => {
+    expect(() => buildShellExport(creds({ simulator: true }))).toThrow("explicit local endpoint");
+    for (const endpointUrl of [
+      "",
+      "https://aws.example",
+      "http://localhost:4566",
+      // eslint-disable-next-line sonarjs/no-clear-text-protocols -- Malformed loopback endpoint must be rejected, never used.
+      "http://127.0.0.1:4566';echo BAD",
+    ]) {
+      expect(() => buildShellExport(creds({ simulator: true, endpointUrl }))).toThrow(
+        "numeric loopback",
+      );
+      expect(() => buildShellExport(creds({ endpointUrl }))).toThrow("numeric loopback");
+    }
+  });
+
+  it("quotes shell metacharacters in credential fields without executing them", () => {
+    expect(buildShellExport(creds({ secretAccessKey: "$(touch /tmp/never-run)'value" }))).toContain(
+      "export AWS_SECRET_ACCESS_KEY='$(touch /tmp/never-run)'\\''value'",
+    );
+    expect(() => buildShellExport(creds({ sessionToken: "bad\0token" }))).toThrow("null byte");
+  });
+
   it("should treat an unparseable expiration as expired", () => {
     expect(describeRemainingTime("not-a-date", 0)).toEqual({ kind: "expired" });
   });
@@ -253,5 +287,27 @@ describe("CliCredentialsPanel display interactions", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("simulator credential display", () => {
+  it("shows and copies the local endpoint with issued simulator credentials", async () => {
+    await showCreds({ simulator: true, endpointUrl: "http://127.0.0.1:4566" });
+    expect(screen.getByText("AWS_ENDPOINT_URL")).toBeInTheDocument();
+    expect(screen.getByText(/Simulator setup requires AWS CLI/)).toBeInTheDocument();
+    expect(screen.getByText("http://127.0.0.1:4566")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "sso_credentials.cli.copy_export_button" }));
+    expect(clip).toHaveBeenCalledWith(
+      expect.stringContaining("export AWS_ENDPOINT_URL='http://127.0.0.1:4566'"),
+    );
+  });
+
+  it("does not offer credentials or a copy action when simulator endpoint is missing", async () => {
+    mockGet.mockResolvedValue(creds({ simulator: true }));
+    renderPanel();
+    fireEvent.click(issueButton());
+    await screen.findByText("Simulator credentials require an explicit local endpoint.");
+    expect(screen.queryByText("sso_credentials.cli.copy_export_button")).not.toBeInTheDocument();
+    expect(screen.queryByText("sso_credentials.cli.field_access_key_id")).not.toBeInTheDocument();
   });
 });

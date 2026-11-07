@@ -374,3 +374,21 @@ describe("CompetitorAccountsPage bulk import", () => {
     expect(verifyAll).toHaveBeenCalledTimes(1);
   });
 });
+
+it("shows local simulator guidance instead of real AWS bootstrap links", () => {
+  mockHook.mockReturnValue(
+    hookState({
+      simulator: {
+        endpoint: "http://127.0.0.1:4566",
+        awsAccountId: "000000000000",
+        bootstrapRoleName: "TenkaCloud-SimulatorDeploy-Role",
+      },
+    }),
+  );
+  render(<CompetitorAccountsPage config={config()} />);
+  expect(screen.getByText("competitor_accounts.simulator_verify")).toBeInTheDocument();
+  expect(
+    screen.queryByRole("link", { name: "competitor_accounts.bootstrap_guide_link" }),
+  ).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "competitor_accounts.bulk_button" })).toBeDisabled();
+});

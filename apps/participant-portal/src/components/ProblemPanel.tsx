@@ -306,6 +306,11 @@ function ProblemPanelAlerts({
           {problem.failureReason}
         </Alert>
       )}
+      {problem.deployLog.error === "unavailable" && (
+        <Alert type="warning" header={t("problem_panel.deployment_logs_unavailable_header")}>
+          {t("problem_panel.deployment_logs_unavailable_body")}
+        </Alert>
+      )}
       {problem.accessError === "link_unavailable" && (
         <Alert type="warning" header={t("problem_panel.access_unavailable_header")}>
           {t("problem_panel.access_unavailable_body")}

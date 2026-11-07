@@ -35,6 +35,20 @@ const view = (over: Record<string, unknown> = {}): ParticipantTeamView =>
   }) as ParticipantTeamView;
 
 describe("team-view-diff (Issue #2222)", () => {
+  it("refreshes deployment log errors and recovery even with an unchanged log cursor", () => {
+    const available = view();
+    const unavailable = view({
+      problems: [
+        prob({
+          deployLog: { cursor: "0", entries: [], error: "unavailable" },
+        }),
+      ],
+    });
+    expect(viewIsUnchanged(available, unavailable)).toBe(false);
+    expect(viewIsUnchanged(unavailable, available)).toBe(false);
+    expect(viewIsUnchanged(unavailable, structuredClone(unavailable))).toBe(true);
+  });
+
   it("refreshes when the pinned catalog changes even when deployments and scores stay the same", () => {
     const original = view({ problemCatalog: [] });
     const changed = view({ problemCatalog: [{ id: "saved", name: "Pinned edition" }] });

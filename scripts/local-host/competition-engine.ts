@@ -180,6 +180,18 @@ export class CompetitionEngine extends DockerHostingEngine {
       jobs: context.jobs.filter((job) => kinds.get(job.problemId) === kind),
     };
   }
+  async deploymentLogs(
+    context: Context,
+    jobId: string,
+    options?: import("./deployment-logs").DeploymentLogPageOptions,
+  ) {
+    const job = context.jobs.find((candidate) => candidate.jobId === jobId);
+    if (!job)
+      throw new HostError(403, "This environment does not belong to your team.", "unauthorized");
+    return definitionKind(job.definition) === "cloudformation"
+      ? this.aws().deploymentLogs(context, jobId, options)
+      : { cursor: "", entries: [] };
+  }
   override async view(context: Context): Promise<Record<string, unknown>> {
     const kinds = problemKinds(context.event);
     const docker = this.only(context, kinds, "compose");

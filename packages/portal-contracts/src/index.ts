@@ -26,6 +26,7 @@ export * from "./problem-authors.js";
 // local-play control plane の runtime catalog endpoint が同じ投影を通るよう、 ここが唯一の定義。
 export * from "./problem-catalog.js";
 export * from "./problem-course-projection.js";
+export * from "./simulator-endpoint.js";
 
 export type DeploymentStatus =
   | "PENDING"
@@ -209,6 +210,8 @@ export interface DeploymentLogView {
    */
   readonly cursor: string;
   readonly entries: readonly DeploymentLogEntry[];
+  /** Live log retrieval failed; retained problem and score data remain available. */
+  readonly error?: "unavailable";
 }
 
 /**
@@ -519,6 +522,10 @@ export interface LeaderboardResponse {
 
 /** Temporary credentials for one participant viewer role, never the deploy role. */
 export interface CliCredentialsView {
+  /** Simulator sessions require endpointUrl; clients must fail closed when it is absent. */
+  readonly simulator?: true;
+  /** Present only for local simulator credentials; export as AWS_ENDPOINT_URL. */
+  readonly endpointUrl?: string;
   readonly accessKeyId: string;
   readonly secretAccessKey: string;
   readonly sessionToken: string;

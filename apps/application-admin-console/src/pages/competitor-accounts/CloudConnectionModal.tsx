@@ -6,7 +6,10 @@ import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Tiles from "@cloudscape-design/components/tiles";
 import { useState } from "react";
-import type { CreateCompetitorAccountResponse } from "../../api/competitor-accounts-client";
+import type {
+  CreateCompetitorAccountResponse,
+  SimulatorConnectionInfo,
+} from "../../api/competitor-accounts-client";
 import type { TeamCredentialProvider } from "../../api/team-credentials-client";
 import { type AppConfig, isLocalHost } from "../../config";
 import { useT } from "../../i18n";
@@ -18,10 +21,12 @@ const PROVIDERS: readonly CloudProvider[] = ["aws", "gcp", "azure", "sakura"];
 
 export function CloudConnectionModal({
   config,
+  simulator,
   onDismiss,
   onSuccess,
 }: {
   config: AppConfig;
+  simulator?: SimulatorConnectionInfo;
   onDismiss: () => void;
   onSuccess: (response: CreateCompetitorAccountResponse) => void;
 }) {
@@ -48,14 +53,15 @@ export function CloudConnectionModal({
     if (!busy) onDismiss();
   };
 
-  if (showForm && provider === "aws") {
+  if (simulator || (showForm && provider === "aws")) {
     return (
       <AddAccountModal
         config={config}
+        simulator={simulator}
         visible
         onDismiss={onDismiss}
         onSuccess={onSuccess}
-        onBack={back}
+        onBack={simulator ? undefined : back}
       />
     );
   }

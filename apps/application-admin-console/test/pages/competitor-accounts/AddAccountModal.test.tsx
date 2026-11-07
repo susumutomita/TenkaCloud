@@ -157,3 +157,29 @@ describe("AddAccountModal", () => {
     expect(submitBtn()).toBeDisabled();
   });
 });
+
+it("pins simulator registration to its declared local account and deploy role", async () => {
+  const simulator = {
+    endpoint: "http://127.0.0.1:4566",
+    awsAccountId: "000000000000",
+    bootstrapRoleName: "TenkaCloud-SimulatorDeploy-Role",
+    region: "us-east-1",
+  };
+  render(<AddAccountModal {...props({ simulator })} />);
+  expect(accountInput()).toHaveValue(simulator.awsAccountId);
+  expect(accountInput()).toBeDisabled();
+  expect(screen.getByDisplayValue(simulator.bootstrapRoleName)).toBeDisabled();
+  expect(screen.getByDisplayValue(simulator.region)).toBeDisabled();
+  expect(screen.queryAllByRole("link")).toHaveLength(0);
+  fireEvent.click(submitBtn());
+  await waitFor(() =>
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        awsAccountId: simulator.awsAccountId,
+        competitorRoleName: simulator.bootstrapRoleName,
+        region: simulator.region,
+      }),
+    ),
+  );
+});
