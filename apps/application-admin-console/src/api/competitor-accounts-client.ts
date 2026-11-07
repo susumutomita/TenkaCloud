@@ -7,6 +7,14 @@ import type { ApiClient } from "./client-contract";
  * 現行クラウドは単独開催の registry を持ち、frontend から tenant selector は送らない。
  */
 
+/** Explicit local Simulator setup; never use real-AWS bootstrap links for this mode. */
+export interface SimulatorConnectionInfo {
+  endpoint: string;
+  awsAccountId: string;
+  bootstrapRoleName: string;
+  region?: string;
+}
+
 export interface CompetitorAccountSummary {
   awsAccountId: string;
   region: string;
@@ -26,8 +34,9 @@ export interface CreateCompetitorAccountRequest {
 }
 
 export interface CreateCompetitorAccountResponse extends CompetitorAccountSummary {
+  simulator?: SimulatorConnectionInfo;
   /** 競技者に **1 度だけ** 露出する secret。`competitor-bootstrap.yaml` の Parameter に渡す。 */
-  externalId: string;
+  externalId?: string;
   /** 競技者に伝える TenkaCloud 側の AWS Account ID (CFn Parameter として要る)。 */
   tenkaCloudAccountId: string;
 }
@@ -58,6 +67,7 @@ export interface BulkCompetitorAccountResult {
 }
 
 export interface BulkCreateCompetitorAccountsResponse {
+  simulator?: SimulatorConnectionInfo;
   results: readonly BulkCompetitorAccountResult[];
   created: number;
   duplicate: number;
@@ -69,6 +79,7 @@ export interface BulkCreateCompetitorAccountsResponse {
 }
 
 export interface ListCompetitorAccountsResponse {
+  simulator?: SimulatorConnectionInfo;
   items: readonly CompetitorAccountSummary[];
 }
 

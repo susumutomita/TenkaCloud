@@ -251,3 +251,18 @@ for (const unit of [
     expect(f.logs).toEqual([]);
   });
 }
+
+test("simulator credentials include their endpoint and console federation is refused before STS", async () => {
+  const f = await createParticipantAwsFixture({ simulatorEndpoint: "http://127.0.0.1:4566" });
+  cleanups.push(f.close);
+  const consoleResponse = await f.access("console");
+  expect(consoleResponse.status).toBe(409);
+  expect(f.calls).toHaveLength(0);
+  expect(f.federation).toHaveLength(0);
+  const cli = await f.access("cli");
+  expect(cli.status).toBe(200);
+  expect(cli.body.credentials).toMatchObject({
+    simulator: true,
+    endpointUrl: "http://127.0.0.1:4566",
+  });
+});

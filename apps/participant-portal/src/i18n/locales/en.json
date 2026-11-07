@@ -358,6 +358,8 @@
     "writeup_heading": "Explanation and remediation",
     "writeup_handoff": "{solved}/{total} solved. Review the cause and remediation in the explanation",
     "failure_reason_header": "Failure reason",
+    "deployment_logs_unavailable_header": "Deployment logs unavailable",
+    "deployment_logs_unavailable_body": "Deployment logs could not be loaded. Your problem and saved score are still available. Refresh in a moment, and ask the organizer if it continues.",
     "access_unavailable_header": "Access link unavailable",
     "access_unavailable_body": "This environment is running, but its access link is temporarily unavailable. Refresh in a moment, and ask the organizer if it continues.",
     "stale_header": "Score is not increasing",

@@ -9,18 +9,21 @@ import { canManageConnections, useApiClient } from "../../api/client";
 import {
   type CreateCompetitorAccountResponse,
   createCompetitorAccount,
+  type SimulatorConnectionInfo,
 } from "../../api/competitor-accounts-client";
 import { FriendlyErrorAlert } from "../../components/FriendlyErrorAlert";
 import type { AppConfig } from "../../config";
 import { useT } from "../../i18n";
 import { type FriendlyError, toFriendlyError } from "../../lib/friendly-error";
 import { defaultCompetitorRoleName } from "../../lib/resource-naming";
+import { SimulatorConnectionNotice } from "./SimulatorConnectionNotice";
 
 const ACCOUNT_ID_RE = /^\d{12}$/;
 const ALIAS_MAX = 120;
 
 interface AddAccountModalProps {
   config: AppConfig;
+  simulator?: SimulatorConnectionInfo;
   visible: boolean;
   onDismiss: () => void;
   onBack?: () => void;
@@ -29,6 +32,7 @@ interface AddAccountModalProps {
 
 export function AddAccountModal({
   config,
+  simulator,
   visible,
   onDismiss,
   onSuccess,
@@ -40,18 +44,22 @@ export function AddAccountModal({
   // Issue #1314: Plane (= tenantId) scope を含む unique 名を default で提案する。
   // 同一競技者 AWS account を複数 Plane に並列接続できる (= 名前衝突しない)。
   const suggestedRoleName =
-    config.competitorRoleName ?? defaultCompetitorRoleName({ tenantId: config.tenantId });
-  const [awsAccountId, setAwsAccountId] = useState("");
+    simulator?.bootstrapRoleName ??
+    config.competitorRoleName ??
+    defaultCompetitorRoleName({ tenantId: config.tenantId });
+  const [awsAccountId, setAwsAccountId] = useState(simulator?.awsAccountId ?? "");
   const [alias, setAlias] = useState("");
-  const [region, setRegion] = useState(config.hostAwsRegion ?? "ap-northeast-1");
+  const [region, setRegion] = useState(
+    simulator?.region ?? config.hostAwsRegion ?? "ap-northeast-1",
+  );
   const [competitorRoleName, setCompetitorRoleName] = useState(suggestedRoleName);
   const [inFlight, setInFlight] = useState(false);
   const [error, setError] = useState<FriendlyError | null>(null);
 
   const reset = () => {
-    setAwsAccountId("");
+    setAwsAccountId(simulator?.awsAccountId ?? "");
     setAlias("");
-    setRegion(config.hostAwsRegion ?? "ap-northeast-1");
+    setRegion(simulator?.region ?? config.hostAwsRegion ?? "ap-northeast-1");
     setCompetitorRoleName(suggestedRoleName);
     setError(null);
   };
@@ -84,7 +92,8 @@ export function AddAccountModal({
       const res = await createCompetitorAccount(apiClient, {
         awsAccountId,
         region,
-        competitorRoleName: config.competitorRoleName ?? competitorRoleName,
+        competitorRoleName:
+          simulator?.bootstrapRoleName ?? config.competitorRoleName ?? competitorRoleName,
         ...(alias.length > 0 ? { alias } : {}),
       });
       reset();
@@ -132,6 +141,7 @@ export function AddAccountModal({
     >
       <SpaceBetween size="m">
         {error && <FriendlyErrorAlert error={error} />}
+        {simulator && <SimulatorConnectionNotice simulator={simulator} />}
         <FormField
           label={t("competitor_accounts.add_modal_account_id_label")}
           description={t("competitor_accounts.add_modal_account_id_description")}
@@ -144,7 +154,7 @@ export function AddAccountModal({
             onChange={(e) => setAwsAccountId(e.detail.value)}
             invalid={awsAccountIdInvalid}
             placeholder="123456789012"
-            disabled={inFlight}
+            disabled={inFlight || !!simulator}
           />
         </FormField>
         <FormField
@@ -166,7 +176,7 @@ export function AddAccountModal({
           <Input
             value={region}
             onChange={(e) => setRegion(e.detail.value)}
-            disabled={inFlight || !!config.hostAwsRegion}
+            disabled={inFlight || !!simulator || !!config.hostAwsRegion}
           />
         </FormField>
         <FormField
@@ -178,9 +188,9 @@ export function AddAccountModal({
           )}
         >
           <Input
-            value={config.competitorRoleName ?? competitorRoleName}
+            value={simulator?.bootstrapRoleName ?? config.competitorRoleName ?? competitorRoleName}
             onChange={(e) => setCompetitorRoleName(e.detail.value)}
-            disabled={inFlight || !!config.competitorRoleName}
+            disabled={inFlight || !!simulator || !!config.competitorRoleName}
           />
         </FormField>
       </SpaceBetween>

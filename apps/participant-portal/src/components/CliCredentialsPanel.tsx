@@ -4,6 +4,7 @@ import Button from "@cloudscape-design/components/button";
 import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
+import { normalizeSimulatorEndpointUrl } from "@tenkacloud/portal-contracts";
 import { toErrorMessage, useNowMs } from "@tenkacloud/web-kit";
 import { useState } from "react";
 import {
@@ -14,7 +15,10 @@ import {
   PortalValidationError,
 } from "../api/portal-client";
 import { useT } from "../i18n";
+import { buildShellExport } from "./cli-credentials-export";
 import { describeAwsAccessError } from "./describeAwsAccessError";
+
+export { buildShellExport } from "./cli-credentials-export";
 
 /**
  * Issue #1197: CLI / SDK 用一時資格情報を取得して表示する 1 problem 単位の panel。
@@ -54,6 +58,7 @@ export function CliCredentialsPanel({
     setError(null);
     try {
       const view = await getCliCredentials(apiBaseUrl, sessionToken, jobId);
+      buildShellExport(view); // Validate the endpoint before showing or copying any credentials.
       setCredentials(view);
       setRevealed(false);
     } catch (err) {
@@ -178,6 +183,20 @@ function CliCredentialsDisplay({
         revealed={revealed}
       />
       <CredentialField label="AWS_REGION" value={credentials.region} revealed />
+      {credentials.endpointUrl !== undefined && (
+        <CredentialField
+          label="AWS_ENDPOINT_URL"
+          value={normalizeSimulatorEndpointUrl(credentials.endpointUrl)}
+          revealed
+        />
+      )}
+      {credentials.endpointUrl !== undefined && (
+        <Box variant="small" color="text-body-secondary">
+          Simulator setup requires AWS CLI and defines an aws shell function that forces this local
+          endpoint. Changing or overriding the endpoint is refused. Use a fresh shell to return to
+          real AWS.
+        </Box>
+      )}
       <SpaceBetween size="xs" direction="horizontal">
         <Button
           variant="normal"
@@ -246,15 +265,6 @@ function CredentialField({
 function mask(value: string): string {
   if (value.length <= 8) return "•".repeat(value.length);
   return `${value.slice(0, 4)}${"•".repeat(Math.max(0, value.length - 8))}${value.slice(-4)}`;
-}
-
-export function buildShellExport(credentials: CliCredentialsView): string {
-  return [
-    `export AWS_ACCESS_KEY_ID=${credentials.accessKeyId}`,
-    `export AWS_SECRET_ACCESS_KEY=${credentials.secretAccessKey}`,
-    `export AWS_SESSION_TOKEN=${credentials.sessionToken}`,
-    `export AWS_REGION=${credentials.region}`,
-  ].join("\n");
 }
 
 async function writeToClipboard(text: string): Promise<void> {

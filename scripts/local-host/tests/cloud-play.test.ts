@@ -221,7 +221,18 @@ test("a mixed Battle and hello-world event deploys every team and shows the stac
         { id: required(hint2).id, penalty: 30, revealed: false },
       ],
     },
-    deployLog: { cursor: "", entries: [] },
+    deployLog: {
+      cursor: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      entries: [
+        {
+          id: expect.stringMatching(/^[a-f0-9]{64}$/u),
+          timestamp: "2026-01-01T00:00:00.000Z",
+          source: "deployment",
+          level: "success",
+          message: `${stackName(fixture, "alpha")} (AWS::CloudFormation::Stack): CREATE_COMPLETE`,
+        },
+      ],
+    },
     eventStartsAt: new Date(START).toISOString(),
     expiresAt: fixture.store.event(event.eventId).expiresAt,
   });
@@ -253,6 +264,8 @@ test("a correct flag scores once, trimmed, and a second one is already solved", 
   expect(first).toEqual({ status: 200, body: { kind: "ok", scoreDelta: 100, totalScore: 100 } });
   const again = await submit(fixture, alpha, fakeFlag(stackName(fixture, "alpha")));
   expect(again).toEqual({ status: 200, body: { kind: "already_scored", totalScore: 100 } });
+  // Grading uses the retained flag; only the subsequent views read native deployment logs.
+  expect(fixture.aws.assumed.length).toBe(awsCalls);
 
   const team = fixture.store.team(alpha.teamId);
   expect(team.score).toBe(100);
@@ -283,7 +296,11 @@ test("a correct flag scores once, trimmed, and a second one is already solved", 
     { teamName: "alpha", score: 100, completedProblems: 1 },
     { teamName: "beta", score: 0, completedProblems: 0 },
   ]);
-  expect(fixture.aws.assumed.length).toBe(awsCalls);
+  // Each of the two views reads ownership and events for this team's stack only.
+  expect(fixture.aws.assumed.length).toBe(awsCalls + 4);
+  expect(new Set(fixture.aws.assumed.slice(awsCalls).map((call) => call.RoleArn))).toEqual(
+    new Set([`arn:aws:iam::111111111111:role/TenkaCloud-CompetitorDeploy-Role`]),
+  );
 });
 
 test("a wrong flag, including another team's, costs the wrong-answer penalty", async () => {
@@ -506,6 +523,8 @@ test("a hint is charged once and only its own content is revealed", async () => 
   expect(
     team.scoreEvents.map(({ source, points, hintId }) => ({ source, points, hintId })),
   ).toEqual([{ source: "hint", points: -20, hintId: "hint-1" }]);
+  // Hint scoring is local; the following participant view fetches deployment logs.
+  expect(fixture.aws.assumed.length).toBe(awsCalls);
   const me = await fixture.as(alpha).get("/portal/me");
   expect((problem(me, "hello-world").scoring as { hints: unknown }).hints).toEqual([
     {
@@ -519,7 +538,7 @@ test("a hint is charged once and only its own content is revealed", async () => 
     { id: required(hint2).id, penalty: 30, revealed: false },
   ]);
   expect(problem(me, "hello-world").lastScoredAt).toBeUndefined();
-  expect(fixture.aws.assumed.length).toBe(awsCalls);
+  expect(fixture.aws.assumed.length).toBe(awsCalls + 2);
 });
 
 test("a Battle score, a cloud flag and a cloud hint add up to one total", async () => {

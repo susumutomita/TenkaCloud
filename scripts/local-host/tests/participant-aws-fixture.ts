@@ -24,7 +24,7 @@ function roleStage(input: AssumeRoleCommandInput) {
 }
 
 export async function createParticipantAwsFixture(
-  options: { withAws?: boolean; staticRoot?: string } = {},
+  options: { withAws?: boolean; staticRoot?: string; simulatorEndpoint?: string } = {},
 ) {
   const directory = createTemporaryDirectory(root, "tenka-console-");
   const database = join(directory, "host.sqlite");
@@ -70,6 +70,7 @@ export async function createParticipantAwsFixture(
     return client;
   };
   const cloud = new CloudFormationEngine(root, {
+    simulatorEndpoint: options.simulatorEndpoint,
     region: "ap-northeast-1",
     externalId: "host-external-id-0123456789",
     operatorAccountId: async () => "999999999999",

@@ -813,7 +813,10 @@ export class HostingDomain {
   }
   private connection(): AccountConnection {
     if (!this.accountConnection)
-      throw new HostError(422, "Start the host with --aws-region to manage competitor accounts.");
+      throw new HostError(
+        422,
+        "Start an explicitly configured simulator or cloud host to manage competitor accounts.",
+      );
     return this.accountConnection;
   }
   private registerAccount(body: Record<string, unknown>): CompetitorAccount {
@@ -821,6 +824,11 @@ export class HostingDomain {
     const awsAccountId = text(body.awsAccountId, "awsAccountId", 12);
     if (!awsAccountPattern.test(awsAccountId))
       throw new HostError(422, "Use a 12-digit AWS account ID.");
+    if (connection.simulator && awsAccountId !== connection.simulator.awsAccountId)
+      throw new HostError(
+        422,
+        "This simulator connection supports only its local competitor account.",
+      );
     if (awsAccountId === connection.operatorAccountId)
       throw new HostError(422, "The operator account cannot be a competitor account.");
     const region = body.region === undefined ? connection.region : text(body.region, "region", 32);
@@ -828,7 +836,7 @@ export class HostingDomain {
       throw new HostError(422, `This host deploys AWS problems in ${connection.region}.`);
     const competitorRoleName =
       body.competitorRoleName === undefined
-        ? DEFAULT_COMPETITOR_ROLE
+        ? (connection.simulator?.bootstrapRoleName ?? DEFAULT_COMPETITOR_ROLE)
         : text(body.competitorRoleName, "competitorRoleName", 64);
     if (!awsRoleNamePattern.test(competitorRoleName))
       throw new HostError(422, "Invalid competitor IAM role name.");
@@ -850,18 +858,30 @@ export class HostingDomain {
       return account;
     });
   }
+  private connectionSetup(cloud = this.accountConnection, discloseExternalId = true) {
+    if (!cloud) return {};
+    if (cloud.simulator) return { simulator: cloud.simulator };
+    return discloseExternalId ? { externalId: cloud.externalId } : {};
+  }
   private accountRoute(
     request: ApiRequest,
     principal: OrganizerPrincipal,
   ): ApiResponse | Promise<ApiResponse> {
     if (request.path === "/admin/competitor-accounts" && request.method === "GET")
-      return ok({ items: this.store.accounts() });
+      return ok({
+        items: this.store.accounts(),
+        ...this.connectionSetup(this.accountConnection, false),
+      });
     requireRole(principal, "manage-connections");
     if (request.path === "/admin/competitor-accounts" && request.method === "POST") {
       const account = this.registerAccount(object(request.body));
       const cloud = this.connection();
       return ok(
-        { ...account, externalId: cloud.externalId, tenkaCloudAccountId: cloud.operatorAccountId },
+        {
+          ...account,
+          ...this.connectionSetup(cloud),
+          tenkaCloudAccountId: cloud.operatorAccountId,
+        },
         201,
       );
     }
@@ -914,7 +934,7 @@ export class HostingDomain {
       duplicate: results.filter((result) => result.outcome === "duplicate").length,
       invalid: results.filter((result) => result.outcome === "invalid").length,
       failed: results.filter((result) => result.outcome === "failed").length,
-      ...(created ? { externalId: cloud.externalId } : {}),
+      ...this.connectionSetup(cloud, created > 0),
       tenkaCloudAccountId: cloud.operatorAccountId,
     });
   }
@@ -2476,7 +2496,44 @@ export class HostingDomain {
   private readParticipant(request: ApiRequest): Promise<ApiResponse> {
     const team = this.store.authenticateTeam(request.token);
     this.coordination.advance(this.currentEvent(team.eventId));
-    return this.participantRead(this.context(this.store.team(team.teamId)), request.path);
+    const context = this.context(this.store.team(team.teamId));
+    if (request.path === "/portal/me/deploy-logs")
+      return this.participantDeploymentLogs(context, request.query);
+    return this.participantRead(context, request.path);
+  }
+  private async participantDeploymentLogs(
+    context: Context,
+    query: URLSearchParams,
+  ): Promise<ApiResponse> {
+    const jobId = query.get("jobId") ?? "";
+    if (
+      !jobPattern.test(jobId) ||
+      query.getAll("jobId").length !== 1 ||
+      [...query.keys()].some((key) => !["jobId", "limit", "nextToken"].includes(key)) ||
+      query.getAll("limit").length > 1 ||
+      query.getAll("nextToken").length > 1
+    )
+      throw new HostError(400, "Specify one valid jobId.", "invalid_jobid");
+    const job = context.jobs.find((candidate) => candidate.jobId === jobId);
+    if (!job)
+      throw new HostError(403, "This environment does not belong to your team.", "unauthorized");
+    this.progression.assertAccess(context.team, job.problemId);
+    const rawLimit = query.get("limit") ?? "100";
+    if (!/^[1-9]\d?$/u.test(rawLimit) && rawLimit !== "100")
+      throw new HostError(400, "Limit must be from 1 to 100.", "invalid_limit");
+    const nextToken = query.get("nextToken") ?? undefined;
+    if (nextToken !== undefined && (!nextToken || nextToken.length > 4096))
+      throw new HostError(400, "Invalid deployment log cursor.", "invalid_next_token");
+    const logs = (await this.engine.deploymentLogs?.(context, jobId, {
+      limit: Number(rawLimit),
+      nextToken,
+    })) ?? { cursor: "", entries: [] };
+    return ok({
+      ...logs,
+      jobId,
+      buildStatus: job.status,
+      complete: ["COMPLETE", "FAILED", "DELETED", "STOPPED"].includes(job.status),
+    });
   }
   /** Runs inside the event's serial queue: one submission or hint reveal, awarded at most once. */
   private async score(
@@ -2570,8 +2627,6 @@ export class HostingDomain {
           eventId: context.event.eventId,
           items: this.store.notifications(context.event.eventId),
         });
-      case "/portal/me/deploy-logs":
-        return ok({ entries: [], cursor: "" });
       case "/portal/leaderboard":
         return ok(this.leaderboard(context));
       case "/portal/leaderboard/score-events":

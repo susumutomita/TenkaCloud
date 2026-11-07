@@ -19,7 +19,10 @@ export interface CloudHosting {
   engine(team: (job: Job) => Team): CloudFormationEngine;
 }
 
-type AwsClients = Pick<CloudFormationEngineOptions, "sts" | "cloudFormation">;
+type AwsClients = Pick<
+  CloudFormationEngineOptions,
+  "sts" | "cloudFormation" | "ssm" | "federationFetch" | "simulatorEndpoint"
+>;
 
 /** Credentials come from the AWS SDK's default chain, never from a flag. */
 function sdkClients(region: string): AwsClients {

@@ -16,6 +16,7 @@ import {
   type CloudFormationClient,
   CreateStackCommand,
   DeleteStackCommand,
+  DescribeStackEventsCommand,
   DescribeStacksCommand,
   type Stack,
 } from "@aws-sdk/client-cloudformation";
@@ -39,8 +40,14 @@ import {
   type Revision,
   selectedCatalogSnapshots,
 } from "../problem-pack/catalog-read";
-import { AwsDisruptionAdapter } from "./aws-disruption-adapter";
+import { AwsDisruptionAdapter, type AwsDisruptionClients } from "./aws-disruption-adapter";
 import { publicCatalogEntry } from "./catalog-projection";
+import {
+  type DeploymentLogPageOptions,
+  deploymentLogCursor,
+  deploymentLogPage,
+  deploymentLogView,
+} from "./deployment-logs";
 import {
   type AwsTarget,
   type Context,
@@ -76,6 +83,8 @@ function isFlagStackDefinition(definition: StackDefinition): definition is FlagS
 
 export interface CloudFormationEngineOptions extends ParticipantAwsClients {
   readonly region: string;
+  readonly simulatorEndpoint?: string;
+  readonly ssm?: AwsDisruptionClients["ssm"];
   /** The host's ExternalId. Every competitor role requires it (`competitor-bootstrap.yaml`). */
   readonly externalId: string;
   /** The account the host runs as. Problem templates trust it for participant access. */
@@ -96,9 +105,14 @@ const EXTERNAL_ID_PATTERN = /^[A-Za-z0-9_=,.@:/-]{16,128}$/u;
 
 /** Reviewed list: extending it requires reviewing the template's cost and blast radius. */
 const REVIEWED_STACK_PROBLEMS = [
-  { problemId: "hello-world", folder: "challenges", scoring: "flag" },
-  { problemId: "hello-world-battle", folder: "battles", scoring: "uptime-flat" },
+  { problemId: "hello-world", folder: "challenges", scoring: "flag", simulator: true },
+  { problemId: "hello-world-battle", folder: "battles", scoring: "uptime-flat", simulator: false },
 ] as const;
+
+/** Simulator support requires an unchanged-problem rehearsal, not just catalog discovery. */
+function simulatorProblemSupported(problemId: string): boolean {
+  return REVIEWED_STACK_PROBLEMS.some((entry) => entry.problemId === problemId && entry.simulator);
+}
 
 interface StackMetadata {
   skillEvidence?: unknown;
@@ -213,10 +227,15 @@ function stackProblem(
   };
 }
 
-export function cloudFormationCatalog(repositoryRoot: string): Problem[] {
+export function cloudFormationCatalog(
+  repositoryRoot: string,
+  options: { simulator?: boolean } = {},
+): Problem[] {
   return selectedCatalogSnapshots(repositoryRoot).flatMap(({ problemRoot: catalog, revision }) =>
-    REVIEWED_STACK_PROBLEMS.filter(({ folder, problemId }) =>
-      existsSync(join(catalog, folder, problemId, "metadata.json")),
+    REVIEWED_STACK_PROBLEMS.filter(
+      ({ folder, problemId, simulator }) =>
+        (!options.simulator || simulator) &&
+        existsSync(join(catalog, folder, problemId, "metadata.json")),
     ).map((entry) => stackProblem(catalog, entry, revision)),
   );
 }
@@ -229,11 +248,13 @@ export class CloudFormationEngine implements RuntimeEngine {
     job: Job;
     assertCurrent: () => void;
   }): Promise<ParticipantAwsAccess> {
+    this.assertSimulatorSupport(args.job);
     return participantAwsAccess({
       ...args,
       team: this.options.team(args.job),
       externalId: this.options.externalId,
       clients: this.options,
+      endpointUrl: this.options.simulatorEndpoint,
     });
   }
 
@@ -245,11 +266,33 @@ export class CloudFormationEngine implements RuntimeEngine {
   ) {
     if (!EXTERNAL_ID_PATTERN.test(options.externalId))
       throw new Error("The host ExternalId must be 16–128 characters of [A-Za-z0-9_=,.@:/-].");
-    this.problems = cloudFormationCatalog(repositoryRoot);
+    this.problems = cloudFormationCatalog(repositoryRoot, {
+      simulator: Boolean(options.simulatorEndpoint),
+    });
+  }
+
+  private assertSimulatorSupport(job: Job): void {
+    if (!this.options.simulatorEndpoint) return;
+    const definition = JSON.parse(job.definition) as StackDefinition;
+    if (job.problemId !== definition.problemId || !simulatorProblemSupported(definition.problemId))
+      throw new HostError(
+        409,
+        "This AWS problem is unavailable in simulator mode. Only Hello World is currently supported.",
+        "simulator_problem_unsupported",
+      );
   }
 
   disruptionAdapter(): AwsDisruptionAdapter {
-    return new AwsDisruptionAdapter({ sts: this.options.sts }, this.options.externalId);
+    if (this.options.simulatorEndpoint && !this.options.ssm)
+      throw new HostError(409, "Simulator SSM transport is unavailable.", "not_ready");
+    return new AwsDisruptionAdapter(
+      { sts: this.options.sts, ssm: this.options.ssm },
+      this.options.externalId,
+      // Only original Hello World is supported; it has no command-disruption runtime.
+      this.options.simulatorEndpoint
+        ? "AWS disruptions are unavailable in simulator mode. Retained operations require recovery in their original supported hosting mode."
+        : undefined,
+    );
   }
 
   catalog(): readonly Problem[] {
@@ -265,6 +308,7 @@ export class CloudFormationEngine implements RuntimeEngine {
   }
 
   async start(job: Job, retain: (unit: string | null) => void): Promise<void> {
+    this.assertSimulatorSupport(job);
     const definition = JSON.parse(job.definition) as StackDefinition;
     const team = this.options.team(job);
     const aws = awsTargetOf(team);
@@ -348,6 +392,12 @@ export class CloudFormationEngine implements RuntimeEngine {
 
   /** The stack's console page, in the team's own account. */
   surface(job: Job): string {
+    if (this.options.simulatorEndpoint)
+      throw new HostError(
+        409,
+        "AWS console access is unavailable in simulator mode.",
+        "console_unavailable",
+      );
     const unit = unitOf(job);
     const region = encodeURIComponent(unit.region);
     const base = `https://${unit.region}.console.aws.amazon.com/cloudformation/home?region=${region}`;
@@ -358,8 +408,74 @@ export class CloudFormationEngine implements RuntimeEngine {
 
   async view(context: Context): Promise<Record<string, unknown>> {
     return {
-      problems: context.event.problems.map((problem) => this.problemView(context, problem)),
+      problems: await Promise.all(
+        context.event.problems.map(async (problem) => {
+          const job = context.jobs.find((candidate) => candidate.problemId === problem.problemId);
+          return {
+            ...this.problemView(context, problem),
+            deployLog: job
+              ? await this.deploymentLogs(context, job.jobId).catch(() => ({
+                  cursor: "",
+                  entries: [],
+                  // A telemetry failure must not discard retained problem or score data.
+                  // Do not disclose AWS errors, which may contain credentials or resource data.
+                  error: "unavailable" as const,
+                }))
+              : { cursor: "", entries: [] },
+          };
+        }),
+      ),
     };
+  }
+
+  async deploymentLogs(context: Context, jobId: string, options: DeploymentLogPageOptions = {}) {
+    const job = context.jobs.find((candidate) => candidate.jobId === jobId);
+    if (!job || job.teamId !== context.team.teamId || job.eventId !== context.event.eventId)
+      throw new HostError(403, "This environment does not belong to your team.", "unauthorized");
+    if (
+      !context.event.problems.some(
+        (problem) => problem.problemId === job.problemId && problem.definition === job.definition,
+      )
+    )
+      throw new HostError(409, "This environment changed.", "not_ready");
+    const limit = options.limit ?? 100;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100)
+      throw new HostError(400, "Limit must be from 1 to 100.", "invalid_limit");
+    let cursor: ReturnType<typeof deploymentLogCursor>;
+    try {
+      cursor = deploymentLogCursor(jobId, options.nextToken);
+    } catch {
+      throw new HostError(400, "Invalid deployment log cursor.", "invalid_next_token");
+    }
+    if (!job.unit) return { cursor: "", entries: [] };
+    const unit = unitOf(job);
+    const target = awsTargetOf(context.team);
+    if (
+      unit.accountId !== target.accountId ||
+      unit.roleArn !== `arn:aws:iam::${target.accountId}:role/${target.roleName}`
+    )
+      throw new HostError(403, "This environment does not belong to your team.", "unauthorized");
+    if (!unit.stackId) return { cursor: "", entries: [] };
+    const client = this.client(unit, job);
+    // Verify the retained stack identity and ownership tag before requesting events.
+    const stack = await this.describe(client, unit, job.jobId);
+    if (!stack) return { cursor: "", entries: [] };
+    const response = await client.send(
+      new DescribeStackEventsCommand({ StackName: unit.stackId, NextToken: cursor.pageToken }),
+    );
+    const view = deploymentLogView(
+      (response.StackEvents ?? []).filter((event) => event.StackId === unit.stackId),
+    );
+    if (cursor.offset > view.entries.length)
+      throw new HostError(400, "Invalid deployment log cursor.", "invalid_next_token");
+    return deploymentLogPage(
+      jobId,
+      view,
+      cursor.offset,
+      limit,
+      cursor.pageToken,
+      response.NextToken,
+    );
   }
 
   /**
@@ -385,9 +501,18 @@ export class CloudFormationEngine implements RuntimeEngine {
       ...(definition.english ? { i18n: { en: definition.english } } : {}),
       region: unit?.region ?? this.options.region,
       awsAccountId: awsTargetOf(context.team).accountId,
+      ...(this.options.simulatorEndpoint
+        ? {
+            accessCapabilities: simulatorProblemSupported(definition.problemId)
+              ? (["cli-credentials"] as const)
+              : [],
+          }
+        : {}),
       stackOutputs: Object.fromEntries(
         Object.entries(unit?.outputs ?? {}).filter(
-          ([key]) => !isFlagStackDefinition(definition) || key !== definition.flagOutputKey,
+          ([key]) =>
+            (!isFlagStackDefinition(definition) || key !== definition.flagOutputKey) &&
+            (!this.options.simulatorEndpoint || !key.endsWith("ConsoleUrl")),
         ),
       ),
       score:
@@ -512,6 +637,8 @@ export class CloudFormationEngine implements RuntimeEngine {
   }
 
   private client(unit: StackUnit, job: Job): Pick<CloudFormationClient, "send"> {
+    // Saved jobs bypass the current catalog, including cleanup before a deployment retry.
+    this.assertSimulatorSupport(job);
     const credentials: CredentialsProvider = async () => {
       const assumed = await assumeRoleWithExternalId(
         { sts: this.options.sts },

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readCatalogSelection } from "../problem-pack/catalog-read";
 
@@ -50,10 +50,17 @@ export function runBuildCommand(
 export async function buildHosting(
   repositoryRoot: string,
   output: BuildOutput = "full",
+  options: { acceptanceProvenance?: boolean } = {},
 ): Promise<void> {
+  // Every rebuild invalidates prior acceptance evidence, including failed rebuilds.
+  rmSync(join(repositoryRoot, ".tenkacloud/host-build/provenance.json"), { force: true });
   const { materializeCatalog } = await import("../problem-pack/downloaded-catalog");
   materializeCatalog(repositoryRoot);
   const catalogIdentity = readCatalogSelection(repositoryRoot);
+  // Strict source-tree checks belong only to the optional acceptance build.
+  const provenance =
+    options.acceptanceProvenance === true ? await import("./host-build-provenance") : undefined;
+  const sourceFingerprint = provenance?.hostBuildSourceFingerprint(repositoryRoot);
   const apps = Object.keys(APPS) as App[];
   for (const [index, app] of apps.entries()) {
     const started = performance.now();
@@ -85,4 +92,6 @@ export async function buildHosting(
     join(repositoryRoot, ".tenkacloud/host-build/catalog-selection.json"),
     catalogIdentity,
   );
+  if (provenance && sourceFingerprint)
+    provenance.writeHostBuildProvenance(repositoryRoot, sourceFingerprint);
 }

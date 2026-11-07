@@ -116,3 +116,56 @@ describe("SecretRevealModal", () => {
     );
   });
 });
+
+describe("Simulator bootstrap safety", () => {
+  const simulator = {
+    endpoint: "http://127.0.0.1:4566",
+    awsAccountId: "000000000000",
+    bootstrapRoleName: "TenkaCloud-SimulatorDeploy-Role",
+  };
+  it.each([true, false])(
+    "never exposes real AWS links or ExternalId in simulator mode (localHost=%s)",
+    (localHost) => {
+      render(
+        <SecretRevealModal
+          secret={{ ...secret, simulator }}
+          onDismiss={vi.fn()}
+          localHost={localHost}
+        />,
+      );
+      expect(screen.getByText(/AWS_ENDPOINT_URL: http:\/\/127.0.0.1:4566/u)).toBeInTheDocument();
+      expect(screen.queryByText(secret.externalId ?? "")).not.toBeInTheDocument();
+      expect(screen.queryAllByRole("link")).toHaveLength(0);
+      expect(screen.queryByRole("button", { name: /copy/u })).not.toBeInTheDocument();
+      expect(writeText).not.toHaveBeenCalled();
+    },
+  );
+  it("accepts secret-free simulator responses", () => {
+    render(
+      <SecretRevealModal
+        secret={{ ...secret, externalId: undefined, simulator }}
+        onDismiss={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("competitor_accounts.simulator_verify")).toBeInTheDocument();
+    expect(screen.queryAllByRole("link")).toHaveLength(0);
+  });
+  it("fails closed for malformed simulator endpoints and missing ordinary bootstrap secret", () => {
+    const view = render(
+      <SecretRevealModal
+        secret={{
+          ...secret,
+          simulator: { ...simulator, endpoint: "https://console.aws.amazon.com" },
+        }}
+        onDismiss={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("competitor_accounts.simulator_invalid")).toBeInTheDocument();
+    expect(screen.queryAllByRole("link")).toHaveLength(0);
+    view.rerender(
+      <SecretRevealModal secret={{ ...secret, externalId: undefined }} onDismiss={vi.fn()} />,
+    );
+    expect(screen.getByText("competitor_accounts.secret_missing")).toBeInTheDocument();
+    expect(screen.queryAllByRole("link")).toHaveLength(0);
+  });
+});

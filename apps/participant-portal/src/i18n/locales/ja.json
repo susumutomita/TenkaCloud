@@ -358,6 +358,8 @@
     "writeup_heading": "解説と対策",
     "writeup_handoff": "{solved}/{total} 解答済み。解説で原因と対策を振り返る",
     "failure_reason_header": "失敗理由",
+    "deployment_logs_unavailable_header": "デプロイログを取得できません",
+    "deployment_logs_unavailable_body": "デプロイログを現在取得できません。問題と保存済みのスコアは引き続き利用できます。しばらくしてから更新し、続く場合は主催者に連絡してください。",
     "access_unavailable_header": "アクセス先を開けません",
     "access_unavailable_body": "この問題環境は動いていますが、アクセス先のリンクを現在発行できません。しばらくしてから更新し、続く場合は主催者に連絡してください。",
     "stale_header": "スコアが伸びていません",
