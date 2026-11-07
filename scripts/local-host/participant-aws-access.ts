@@ -185,8 +185,15 @@ export async function participantAwsAccess(args: {
   readonly team: Team;
   readonly externalId: string;
   readonly clients: ParticipantAwsClients;
+  readonly endpointUrl?: string;
   readonly assertCurrent: () => void;
 }): Promise<ParticipantAwsAccess> {
+  if (args.endpointUrl && args.kind === "console")
+    throw new HostError(
+      409,
+      "AWS console access is unavailable in simulator mode. Use local CLI credentials.",
+      "console_unavailable",
+    );
   const target = consoleTarget(args.job, args.team);
   args.assertCurrent();
   // Recheck the competitor connection so removing its bootstrap role still revokes issuance.
@@ -212,6 +219,7 @@ export async function participantAwsAccess(args: {
       kind: "cli",
       credentials: {
         ...viewer,
+        ...(args.endpointUrl ? { simulator: true as const, endpointUrl: args.endpointUrl } : {}),
         expiration: viewer.expiration.toISOString(),
         region: target.region,
         awsAccountId: target.accountId,

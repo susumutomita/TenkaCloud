@@ -47,6 +47,7 @@ export function viewIsUnchanged(
       p.region !== n.region ||
       JSON.stringify(p.accessCapabilities) !== JSON.stringify(n.accessCapabilities) ||
       p.deployLog?.cursor !== n.deployLog?.cursor ||
+      p.deployLog?.error !== n.deployLog?.error ||
       // Issue #2845: `lifecycle` was missing here, and it is the only field the
       // refetch right after Start changes (`stopped` -> `starting`). Treating
       // that as "unchanged" made `TeamViewProvider` keep `prev`, so the panel

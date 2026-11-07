@@ -4,6 +4,12 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  DescribeStackEventsCommand,
+  DescribeStacksCommand,
+  type StackEvent,
+} from "@aws-sdk/client-cloudformation";
+import type { ParticipantProblemView } from "@tenkacloud/portal-contracts";
 import { apiRequest, HOST_KEY } from "../bench/state-setup";
 import { CloudFormationEngine } from "../cloudformation-engine";
 import { startHttpHost } from "../http";
@@ -27,18 +33,40 @@ afterEach(() => {
     rmSync(directory, { recursive: true, force: true });
 });
 
-async function host() {
+async function host(
+  logFailure: { at?: "sts" | "describe" | "events" } = {},
+  eventPage?: (command: DescribeStackEventsCommand) => {
+    StackEvents: StackEvent[];
+    NextToken?: string;
+  },
+) {
   const data = mkdtempSync(join(tmpdir(), "tenka-cloudformation-"));
   directories.push(data);
   const store = new HostStore(new Database(join(data, "host.sqlite")));
   stores.push(store);
   const aws = new FakeAws();
+  const sts = {
+    send: async (command: unknown) => {
+      if (logFailure.at === "sts") throw new Error("STS unavailable: secret-credential");
+      return aws.sts.send(command);
+    },
+  };
   const engine = new CloudFormationEngine(root, {
     region: "ap-northeast-1",
     externalId: EXTERNAL_ID,
     operatorAccountId: async () => OPERATOR_ACCOUNT,
-    sts: aws.sts as never,
-    cloudFormation: aws.cloudFormation as never,
+    sts: sts as never,
+    cloudFormation: ((credentials: Parameters<typeof aws.cloudFormation>[0]) => ({
+      send: async (command: unknown) => {
+        if (
+          (logFailure.at === "describe" && command instanceof DescribeStacksCommand) ||
+          (logFailure.at === "events" && command instanceof DescribeStackEventsCommand)
+        )
+          throw new Error("CloudFormation unavailable: secret-credential");
+        if (eventPage && command instanceof DescribeStackEventsCommand) return eventPage(command);
+        return aws.cloudFormation(credentials).send(command);
+      },
+    })) as never,
     team: (job) => store.team(job.teamId),
     sleep: async () => undefined,
     pollIntervalMs: 0,
@@ -478,4 +506,156 @@ test("recovery marks a job failed when its stack was deleted outside the host", 
   const recovered = store.jobs(eventId);
   expect(recovered.map((job) => job.status)).toEqual(["FAILED", "FAILED"]);
   expect(recovered[0]?.error).toContain("is gone");
+});
+
+test("participant deployment logs use only their own retained stack and reject another team's job", async () => {
+  const { store, aws, service, admin } = await host();
+  const eventId = await createEvent(admin);
+  await admin("POST", `/events/${eventId}/deploy`);
+  await service.drain();
+  const [own, other] = store.jobs(eventId);
+  if (!own || !other) throw new Error("Expected both deployed jobs.");
+  const token = store.team(own.teamId).loginKey;
+  const request = (jobId: string) =>
+    apiRequest({
+      method: "GET",
+      path: "/portal/me/deploy-logs",
+      token,
+      query: new URLSearchParams({ jobId }),
+    });
+  const result = await service.participant(request(own.jobId));
+  expect(result.status).toBe(200);
+  const body = result.body as { jobId: string; complete: boolean; entries: { message: string }[] };
+  expect(body.jobId).toBe(own.jobId);
+  expect(body.complete).toBe(true);
+  expect(body.entries).toHaveLength(1);
+  expect(body.entries[0]?.message).toContain("CREATE_COMPLETE");
+  expect(JSON.stringify(body)).not.toContain("TC{");
+  await expect(service.participant(request(other.jobId))).rejects.toMatchObject({ status: 403 });
+  const stack = aws.stacks.find((entry) => entry.tags.some((tag) => tag.Value === own.jobId));
+  if (!stack) throw new Error("Expected owned stack.");
+  stack.tags = [{ Key: "tenkacloud:job", Value: other.jobId }];
+  await expect(service.participant(request(own.jobId))).rejects.toThrow("does not belong");
+});
+
+test.each(["sts", "describe", "events"] as const)(
+  "participant view retains problem and score when deployment logs fail at %s",
+  async (at) => {
+    const logFailure: { at?: "sts" | "describe" | "events" } = {};
+    const { store, service, admin } = await host(logFailure);
+    const eventId = await createEvent(admin, [TEAM_A]);
+    await admin("POST", `/events/${eventId}/deploy`);
+    await service.drain();
+    await admin("PATCH", `/events/${eventId}/schedule`, { startNow: true });
+    const [job] = store.jobs(eventId);
+    if (!job) throw new Error("Expected a deployed job.");
+    const team = store.team(job.teamId);
+    store.putTeam({
+      ...team,
+      scoreEvents: [
+        {
+          jobId: job.jobId,
+          problemId: job.problemId,
+          source: "flag",
+          points: 37,
+          result: "ok",
+          occurredAt: new Date().toISOString(),
+        },
+      ],
+    });
+    const request = (path: string, query = new URLSearchParams()) =>
+      apiRequest({ method: "GET", path, token: team.loginKey, query });
+    const before = await service.participant(request("/portal/me"));
+    const expected = (before.body as { problems: ParticipantProblemView[] }).problems[0];
+    expect(expected?.score).toBe(37);
+    expect(expected?.instructions).toBeTruthy();
+    logFailure.at = at;
+    const response = await service.participant(request("/portal/me"));
+    expect(response.status).toBe(200);
+    const problem = (response.body as { problems: ParticipantProblemView[] }).problems[0];
+    expect(problem).toMatchObject({
+      problemId: job.problemId,
+      instructions: expected?.instructions,
+      score: 37,
+      status: "COMPLETE",
+      stackOutputs: expected?.stackOutputs,
+      deployLog: { entries: [], error: "unavailable" },
+    });
+    expect(JSON.stringify(response.body)).not.toContain("secret-credential");
+    await expect(
+      service.participant(
+        request("/portal/me/deploy-logs", new URLSearchParams({ jobId: job.jobId })),
+      ),
+    ).rejects.toThrow("unavailable");
+    delete logFailure.at;
+    const recovered = await service.participant(request("/portal/me"));
+    expect(
+      (recovered.body as { problems: ParticipantProblemView[] }).problems[0]?.deployLog,
+    ).toEqual(expected?.deployLog);
+  },
+);
+
+test("participant log endpoint paginates every aggregated event before following the provider cursor", async () => {
+  const requestedTokens: (string | undefined)[] = [];
+  const { store, service, admin } = await host({}, (command) => {
+    requestedTokens.push(command.input.NextToken);
+    const later = command.input.NextToken === "provider-next";
+    if (command.input.NextToken && !later) throw new Error("Unexpected provider cursor.");
+    return {
+      StackEvents: Array.from({ length: later ? 7 : 251 }, (_, index) => ({
+        StackId: command.input.StackName,
+        StackName: "stack",
+        EventId: `${later ? "later" : "first"}-${index}`,
+        Timestamp: new Date((index + (later ? 251 : 0)) * 1000),
+        LogicalResourceId: `Resource${index + (later ? 251 : 0)}`,
+        ResourceType: "AWS::SSM::Parameter",
+        ResourceStatus: "CREATE_COMPLETE",
+      })),
+      ...(later ? {} : { NextToken: "provider-next" }),
+    };
+  });
+  const eventId = await createEvent(admin, [TEAM_A]);
+  await admin("POST", `/events/${eventId}/deploy`);
+  await service.drain();
+  const [job] = store.jobs(eventId);
+  if (!job) throw new Error("Expected a deployed job.");
+  const token = store.team(job.teamId).loginKey;
+  const read = (nextToken?: string, limit = "37") =>
+    service.participant(
+      apiRequest({
+        method: "GET",
+        path: "/portal/me/deploy-logs",
+        token,
+        query: new URLSearchParams({
+          jobId: job.jobId,
+          limit,
+          ...(nextToken ? { nextToken } : {}),
+        }),
+      }),
+    );
+  const entries: { id: string; message: string }[] = [];
+  let nextToken: string | undefined;
+  requestedTokens.length = 0;
+  for (let index = 0; index < 8; index++) {
+    const response = await read(nextToken);
+    expect(response.status).toBe(200);
+    const body = response.body as { entries: typeof entries; nextToken?: string };
+    expect(body.entries.length).toBeLessThanOrEqual(37);
+    entries.push(...body.entries);
+    nextToken = body.nextToken;
+    if (index < 7) expect(nextToken).toBeDefined();
+  }
+  expect(nextToken).toBeUndefined();
+  expect(entries).toHaveLength(258);
+  expect(new Set(entries.map((entry) => entry.id)).size).toBe(258);
+  expect(entries.at(-1)?.message).toContain("Resource257");
+  expect(requestedTokens).toEqual([...Array.from({ length: 7 }, () => undefined), "provider-next"]);
+  const forged = Buffer.from(JSON.stringify({ jobId: job.jobId, offset: 252 })).toString(
+    "base64url",
+  );
+  await expect(read(forged)).rejects.toMatchObject({ status: 400, kind: "invalid_next_token" });
+  await expect(read(undefined, "101")).rejects.toMatchObject({
+    status: 400,
+    kind: "invalid_limit",
+  });
 });

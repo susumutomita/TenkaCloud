@@ -16,6 +16,7 @@ import {
   COMPETITOR_ACCOUNT_ONBOARDING_URL,
   COMPETITOR_BOOTSTRAP_TEMPLATE_URL_FALLBACK,
 } from "../../lib/competitor-bootstrap";
+import { SimulatorConnectionNotice } from "./SimulatorConnectionNotice";
 
 /** How long the "Copied" confirmation stays lit after copying the full payload. */
 const COPIED_FEEDBACK_RESET_MS = 2_000;
@@ -36,6 +37,38 @@ export function SecretRevealModal({
   const t = useT();
   const [allCopied, setAllCopied] = useState(false);
   if (!secret) return null;
+  if (secret.simulator)
+    return (
+      <Modal
+        visible
+        onDismiss={onDismiss}
+        header={t("competitor_accounts.simulator_header")}
+        footer={
+          <Box float="right">
+            <Button variant="primary" onClick={onDismiss}>
+              {t("competitor_accounts.secret_modal_close")}
+            </Button>
+          </Box>
+        }
+      >
+        <SimulatorConnectionNotice simulator={secret.simulator} />
+      </Modal>
+    );
+  if (!secret.externalId)
+    return (
+      <Modal
+        visible
+        onDismiss={onDismiss}
+        header={t("competitor_accounts.secret_modal_header")}
+        footer={
+          <Box float="right">
+            <Button onClick={onDismiss}>{t("competitor_accounts.secret_modal_close")}</Button>
+          </Box>
+        }
+      >
+        <Alert type="error">{t("competitor_accounts.secret_missing")}</Alert>
+      </Modal>
+    );
   const effectiveTemplateUrl =
     templateUrl && templateUrl.length > 0
       ? templateUrl

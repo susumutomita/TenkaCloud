@@ -72,8 +72,11 @@ export class AwsDisruptionAdapter implements DisruptionAdapter {
   constructor(
     private readonly clients: AwsDisruptionClients,
     private readonly externalId: string,
+    private readonly unavailableReason?: string,
   ) {}
   private async client(target: DisruptionTarget): Promise<Ssm> {
+    // Retained recovery work also needs this capability; a failed job is not sufficient.
+    if (this.unavailableReason) throw new Error(this.unavailableReason);
     const assumed = await this.clients.sts.send(
       new AssumeRoleCommand({
         RoleArn: target.roleArn,
@@ -101,7 +104,9 @@ export class AwsDisruptionAdapter implements DisruptionAdapter {
       client?.destroy();
       return {
         kind: "rejected",
-        reason: "The role or current environment does not permit this operation.",
+        reason:
+          this.unavailableReason ??
+          "The role or current environment does not permit this operation.",
       };
     }
     try {
@@ -152,6 +157,7 @@ export class AwsDisruptionAdapter implements DisruptionAdapter {
       return {
         kind: "unknown",
         reason:
+          this.unavailableReason ??
           "SSM command completion is not known. Missing invocations can be eventually consistent.",
       };
     } finally {
@@ -194,7 +200,8 @@ export class AwsDisruptionAdapter implements DisruptionAdapter {
     } catch {
       return {
         kind: "unknown",
-        reason: "SSM command discovery failed; recovery remains required.",
+        reason:
+          this.unavailableReason ?? "SSM command discovery failed; recovery remains required.",
       };
     } finally {
       client?.destroy();

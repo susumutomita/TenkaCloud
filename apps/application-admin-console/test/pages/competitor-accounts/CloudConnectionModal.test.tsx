@@ -184,3 +184,23 @@ describe("common cloud connection entry", () => {
     await screen.findByText("team_cloud_credentials.registered");
   });
 });
+
+it("bypasses real cloud selection for a simulator connection", () => {
+  render(
+    <CloudConnectionModal
+      config={config}
+      onDismiss={vi.fn()}
+      onSuccess={vi.fn()}
+      simulator={{
+        endpoint: "http://127.0.0.1:4566",
+        awsAccountId: "000000000000",
+        bootstrapRoleName: "TenkaCloud-SimulatorDeploy-Role",
+      }}
+    />,
+  );
+  expect(screen.queryAllByRole("radio")).toHaveLength(0);
+  expect(screen.getByDisplayValue("000000000000")).toBeDisabled();
+  expect(screen.getByDisplayValue("TenkaCloud-SimulatorDeploy-Role")).toBeDisabled();
+  expect(screen.queryAllByRole("link")).toHaveLength(0);
+  expect(screen.queryByRole("button", { name: "cloud_connections.back" })).not.toBeInTheDocument();
+});

@@ -104,6 +104,37 @@ afterEach(() => {
 });
 
 describe("ProblemPanel deploy log privacy", () => {
+  it("shows and clears a log warning without hiding the saved score or submission", () => {
+    const problem: ParticipantProblemView = {
+      ...baseProblem,
+      status: "COMPLETE",
+      score: 37,
+      scoring: { kind: "flag", points: 100, flagSubmitted: false, hints: [] },
+      deployLog: { cursor: "", entries: [], error: "unavailable" },
+    };
+    const panel = (value: ParticipantProblemView) =>
+      withI18n(
+        <ProblemPanel
+          problem={value}
+          apiBaseUrl="https://api.example.com"
+          sessionToken="team-key"
+          onScored={async () => undefined}
+        />,
+      );
+    const { rerender } = render(panel(problem));
+    expect(
+      screen.getByText(/Deployment logs unavailable|デプロイログを取得できません/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("37 pt")).toBeInTheDocument();
+    expect(screen.getByTestId("flag-panel")).toBeInTheDocument();
+    rerender(panel({ ...problem, deployLog: { cursor: "", entries: [] } }));
+    expect(
+      screen.queryByText(/Deployment logs unavailable|デプロイログを取得できません/),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("37 pt")).toBeInTheDocument();
+    expect(screen.getByTestId("flag-panel")).toBeInTheDocument();
+  });
+
   it("should hide deploy job log entries while keeping deployment status visible", () => {
     render(
       withI18n(

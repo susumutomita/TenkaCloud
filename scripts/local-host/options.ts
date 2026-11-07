@@ -5,6 +5,7 @@ import { consoleAppliance } from "./console-appliance";
 import { DEFAULT_CONTAINER_LIMITS } from "./container-budget";
 import { parseDockerNetworkPool } from "./docker-networks";
 import { DEFAULT_GATEWAY_PORTS, gatewayPortsOverlap, parseGatewayPorts } from "./gateway-ports";
+import { simulatorSettings } from "./simulator-hosting";
 
 export function parseOptions(
   args: string[],
@@ -46,6 +47,10 @@ export function parseOptions(
       "behind-proxy": { type: "boolean", default: false },
       "unsafe-http": { type: "boolean", default: false },
       "aws-region": { type: "string" },
+      "simulator-endpoint": { type: "string" },
+      "simulator-token-file": { type: "string" },
+      "simulator-region": { type: "string" },
+      "simulator-bootstrap": { type: "boolean", default: false },
       help: {
         type: "boolean",
         short: "h",
@@ -88,7 +93,10 @@ export function parseOptions(
     throw new Error(
       "AWS problems require cloud hosting. --aws-region is no longer accepted by make local; use the reviewed make deploy workflow when cloud hosting is ready.",
     );
+  const simulator = simulatorSettings(values);
+  assertSimulatorOptions(values, simulator, hostname, Boolean(exposure || appliance));
   return {
+    ...(simulator ? { simulator } : {}),
     dataDirectory: resolve(values.data ?? joinDefault(repositoryRoot)),
     competitionNetwork: values["competition-network"],
     unsafeDockerLan: values["unsafe-docker-lan"],
@@ -113,6 +121,23 @@ export function parseOptions(
     build: !values["no-build"],
     help: values.help,
   };
+}
+
+function assertSimulatorOptions(
+  values: { "simulator-bootstrap"?: boolean; "vpn-peers"?: string; "behind-proxy"?: boolean },
+  simulator: ReturnType<typeof simulatorSettings>,
+  hostname: string,
+  publicSurface: boolean,
+): void {
+  if (values["simulator-bootstrap"] && !simulator)
+    throw new Error("--simulator-bootstrap requires the explicit simulator connection options.");
+  if (
+    simulator &&
+    (hostname !== "127.0.0.1" || publicSurface || values["vpn-peers"] || values["behind-proxy"])
+  )
+    throw new Error(
+      "Simulator hosting currently supports same-machine loopback participants only; LAN, VPN, public/proxy and console-appliance exposure are not supported.",
+    );
 }
 
 /** Select exact forwarded origins; this neither opens ports nor changes their visibility. */

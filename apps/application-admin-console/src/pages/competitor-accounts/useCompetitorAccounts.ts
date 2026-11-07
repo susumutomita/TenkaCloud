@@ -4,6 +4,7 @@ import {
   type CompetitorAccountSummary,
   deleteCompetitorAccount,
   listCompetitorAccounts,
+  type SimulatorConnectionInfo,
   verifyCompetitorAccount,
 } from "../../api/competitor-accounts-client";
 import type { AppConfig } from "../../config";
@@ -11,6 +12,7 @@ import { type FriendlyError, toFriendlyError } from "../../lib/friendly-error";
 
 export interface UseCompetitorAccountsResult {
   items: readonly CompetitorAccountSummary[] | null;
+  simulator?: SimulatorConnectionInfo;
   error: FriendlyError | null;
   verifyInFlight: string | null;
   deleteInFlight: boolean;
@@ -37,6 +39,7 @@ export function useCompetitorAccounts(config: AppConfig): UseCompetitorAccountsR
   const apiClient = useApiClient(config);
   const canMutate = canManageConnections(config, apiClient);
   const [items, setItems] = useState<readonly CompetitorAccountSummary[] | null>(null);
+  const [simulator, setSimulator] = useState<SimulatorConnectionInfo | undefined>();
   const [error, setError] = useState<FriendlyError | null>(null);
   const [verifyInFlight, setVerifyInFlight] = useState<string | null>(null);
   const [deleteInFlight, setDeleteInFlight] = useState(false);
@@ -51,6 +54,7 @@ export function useCompetitorAccounts(config: AppConfig): UseCompetitorAccountsR
     try {
       const res = await listCompetitorAccounts(apiClient);
       setItems(res.items);
+      setSimulator(res.simulator);
       setError(null);
     } catch (err) {
       setError(toFriendlyError(err));
@@ -136,6 +140,7 @@ export function useCompetitorAccounts(config: AppConfig): UseCompetitorAccountsR
 
   return {
     items,
+    simulator,
     error,
     verifyInFlight,
     deleteInFlight,

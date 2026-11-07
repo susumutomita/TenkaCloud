@@ -166,6 +166,12 @@ export interface CompetitorAccount {
 
 /** Supplied only when the host starts with AWS enabled; tests inject a local verifier. */
 export interface AccountConnection {
+  readonly simulator?: {
+    readonly endpoint: string;
+    readonly awsAccountId: string;
+    readonly bootstrapRoleName: string;
+    readonly region: string;
+  };
   readonly region: string;
   readonly operatorAccountId: string;
   readonly externalId: string;
@@ -318,6 +324,11 @@ export interface RuntimeEngine {
   pause(job: Job): Promise<void>;
   /** Restart a halted or running environment in place and wait until it is reachable. */
   resume(job: Job): Promise<void>;
+  deploymentLogs?(
+    context: Context,
+    jobId: string,
+    options?: import("./deployment-logs").DeploymentLogPageOptions,
+  ): Promise<import("./deployment-logs").DeploymentLogPage>;
   view(context: Context): Promise<Record<string, unknown>>;
   submit(context: Context, body: Record<string, unknown>): Promise<EngineResult>;
   /** Read the running exercise's verdict without recording scores or participant progress. */
