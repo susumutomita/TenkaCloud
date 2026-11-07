@@ -19,7 +19,10 @@ a browser, or Docker exercises, and does not demonstrate Hello World Battle.
   links under node_modules are permitted and only read.
 - An explicitly supplied executable TenkaCloud Simulator binary supporting native
   STS/IAM/CloudFormation/SSM, operator token files and deployment events. The
-  rehearsed native source is `7621daed957fee0dfda52544fb29f174cd765e37`.
+  native source tree used for the rehearsal is published in
+  [Simulator PR #442](https://github.com/susumutomita/TenkaCloudSimulator/pull/442),
+  commit `f6c05a68bf87ddf62411235ae2111e0fcb5559c5`. The publication commit has
+  the same source tree as the rehearsed local build; its commit metadata differs.
 - An explicitly supplied official AWS CLI **1.46.3** executable. Other versions
   are rejected by this narrowly pinned rehearsal. Python/boto3 is not required
   separately by the test (the installed CLI has its own runtime).
