@@ -105,9 +105,14 @@ const EXTERNAL_ID_PATTERN = /^[A-Za-z0-9_=,.@:/-]{16,128}$/u;
 
 /** Reviewed list: extending it requires reviewing the template's cost and blast radius. */
 const REVIEWED_STACK_PROBLEMS = [
-  { problemId: "hello-world", folder: "challenges", scoring: "flag" },
-  { problemId: "hello-world-battle", folder: "battles", scoring: "uptime-flat" },
+  { problemId: "hello-world", folder: "challenges", scoring: "flag", simulator: true },
+  { problemId: "hello-world-battle", folder: "battles", scoring: "uptime-flat", simulator: false },
 ] as const;
+
+/** Simulator support requires an unchanged-problem rehearsal, not just catalog discovery. */
+function simulatorProblemSupported(problemId: string): boolean {
+  return REVIEWED_STACK_PROBLEMS.some((entry) => entry.problemId === problemId && entry.simulator);
+}
 
 interface StackMetadata {
   skillEvidence?: unknown;
@@ -222,10 +227,15 @@ function stackProblem(
   };
 }
 
-export function cloudFormationCatalog(repositoryRoot: string): Problem[] {
+export function cloudFormationCatalog(
+  repositoryRoot: string,
+  options: { simulator?: boolean } = {},
+): Problem[] {
   return selectedCatalogSnapshots(repositoryRoot).flatMap(({ problemRoot: catalog, revision }) =>
-    REVIEWED_STACK_PROBLEMS.filter(({ folder, problemId }) =>
-      existsSync(join(catalog, folder, problemId, "metadata.json")),
+    REVIEWED_STACK_PROBLEMS.filter(
+      ({ folder, problemId, simulator }) =>
+        (!options.simulator || simulator) &&
+        existsSync(join(catalog, folder, problemId, "metadata.json")),
     ).map((entry) => stackProblem(catalog, entry, revision)),
   );
 }
@@ -238,6 +248,7 @@ export class CloudFormationEngine implements RuntimeEngine {
     job: Job;
     assertCurrent: () => void;
   }): Promise<ParticipantAwsAccess> {
+    this.assertSimulatorSupport(args.job);
     return participantAwsAccess({
       ...args,
       team: this.options.team(args.job),
@@ -255,7 +266,20 @@ export class CloudFormationEngine implements RuntimeEngine {
   ) {
     if (!EXTERNAL_ID_PATTERN.test(options.externalId))
       throw new Error("The host ExternalId must be 16–128 characters of [A-Za-z0-9_=,.@:/-].");
-    this.problems = cloudFormationCatalog(repositoryRoot);
+    this.problems = cloudFormationCatalog(repositoryRoot, {
+      simulator: Boolean(options.simulatorEndpoint),
+    });
+  }
+
+  private assertSimulatorSupport(job: Job): void {
+    if (!this.options.simulatorEndpoint) return;
+    const definition = JSON.parse(job.definition) as StackDefinition;
+    if (job.problemId !== definition.problemId || !simulatorProblemSupported(definition.problemId))
+      throw new HostError(
+        409,
+        "This AWS problem is unavailable in simulator mode. Only Hello World is currently supported.",
+        "simulator_problem_unsupported",
+      );
   }
 
   disruptionAdapter(): AwsDisruptionAdapter {
@@ -264,6 +288,10 @@ export class CloudFormationEngine implements RuntimeEngine {
     return new AwsDisruptionAdapter(
       { sts: this.options.sts, ssm: this.options.ssm },
       this.options.externalId,
+      // Only original Hello World is supported; it has no command-disruption runtime.
+      this.options.simulatorEndpoint
+        ? "AWS disruptions are unavailable in simulator mode. Retained operations require recovery in their original supported hosting mode."
+        : undefined,
     );
   }
 
@@ -280,6 +308,7 @@ export class CloudFormationEngine implements RuntimeEngine {
   }
 
   async start(job: Job, retain: (unit: string | null) => void): Promise<void> {
+    this.assertSimulatorSupport(job);
     const definition = JSON.parse(job.definition) as StackDefinition;
     const team = this.options.team(job);
     const aws = awsTargetOf(team);
@@ -473,7 +502,11 @@ export class CloudFormationEngine implements RuntimeEngine {
       region: unit?.region ?? this.options.region,
       awsAccountId: awsTargetOf(context.team).accountId,
       ...(this.options.simulatorEndpoint
-        ? { accessCapabilities: ["cli-credentials"] as const }
+        ? {
+            accessCapabilities: simulatorProblemSupported(definition.problemId)
+              ? (["cli-credentials"] as const)
+              : [],
+          }
         : {}),
       stackOutputs: Object.fromEntries(
         Object.entries(unit?.outputs ?? {}).filter(
@@ -604,6 +637,8 @@ export class CloudFormationEngine implements RuntimeEngine {
   }
 
   private client(unit: StackUnit, job: Job): Pick<CloudFormationClient, "send"> {
+    // Saved jobs bypass the current catalog, including cleanup before a deployment retry.
+    this.assertSimulatorSupport(job);
     const credentials: CredentialsProvider = async () => {
       const assumed = await assumeRoleWithExternalId(
         { sts: this.options.sts },

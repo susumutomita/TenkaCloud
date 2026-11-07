@@ -12,7 +12,6 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { computeContentDigest } from "../../../packages/problem-sdk/src/content-digest";
 import { copyLocalCatalog } from "../../problem-pack/local-catalog";
 import { sealSourcePermissions } from "../../problem-pack/source-permissions";
@@ -33,6 +32,7 @@ import {
   waitForFixtureReady,
   withinFixtureDeadline,
 } from "../integration/simulator-fixture-process";
+import { simulatorFixtureChild } from "./simulator-fixture-child";
 
 const directories: string[] = [];
 afterEach(() => {
@@ -70,26 +70,10 @@ function catalogFixture() {
 }
 
 /** A FIFO/device regression must fail this subprocess's deadline, never block the test runner. */
-async function expectBoundedCatalogRejection(expression: string): Promise<void> {
-  const helper = fileURLToPath(
-    new URL("../integration/simulator-fixture-catalog.ts", import.meta.url),
-  );
-  const processHelper = fileURLToPath(
-    new URL("../integration/simulator-fixture-process.ts", import.meta.url),
-  );
-  const child = Bun.spawn(
-    [
-      process.execPath,
-      "-e",
-      `
-    import * as catalog from ${JSON.stringify(helper)};
-    import {SimulatorFixtureError} from ${JSON.stringify(processHelper)};
-    try { ${expression}; process.exit(2); }
-    catch (error) { process.exit(error instanceof SimulatorFixtureError ? 0 : 3); }
-  `,
-    ],
-    { stdout: "pipe", stderr: "pipe" },
-  );
+async function expectBoundedCatalogRejection(
+  ...args: Parameters<typeof simulatorFixtureChild>
+): Promise<void> {
+  const child = Bun.spawn(simulatorFixtureChild(...args), { stdout: "pipe", stderr: "pipe" });
   const stdout = new Response(child.stdout).text();
   const stderr = new Response(child.stderr).text();
   try {
@@ -122,13 +106,17 @@ test("fixture entry paths reject a symlinked selection before reading its synthe
   const target = join(fixture.base, "synthetic-selection.json");
   renameSync(fixture.lock, target);
   symlinkSync(target, fixture.lock);
-  const root = JSON.stringify(fixture.repository);
-  await expectBoundedCatalogRejection(`catalog.readFixtureCatalogSelection(${root})`);
+  await expectBoundedCatalogRejection("catalog-read-selection", fixture.repository);
   await expectBoundedCatalogRejection(
-    `catalog.copyFixtureSelection(${root}, ${JSON.stringify(fixture.runtime)})`,
+    "catalog-copy-selection",
+    fixture.repository,
+    fixture.runtime,
   );
   await expectBoundedCatalogRejection(
-    `catalog.prepareFixtureCatalog(${root}, ${JSON.stringify(fixture.runtime)}, ${JSON.stringify(fixture.scratch)})`,
+    "catalog-prepare",
+    fixture.repository,
+    fixture.runtime,
+    fixture.scratch,
   );
   expect(existsSync(fixture.runtime)).toBe(false);
   expect(readFileSync(target, "utf8")).toBe(fixture.identity);
@@ -141,33 +129,33 @@ for (const relative of ["", ".tenkacloud", ".tenkacloud/catalog-store"]) {
     const target = join(fixture.base, "synthetic-directory-target");
     renameSync(path, target);
     symlinkSync(target, path, "dir");
-    await expectBoundedCatalogRejection(
-      `catalog.readFixtureCatalogSelection(${JSON.stringify(fixture.repository)})`,
-    );
+    await expectBoundedCatalogRejection("catalog-read-selection", fixture.repository);
   });
 }
 
 test("FIFO, directory, oversized and device selections are promptly refused before reading", async () => {
   const fixture = catalogFixture();
-  const root = JSON.stringify(fixture.repository);
   rmSync(fixture.lock);
   const mkfifo = Bun.which("mkfifo", { PATH: "/usr/bin:/bin" });
   if (!mkfifo) throw new Error("POSIX fixture tests require mkfifo.");
   expect(
     Bun.spawnSync([mkfifo, fixture.lock], { stdout: "ignore", stderr: "ignore" }).exitCode,
   ).toBe(0);
-  await expectBoundedCatalogRejection(`catalog.readFixtureCatalogSelection(${root})`);
+  await expectBoundedCatalogRejection("catalog-read-selection", fixture.repository);
   await expectBoundedCatalogRejection(
-    `catalog.verifyFixtureSources(${root}, ${JSON.stringify(fixture.scratch)}, ${JSON.stringify(fixture.identity)})`,
+    "catalog-verify-sources",
+    fixture.repository,
+    fixture.scratch,
+    fixture.identity,
   );
   rmSync(fixture.lock);
   mkdirSync(fixture.lock);
-  await expectBoundedCatalogRejection(`catalog.readFixtureCatalogSelection(${root})`);
+  await expectBoundedCatalogRejection("catalog-read-selection", fixture.repository);
   rmSync(fixture.lock, { recursive: true });
   writeFileSync(fixture.lock, Buffer.alloc(1024 * 1024 + 1, 120));
-  await expectBoundedCatalogRejection(`catalog.readFixtureCatalogSelection(${root})`);
+  await expectBoundedCatalogRejection("catalog-read-selection", fixture.repository);
   // /dev/null is a nonsensitive real device. fstat must reject it before the byte reader runs.
-  await expectBoundedCatalogRejection('catalog.readFixtureCatalogLock("/dev/null")');
+  await expectBoundedCatalogRejection("catalog-read-lock", "/dev/null");
 }, 12_000);
 
 for (const relative of ["snapshots", "snapshot-target"]) {
@@ -179,7 +167,9 @@ for (const relative of ["snapshots", "snapshot-target"]) {
     renameSync(path, target);
     symlinkSync(target, path, "dir");
     await expectBoundedCatalogRejection(
-      `catalog.copyFixtureSelection(${JSON.stringify(fixture.repository)}, ${JSON.stringify(fixture.runtime)})`,
+      "catalog-copy-selection",
+      fixture.repository,
+      fixture.runtime,
     );
     expect(existsSync(fixture.runtime)).toBe(false);
   });
@@ -336,19 +326,10 @@ test("readiness failure stops a real synthetic child and never returns its priva
   const root = directory();
   const started = join(root, "started");
   const closed = join(root, "closed");
-  const child = spawnFixtureProcess(
-    [
-      process.execPath,
-      "-e",
-      `
-    import {writeFileSync} from 'node:fs';
-    process.on('SIGTERM', () => { writeFileSync(${JSON.stringify(closed)}, 'closed'); process.exit(0); });
-    console.log('synthetic-private-secret'); console.error('synthetic-private-secret');
-    writeFileSync(${JSON.stringify(started)}, 'started'); await Bun.sleep(10000);
-  `,
-    ],
-    { cwd: root, environment: fixtureEnvironment(root, dirname(process.execPath)) },
-  );
+  const child = spawnFixtureProcess(simulatorFixtureChild("readiness", started, closed), {
+    cwd: root,
+    environment: fixtureEnvironment(root, dirname(process.execPath)),
+  });
   try {
     await waitForFixtureReady(child, () => Promise.resolve(existsSync(started)), 2000, "Synthetic");
     await expect(
@@ -363,33 +344,34 @@ test("readiness failure stops a real synthetic child and never returns its priva
   await child.stop();
 });
 
-test("process-group cleanup stops a real synthetic descendant after its launcher exits", async () => {
-  const root = directory();
-  const started = join(root, "started");
-  const closed = join(root, "closed");
-  const descendant = `import {writeFileSync} from 'node:fs'; const server = Bun.serve({hostname:'127.0.0.1',port:0,fetch:()=>new Response('alive')}); process.on('SIGTERM', () => { writeFileSync(${JSON.stringify(closed)}, 'closed'); process.exit(0); }); writeFileSync(${JSON.stringify(started)}, String(server.port)); await Bun.sleep(10000);`;
-  const child = spawnFixtureProcess(
-    [
-      process.execPath,
-      "-e",
-      `
-    import {spawn} from 'node:child_process';
-    const child = spawn(process.execPath, ['-e', ${JSON.stringify(descendant)}], {stdio:'ignore'});
-    child.unref(); await Bun.sleep(250); process.exit(0);
-  `,
-    ],
-    { cwd: root, environment: fixtureEnvironment(root, dirname(process.execPath)) },
-  );
-  try {
-    await waitForFixtureReady(child, () => Promise.resolve(existsSync(started)), 2000, "Synthetic");
-    await withinFixtureDeadline(child.exited, 2000, "Synthetic launcher did not exit.");
-  } finally {
-    await child.stop();
-  }
-  const port = readFileSync(started, "utf8");
-  await expect(directWebTransport(new URL(`http://127.0.0.1:${port}/`), {})).rejects.toThrow();
-  expect(child.hasExited()).toBe(true);
-});
+for (const name of ["ordinary", "path with spaces ' \" ` ; process.exit(9)"]) {
+  test(`process-group cleanup stops a real descendant after its launcher exits (${name})`, async () => {
+    const root = join(directory(), name);
+    mkdirSync(root);
+    const started = join(root, "started");
+    const closed = join(root, "closed");
+    const child = spawnFixtureProcess(simulatorFixtureChild("orphan-launcher", started, closed), {
+      cwd: root,
+      environment: fixtureEnvironment(root, dirname(process.execPath)),
+    });
+    try {
+      await waitForFixtureReady(
+        child,
+        () => Promise.resolve(existsSync(started)),
+        2000,
+        "Synthetic",
+      );
+      expect(
+        await withinFixtureDeadline(child.exited, 2000, "Synthetic launcher did not exit."),
+      ).toBe(0);
+    } finally {
+      await child.stop();
+    }
+    const port = readFileSync(started, "utf8");
+    await expect(directWebTransport(new URL(`http://127.0.0.1:${port}/`), {})).rejects.toThrow();
+    expect(child.hasExited()).toBe(true);
+  });
+}
 
 test("failed version checks do not expose executable output and have finite deadlines", async () => {
   const root = directory();
@@ -447,15 +429,8 @@ test("fixture shell timeout kills a descendant retaining stdout after its shell 
   const ready = join(root, "shell-descendant.json");
   const group = join(root, "shell-group");
   const literal = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
-  const descendant = `
-    import {writeFileSync} from 'node:fs';
-    const server = Bun.serve({hostname:'127.0.0.1',port:0,fetch:()=>new Response('alive')});
-    process.on('SIGTERM', () => {});
-    console.error('synthetic-private-token');
-    writeFileSync(${JSON.stringify(ready)}, JSON.stringify({port:server.port}));
-    await Bun.sleep(60000);
-  `;
-  const script = `printf '%s' "$$" > ${literal(group)}\n${literal(process.execPath)} -e ${literal(descendant)} &\nexit 0\n`;
+  const command = simulatorFixtureChild("shell-descendant", ready).map(literal).join(" ");
+  const script = `printf '%s' "$$" > ${literal(group)}\n${command} &\nexit 0\n`;
   try {
     await expect(
       fixtureShellOutput(script, {
@@ -484,51 +459,10 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     const root = directory();
     const state = join(root, "private-state");
     const ready = join(root, "ready.json");
-    const descendantReady = join(root, "descendant.json");
-    const helper = fileURLToPath(
-      new URL("../integration/simulator-fixture-process.ts", import.meta.url),
-    );
-    const descendant = `
-      import {writeFileSync} from 'node:fs';
-      const server = Bun.serve({hostname:'127.0.0.1',port:0,fetch:()=>new Response('descendant')});
-      writeFileSync(${JSON.stringify(descendantReady)}, JSON.stringify({pid:process.pid,port:server.port}));
-      process.on('SIGTERM', () => {}); // Require bounded SIGKILL escalation for this descendant.
-      await Bun.sleep(60000);
-    `;
-    const child = `
-      import {writeFileSync,existsSync,readFileSync} from 'node:fs';
-      import {spawn} from 'node:child_process';
-      spawn(process.execPath, ['-e', ${JSON.stringify(descendant)}], {stdio:'ignore'});
-      const server = Bun.serve({hostname:'127.0.0.1',port:0,fetch:()=>new Response('child')});
-      while(!existsSync(${JSON.stringify(descendantReady)})) await Bun.sleep(10);
-      writeFileSync(${JSON.stringify(ready)}, JSON.stringify({pid:process.pid,port:server.port,descendant:JSON.parse(readFileSync(${JSON.stringify(descendantReady)},'utf8')).port}));
-      console.error('synthetic-private-token');
-      process.on('SIGTERM', () => {}); // Keep the launcher alive until the bounded escalation.
-      await Bun.sleep(60000);
-    `;
-    const harness = `
-      import {mkdirSync,rmSync,writeFileSync} from 'node:fs';
-      import {registerFixtureInterruptCleanup,fixtureCommandOutput,waitForFixtureOperation} from ${JSON.stringify(helper)};
-      const children = new Set();
-      let stopping;
-      const unregister = registerFixtureInterruptCleanup(() => stopping ??= (async () => {
-        await Promise.all([...children].map(child => child.stop()));
-        rmSync(${JSON.stringify(state)}, {recursive:true,force:true});
-      })().finally(() => unregister()));
-      registerFixtureInterruptCleanup(async () => {
-        await Bun.sleep(250);
-        writeFileSync(${JSON.stringify(join(root, "all-cleanups-completed"))}, 'completed');
-      });
-      mkdirSync(${JSON.stringify(state)});
-      writeFileSync(${JSON.stringify(join(state, "token"))}, 'synthetic-private-token');
-      // Interrupt while setup awaits a subprocess, before a simulator/host handle can be returned.
-      await waitForFixtureOperation(fixtureCommandOutput(${JSON.stringify([process.execPath, "-e", child])}, {
-        cwd:${JSON.stringify(root)},environment:{PATH:'/usr/bin:/bin',HOME:${JSON.stringify(state)}},
-        onSpawn:child => children.add(child),
-      }));
-      console.log('must not resume after interruption');
-    `;
-    const parent = Bun.spawn([process.execPath, "-e", harness], { stdout: "pipe", stderr: "pipe" });
+    const parent = Bun.spawn(simulatorFixtureChild("interrupt-harness", root), {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
     const stdout = new Response(parent.stdout).text();
     const stderr = new Response(parent.stderr).text();
     let ports: { pid: number; port: number; descendant: number } | undefined;
