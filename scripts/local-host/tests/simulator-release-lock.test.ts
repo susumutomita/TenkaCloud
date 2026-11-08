@@ -16,6 +16,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ensureOfficialSimulatorBinary } from "../simulator-release-lock";
 
+const releaseListUrl =
+  "https://api.github.com/repos/susumutomita/TenkaCloudSimulator/releases?per_page=100";
 const roots: string[] = [];
 afterEach(async () => {
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
@@ -50,9 +52,7 @@ function transport(releases = [fixture()]) {
   const requests: string[] = [];
   const fetch = async (url: string, _init: RequestInit) => {
     requests.push(url);
-    if (
-      url === "https://api.github.com/repos/susumutomita/TenkaCloudSimulator/releases?per_page=100"
-    )
+    if (url === releaseListUrl)
       return Response.json(
         releases.map((r) => ({ tag_name: r.version, draft: false, prerelease: false })),
       );
@@ -138,7 +138,7 @@ test("missing cached binary retrieves locked version without release discovery; 
   await rm(path);
   deps.requests.length = 0;
   await ensureOfficialSimulatorBinary(options, deps);
-  expect(deps.requests.some((url) => url.includes("api.github.com"))).toBe(false);
+  expect(deps.requests.some((url) => url === releaseListUrl)).toBe(false);
   await writeFile(path, "corrupt");
   await expect(ensureOfficialSimulatorBinary(options, deps)).rejects.toThrow("checksum mismatch");
 });
@@ -215,7 +215,7 @@ test("discovery ignores prereleases and drafts and chooses semantic version orde
   const options = await setup();
   const deps = transport([fixture("v0.9.0"), fixture("v0.10.0")]);
   const fetch = async (url: string, init: RequestInit) =>
-    url.includes("api.github.com")
+    url === releaseListUrl
       ? Response.json([
           { tag_name: "v9.0.0", draft: true, prerelease: false },
           { tag_name: "v8.0.0-rc.1", draft: false, prerelease: true },
