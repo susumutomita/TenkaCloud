@@ -682,7 +682,13 @@ export class HostStore {
           expires: number;
         }
       | undefined;
-    if (!row || row.expires <= now || row.lastSeen + 15 * 60 * 1000 <= now)
+    // Local organizers spend long stretches in problem/Simulator tabs. Their sessions keep
+    // the issued eight-hour deadline; account/SAML sessions retain the shorter idle limit.
+    if (
+      !row ||
+      row.expires <= now ||
+      (row.authMethod !== "host-key" && row.lastSeen + 15 * 60 * 1000 <= now)
+    )
       throw new HostError(401, "Host session expired or invalid.");
     if (row.authMethod === "host-key") {
       if (

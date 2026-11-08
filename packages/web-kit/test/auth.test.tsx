@@ -157,6 +157,24 @@ describe("AuthProvider idle timeout (#859)", () => {
     });
     expect(beginLogoutMock).toHaveBeenCalledTimes(1);
   });
+
+  it("uses the local competition timeout without changing the cloud default", async () => {
+    render(
+      <AuthProvider config={config} idleTimeoutMs={8 * 60 * 60_000}>
+        <SignedIn tokens={validTokens} />
+      </AuthProvider>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(8 * 60 * 60_000 - 1);
+    });
+    expect(screen.getByTestId("tokens")).toHaveTextContent("has-tokens");
+    expect(beginLogoutMock).not.toHaveBeenCalled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(screen.getByTestId("tokens")).toHaveTextContent("no-tokens");
+    expect(beginLogoutMock).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("AuthProvider login delegation", () => {

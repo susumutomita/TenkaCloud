@@ -68,7 +68,7 @@ function LoginRoute({ config }: { config: AppConfig }) {
 }
 
 /**
- * A local host session has an absolute lifetime in addition to the shared idle logout.
+ * A local host session lasts at most eight hours, including time spent in other tabs.
  * Sign out when it ends instead of letting every later
  * request fail with 401; the event and its results are unaffected.
  */
@@ -101,7 +101,7 @@ function LocalHostSessionReload() {
 
 export function App({ config }: { config: AppConfig }) {
   return (
-    <AuthProvider config={config}>
+    <AuthProvider config={config} idleTimeoutMs={isLocalHost(config) ? 8 * 60 * 60_000 : undefined}>
       {/* Issue #1954: demo mode は Cognito をスキップして mock session を注入する。 */}
       <DemoSessionBootstrap config={config} />
       {isLocalHost(config) && <LocalHostSessionExpiry />}

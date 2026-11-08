@@ -305,12 +305,16 @@ test("password verification already in flight cannot mint a session after migrat
   }
 });
 
-test("host-key sessions enforce idle and absolute expiry", async () => {
+test("host-key sessions survive time in other tabs but still enforce absolute expiry", async () => {
   const f = fixture();
   try {
     const key = enable(f.store);
     const idle = await f.login(key);
-    f.advance(15 * 60_000);
+    f.advance(60 * 60_000);
+    expect((await f.call("GET", "/events", {}, idle.idToken)).status).toBe(200);
+    f.advance(7 * 60 * 60_000 - 1);
+    expect((await f.call("GET", "/host/me", {}, idle.idToken)).status).toBe(200);
+    f.advance(1);
     expect(await rejectedStatus(f.call("GET", "/events", {}, idle.idToken))).toBe(401);
     const absolute = await f.login(key);
     for (let minute = 10; minute < 8 * 60; minute += 10) {
@@ -319,6 +323,19 @@ test("host-key sessions enforce idle and absolute expiry", async () => {
     }
     f.advance(10 * 60_000);
     expect(await rejectedStatus(f.call("GET", "/events", {}, absolute.idToken))).toBe(401);
+  } finally {
+    f.store.close();
+  }
+});
+
+test("organizer account sessions retain their fifteen-minute idle expiry", async () => {
+  const f = fixture();
+  try {
+    const token = await bootstrapOrganizer(f.service, f.signingKey);
+    f.advance(15 * 60_000 - 1);
+    expect((await f.call("GET", "/host/me", {}, token)).status).toBe(200);
+    f.advance(15 * 60_000);
+    expect(await rejectedStatus(f.call("GET", "/host/me", {}, token))).toBe(401);
   } finally {
     f.store.close();
   }

@@ -57,9 +57,12 @@ const IDLE_EVENTS = ["mousedown", "keydown", "touchstart", "focus", "scroll"] as
 export function AuthProvider({
   config,
   children,
+  idleTimeoutMs = IDLE_TIMEOUT_MS,
 }: {
   config: CognitoOAuthConfig;
   children: ReactNode;
+  /** Local competitions use their server-issued eight-hour lifetime instead of the cloud idle limit. */
+  idleTimeoutMs?: number;
 }) {
   const [tokens, setTokensState] = useState<TokenSet | null>(null);
   const [ready, setReady] = useState(false);
@@ -85,7 +88,7 @@ export function AuthProvider({
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
       idleTimerRef.current = setTimeout(() => {
         logout();
-      }, IDLE_TIMEOUT_MS);
+      }, idleTimeoutMs);
     };
     resetTimer();
     for (const evt of IDLE_EVENTS) {
@@ -100,7 +103,7 @@ export function AuthProvider({
         window.removeEventListener(evt, resetTimer);
       }
     };
-  }, [tokens, logout]);
+  }, [tokens, logout, idleTimeoutMs]);
 
   const value = useMemo<AuthState>(
     () => ({

@@ -2,7 +2,7 @@
  * Issue #3226: the organizer's journey through the normal console in local-host mode, against
  * a stubbed host API (the same wire shapes `scripts/local-host/service.ts` serves).
  */
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -98,6 +98,7 @@ beforeEach(() => {
   sessionStorage.clear();
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -186,6 +187,33 @@ describe("organizer journey in local-host mode", () => {
         },
       });
     });
+  });
+
+  it("keeps the local organizer signed in during an hour in another tab", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    const fetchMock = stubHost();
+    render(
+      <I18nProvider>
+        <MemoryRouter initialEntries={["/login"]}>
+          <App config={config} />
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+    fireEvent.change(screen.getByLabelText("Organizer key"), {
+      target: { value: "synthetic-organizer-key" },
+    });
+    await act(async () => {
+      fireEvent.submit(document.querySelector("form") as HTMLFormElement);
+    });
+    expect(screen.getByRole("heading", { name: "Events", level: 1 })).toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60 * 60_000);
+    });
+    expect(screen.getByRole("heading", { name: "Events", level: 1 })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Organizer key")).toBeNull();
+    expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith("/oauth2/revoke"))).toBe(
+      false,
+    );
   });
 
   it("signs the organizer out when the host session's absolute lifetime ends", async () => {
