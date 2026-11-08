@@ -6,6 +6,7 @@ import { STSClient } from "@aws-sdk/client-sts";
 import { normalizeSimulatorEndpointUrl } from "@tenkacloud/portal-contracts";
 import { connectCloudHosting } from "./cloud-hosting";
 import { bootstrapSimulatorRole, SIMULATOR_DEPLOY_ROLE } from "./simulator-bootstrap";
+import { connectSimulatorConsole } from "./simulator-console";
 
 export type SimulatorSettings = {
   readonly endpoint: string;
@@ -169,8 +170,14 @@ export async function connectSimulatorHosting(
   const secretAccessKey =
     "tokenFile" in settings ? readSimulatorToken(settings.tokenFile) : settings.readToken();
   const { endpoint, region } = settings;
+  const simulatorConsole = await connectSimulatorConsole(
+    endpoint,
+    secretAccessKey,
+    assertSimulatorProxyDisabled,
+  );
   const connection = await connectCloudHosting(root, directory, region, {
     simulatorEndpoint: endpoint,
+    simulatorConsole,
     sts: guardedSimulatorClient(
       new STSClient({
         endpoint,

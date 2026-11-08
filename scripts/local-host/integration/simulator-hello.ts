@@ -134,7 +134,11 @@ async function participantRead(
   );
   const problem = view.problems.find((entry) => entry.problemId === "hello-world");
   assert(problem, "Participant Hello World view is missing.");
-  assert.deepEqual(problem.accessCapabilities, ["cli-credentials"]);
+  assert(
+    JSON.stringify(problem.accessCapabilities) === JSON.stringify(["cli-credentials"]) ||
+      JSON.stringify(problem.accessCapabilities) === JSON.stringify(["console", "cli-credentials"]),
+    "Expected only native CLI access and, on compatible versions, participant Console access.",
+  );
   assert(!("ParameterConsoleUrl" in problem.stackOutputs), "Real AWS console link was exposed.");
   const name = problem.stackOutputs.ParameterName;
   assert(name, "Parameter name is missing.");

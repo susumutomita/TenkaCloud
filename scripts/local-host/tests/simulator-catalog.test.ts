@@ -29,7 +29,7 @@ afterEach(() => {
   for (const close of cleanup.splice(0)) close();
 });
 
-function host(simulator = true) {
+function host(simulator = true, consoleReady = false) {
   const directory = mkdtempSync(join(tmpdir(), "tenka-simulator-catalog-"));
   const store = new HostStore(new Database(":memory:"));
   cleanup.push(() => {
@@ -43,6 +43,9 @@ function host(simulator = true) {
   const operatorAccountId = mock(async () => OPERATOR_ACCOUNT);
   const cloud = new CloudFormationEngine(root, {
     ...(simulator ? { simulatorEndpoint: "http://127.0.0.1:4566" } : {}),
+    ...(consoleReady
+      ? { simulatorConsole: async () => "http://127.0.0.1:4566/_simulator/login" }
+      : {}),
     region: "ap-northeast-1",
     externalId: "fixture-external-id-0123456789",
     operatorAccountId,
@@ -71,7 +74,11 @@ function host(simulator = true) {
 
 type Host = ReturnType<typeof host>;
 
-function savedJob(fixture: Host, problemId = "hello-world-battle"): Context & { job: Job } {
+function savedJob(
+  fixture: Host,
+  problemId = "hello-world-battle",
+  parameterName?: string,
+): Context & { job: Job } {
   const problem = cloudFormationCatalog(root).find((entry) => entry.problemId === problemId);
   if (!problem) throw new Error(`Missing reviewed problem ${problemId}`);
   const now = Date.now();
@@ -122,6 +129,7 @@ function savedJob(fixture: Host, problemId = "hello-world-battle"): Context & { 
       stackName: "retained-stack",
       stackId: "arn:aws:cloudformation:ap-northeast-1:000000000000:stack/retained-stack/1",
       outputs: {
+        ...(parameterName ? { ParameterName: parameterName } : {}),
         ParticipantViewerRoleArn: "arn:aws:iam::000000000000:role/retained-viewer",
         ParameterValue: "retained-flag",
         Ec2HostHint: "retained-host",
@@ -220,6 +228,24 @@ test.each(["job", "definition"] as const)(
       job.definition = JSON.stringify({ ...JSON.parse(job.definition), problemId: "hello-world" });
     await expect(fixture.engine.start(job, mock())).rejects.toMatchObject(unsupported);
     expectNoAws(fixture);
+  },
+);
+
+test.each([
+  { consoleReady: false, parameterName: "/own/flag", capabilities: ["cli-credentials"] },
+  { consoleReady: true, parameterName: undefined, capabilities: ["cli-credentials"] },
+  { consoleReady: true, parameterName: "/own/flag", capabilities: ["console", "cli-credentials"] },
+])(
+  "Simulator Console capability requires both native support and own retained target ($consoleReady, $parameterName)",
+  async ({ consoleReady, parameterName, capabilities }) => {
+    const fixture = host(true, consoleReady);
+    const context = savedJob(fixture, "hello-world", parameterName);
+    const view = await fixture.engine.view(context);
+    expect(view.problems).toMatchObject([
+      { problemId: "hello-world", consoleKind: "simulator", accessCapabilities: capabilities },
+    ]);
+    expect(fixture.aws.created).toEqual([]);
+    expect(fixture.aws.deleted).toEqual([]);
   },
 );
 

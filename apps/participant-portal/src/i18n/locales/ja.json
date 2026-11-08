@@ -13,6 +13,7 @@
     "fetch_status_failed": "状態の取得に失敗しました"
   },
   "nav": {
+    "open_simulator_console": "Simulator Console を開く",
     "problems": "問題一覧",
     "notifications": "お知らせ",
     "menu_header": "メニュー",
@@ -303,6 +304,9 @@
     "info_diagram_open": "図を別のタブで開く"
   },
   "sso_credentials": {
+    "open_simulator_console_button": "Simulator Console を開く",
+    "simulator_console_update": "このSimulatorは参加者用Console接続に未対応です。主催者にSimulatorの更新を依頼してください。CLIは利用できます。",
+    "console_popup_blocked": "Console を開けませんでした。このサイトのポップアップを許可してから、もう一度お試しください。",
     "aws_access_unavailable": "この問題環境の AWS アクセスはまだ利用できません。現在の状態を確認するか、開催者へ問い合わせてください。",
     "title": "SSO Credentials",
     "description": "主催者がチーム用に用意した AWS 環境への一時アクセスです。利用できる方法は問題ごとに異なります。",
@@ -331,6 +335,14 @@
       "reveal_secrets_button": "シークレットを表示",
       "hide_secrets_button": "シークレットを隠す",
       "copy_export_button": "export スニペットをコピー",
+      "simulator_steps_header": "ターミナルでの使い方",
+      "simulator_step_install": "事前に AWS CLI をインストールしてください。",
+      "simulator_step_export": "新しい Bash または Zsh のターミナルを開きます。下の「export スニペットをコピー」を押し、コピーした内容をすべてターミナルに貼り付けて実行してください。",
+      "simulator_step_verify": "同じターミナルで、次のコマンドを実行して接続を確認します：",
+      "simulator_step_problem": "接続確認に成功したら、同じターミナルで問題文に記載されたコマンドを実行してください。",
+      "simulator_s3_note": "接続確認に aws s3 ls は使わないでください。この Simulator の STS 資格情報は現在 STS・IAM・CloudFormation・SSM に対応していますが、S3 には未対応です。有効な資格情報でも S3 は InvalidClientTokenId を返すことがあります。",
+      "simulator_endpoint_note": "AWS_ENDPOINT_URL はローカル Simulator の API 接続先であり、ブラウザーの Console URL ではありません。アクセスキーやセッショントークンを Console のログイン画面に貼り付けないでください。",
+      "simulator_shell_note": "スニペットは接続先をこのローカル API に固定する aws シェル関数を定義し、接続先の上書きを拒否します。実 AWS に戻る場合は接続先を書き換えず、別の新しいターミナルを開いてください。",
       "field_access_key_id": "AWS_ACCESS_KEY_ID",
       "field_secret_access_key": "AWS_SECRET_ACCESS_KEY",
       "field_session_token": "AWS_SESSION_TOKEN",

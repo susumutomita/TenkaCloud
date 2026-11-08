@@ -362,6 +362,8 @@ export interface ParticipantProblemView {
    * 返すが、 旧 backend 応答との互換のため optional。
    */
   readonly accessCapabilities?: readonly TargetAccessCapability[];
+  /** Local native Simulator, never a real AWS federation destination. */
+  readonly consoleKind?: "simulator";
   readonly status: DeploymentStatus;
   readonly stackOutputs: Record<string, string>;
   readonly failureReason?: string;

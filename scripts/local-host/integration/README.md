@@ -1,5 +1,37 @@
 # Opt-in original Hello World simulator rehearsal
 
+## Participant Console GUI acceptance
+
+`bun run test:simulator-console` is a separate real-browser acceptance command.
+It requires an existing Chromium executable, built local-host interfaces, a
+prepared original Hello World catalog, and a native Simulator binary advertising
+`consoleHandoff.version: 1` with the `ssm-parameter` service. An older binary is
+still supported for CLI use, but does not expose the participant Console button.
+
+```sh
+env -u HTTP_PROXY -u http_proxy -u HTTPS_PROXY -u https_proxy \
+  -u ALL_PROXY -u all_proxy \
+  bun run test:simulator-console \
+  --binary /absolute/path/to/tenkacloud-simulator \
+  --chromium /absolute/path/to/chromium
+```
+
+This command creates isolated host and Simulator data, deploys original Hello
+World, signs in through the participant UI, opens Simulator Console, reads the
+team's own SSM parameter in the GUI, and submits that value through the problem
+UI for 100 points. Browser traffic is restricted to loopback. Reports never
+contain participant credentials, operator tokens, sign-in codes, or the answer.
+All owned temporary state is removed when the command exits normally or fails.
+No real AWS account or active event is used. The command fails if a real browser
+cannot start; API-only checks are not a substitute for this acceptance test.
+
+Console sign-in uses the participant's existing short-lived viewer role and a
+one-use code. Only the retained own-parameter name and region are available in
+that browser connection. The original Hello World viewer is read-only. This does
+not grant unrestricted Parameter Store listing or an operator access.
+
+## CLI rehearsal
+
 Run this separately from the required unit suite. It is an integration command,
 not a skipped CI test. Missing prerequisites or a failed assertion exit nonzero.
 Nothing is installed or downloaded by this command. It does not use real AWS,

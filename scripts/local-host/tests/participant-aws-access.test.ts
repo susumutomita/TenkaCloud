@@ -266,3 +266,57 @@ test("simulator credentials include their endpoint and console federation is ref
     endpointUrl: "http://127.0.0.1:4566",
   });
 });
+
+test("Simulator Console uses only the current team's retained parameter and viewer session", async () => {
+  const issued: unknown[] = [];
+  const f = await createParticipantAwsFixture({
+    simulatorEndpoint: "http://127.0.0.1:4566",
+    simulatorConsole: async (input, assertCurrent) => {
+      assertCurrent();
+      issued.push(input);
+      return "http://127.0.0.1:4566/_simulator/login#handoff=synthetic";
+    },
+  });
+  cleanups.push(f.close);
+  const response = await f.access("console");
+  expect(response.status).toBe(200);
+  expect(issued).toEqual([
+    {
+      credentials: {
+        accessKeyId: "participant_viewer-access",
+        secretAccessKey: "participant_viewer-secret",
+        sessionToken: "participant_viewer-token",
+        expiration: f.expiry,
+      },
+      parameterName: "/tc-hello-world-team-0/hello",
+      region: "ap-northeast-1",
+    },
+  ]);
+  expect(f.federation).toHaveLength(0);
+  expect((await f.access("console", f.beta.job.jobId)).status).toBe(403);
+  expect(issued).toHaveLength(1);
+  const view = await f.get("/api/portal/me");
+  const problems = z
+    .array(z.object({ consoleKind: z.string(), accessCapabilities: z.array(z.string()) }))
+    .parse(view.body.problems);
+  expect(problems[0]).toMatchObject({
+    consoleKind: "simulator",
+    accessCapabilities: ["console", "cli-credentials"],
+  });
+});
+
+test("ending the event during Simulator handoff withholds its one-time URL", async () => {
+  const f = await createParticipantAwsFixture({
+    simulatorEndpoint: "http://127.0.0.1:4566",
+    simulatorConsole: async () => {
+      await end();
+      return "http://127.0.0.1:4566/_simulator/login#handoff=must-not-escape";
+    },
+  });
+  cleanups.push(f.close);
+  const end = () => f.admin("/end");
+  const response = await f.access("console");
+  expect(response.status).toBe(409);
+  expect(response.body.error).toBe("scoring_ended");
+  expect(JSON.stringify(response.body)).not.toContain("must-not-escape");
+});

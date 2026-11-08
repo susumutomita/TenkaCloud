@@ -80,6 +80,19 @@ function teamView(scores: readonly number[]): ParticipantTeamView {
   } satisfies ParticipantTeamView;
 }
 
+function simulatorTeamView(scores: readonly number[]): ParticipantTeamView {
+  const view = teamView(scores);
+  return {
+    ...view,
+    problems: view.problems.map((problem) => ({
+      ...problem,
+      provider: "aws",
+      accessCapabilities: ["console"],
+      consoleKind: "simulator",
+    })),
+  };
+}
+
 function leaderboard(entries: LeaderboardResponse["entries"]): LeaderboardResponse {
   return { eventId: "event-1", entries } satisfies LeaderboardResponse;
 }
@@ -507,6 +520,101 @@ describe("ShellLayout", () => {
   it("should keep the AWS Console entry always present in the top nav when signed in (Issue #1919)", () => {
     renderShell();
     expect(screen.getAllByText("nav.open_console").length).toBeGreaterThan(0);
+  });
+
+  it("opens the single Simulator Console again when its shortcut is clicked repeatedly", () => {
+    const openConsole = vi.fn();
+    mockConsoleAccess.mockReturnValue(consoleAccess({ openConsole }));
+    mockTeamView.mockReturnValue(tv({ view: simulatorTeamView([10]) }));
+    renderShell();
+
+    const shortcut = screen.getByRole("button", { name: "nav.open_simulator_console" });
+    expect(screen.queryByText("nav.open_console")).not.toBeInTheDocument();
+    fireEvent.click(shortcut);
+    fireEvent.click(shortcut);
+    expect(openConsole.mock.calls).toEqual([["job-0"], ["job-0"]]);
+    expect(mockNav).not.toHaveBeenCalled();
+  });
+
+  it("keeps the Simulator label and routes to access details when its account is unavailable", () => {
+    const openConsole = vi.fn();
+    const view = simulatorTeamView([10]);
+    mockConsoleAccess.mockReturnValue(consoleAccess({ openConsole }));
+    mockTeamView.mockReturnValue(
+      tv({
+        view: {
+          ...view,
+          problems: view.problems.map((problem) => ({ ...problem, awsAccountId: undefined })),
+        },
+      }),
+    );
+    renderShell();
+
+    expect(screen.queryByText("nav.open_console")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "nav.open_simulator_console" }));
+    expect(mockNav.mock.calls).toEqual([["/tools/sso"]]);
+    expect(openConsole).not.toHaveBeenCalled();
+  });
+
+  it("lists only available Simulator Consoles and opens each newly selected job", () => {
+    const openConsole = vi.fn();
+    const view = simulatorTeamView([10, 20]);
+    mockConsoleAccess.mockReturnValue(consoleAccess({ openConsole }));
+    mockTeamView.mockReturnValue(
+      tv({
+        view: {
+          ...view,
+          problems: [
+            ...view.problems,
+            {
+              ...view.problems[0],
+              jobId: "pending-aws",
+              problemId: "pending-aws-problem",
+              consoleKind: undefined,
+              awsAccountId: undefined,
+            },
+            {
+              ...view.problems[0],
+              jobId: "blocked-simulator",
+              problemId: "blocked-simulator-problem",
+              accessCapabilities: [],
+            },
+          ],
+        },
+      }),
+    );
+    renderShell();
+
+    expect(screen.queryByText("nav.open_console")).not.toBeInTheDocument();
+    const shortcut = screen.getByRole("button", { name: "nav.open_simulator_console" });
+    fireEvent.click(shortcut);
+    expect(screen.queryByText("pending-aws-problem")).not.toBeInTheDocument();
+    expect(screen.queryByText("blocked-simulator-problem")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("menuitem", { name: "problem-1" }));
+    fireEvent.click(shortcut);
+    fireEvent.click(screen.getByRole("menuitem", { name: "problem-0" }));
+    expect(openConsole.mock.calls).toEqual([["job-1"], ["job-0"]]);
+    expect(mockNav).not.toHaveBeenCalled();
+  });
+
+  it("keeps the AWS Console label for a mixed menu and opens either kind by its selected job", () => {
+    const openConsole = vi.fn();
+    const view = simulatorTeamView([10]);
+    const awsView = teamView([0, 20]);
+    mockConsoleAccess.mockReturnValue(consoleAccess({ openConsole }));
+    mockTeamView.mockReturnValue(
+      tv({ view: { ...view, problems: [...view.problems, awsView.problems[1]] } }),
+    );
+    renderShell();
+
+    expect(screen.queryByText("nav.open_simulator_console")).not.toBeInTheDocument();
+    const shortcut = screen.getByRole("button", { name: "nav.open_console" });
+    fireEvent.click(shortcut);
+    fireEvent.click(screen.getByRole("menuitem", { name: "problem-0" }));
+    fireEvent.click(shortcut);
+    fireEvent.click(screen.getByRole("menuitem", { name: "problem-1" }));
+    expect(openConsole.mock.calls).toEqual([["job-0"], ["job-1"]]);
+    expect(mockNav).not.toHaveBeenCalled();
   });
 
   it.each([{ capabilities: ["cli-credentials"] }, { capabilities: [] }])(

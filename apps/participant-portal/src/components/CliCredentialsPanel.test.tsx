@@ -7,6 +7,9 @@ import {
   PortalValidationError,
 } from "../api/portal-client";
 
+import en from "../i18n/locales/en.json";
+import ja from "../i18n/locales/ja.json";
+
 /**
  * CliCredentialsPanel (CLI/SDK 一時資格情報 panel) の取得 (success / 各 error 種別) と表示
  * (mask/reveal/copy/再発行/破棄/TTL countdown/期限切れ) を pin する。 getCliCredentials を mock、
@@ -15,14 +18,24 @@ import {
  */
 const { mockGet } = vi.hoisted(() => ({ mockGet: vi.fn() }));
 
-vi.mock("../i18n", () => ({
-  useT: () => (key: string, params?: Readonly<Record<string, string | number>>) =>
-    params ? `${key}|${JSON.stringify(params)}` : key,
-}));
+vi.mock("../i18n", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../i18n")>();
+  return {
+    ...actual,
+    useT: vi.fn(
+      () => (key: string, params?: Readonly<Record<string, string | number>>) =>
+        params ? `${key}|${JSON.stringify(params)}` : key,
+    ),
+  };
+});
 vi.mock("../api/portal-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api/portal-client")>();
   return { ...actual, getCliCredentials: mockGet };
 });
+
+const { useT } = await import("../i18n");
+const actualI18n = await vi.importActual<typeof import("../i18n")>("../i18n");
+const { I18nProvider } = actualI18n;
 
 const { CliCredentialsPanel, buildShellExport, describeRemainingTime } = await import(
   "./CliCredentialsPanel"
@@ -69,6 +82,11 @@ beforeEach(() => {
   clip.mockResolvedValue(undefined);
   mockGet.mockReset();
   onAuthError.mockClear();
+  vi.mocked(useT).mockImplementation(
+    () => (key: string, params?: Readonly<Record<string, string | number>>) =>
+      params ? `${key}|${JSON.stringify(params)}` : key,
+  );
+  localStorage.removeItem("tenkacloud.portal.locale");
 });
 
 afterEach(() => vi.clearAllMocks());
@@ -294,7 +312,7 @@ describe("simulator credential display", () => {
   it("shows and copies the local endpoint with issued simulator credentials", async () => {
     await showCreds({ simulator: true, endpointUrl: "http://127.0.0.1:4566" });
     expect(screen.getByText("AWS_ENDPOINT_URL")).toBeInTheDocument();
-    expect(screen.getByText(/Simulator setup requires AWS CLI/)).toBeInTheDocument();
+    expect(screen.getByText("sso_credentials.cli.simulator_steps_header")).toBeInTheDocument();
     expect(screen.getByText("http://127.0.0.1:4566")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "sso_credentials.cli.copy_export_button" }));
     expect(clip).toHaveBeenCalledWith(
@@ -310,4 +328,95 @@ describe("simulator credential display", () => {
     expect(screen.queryByText("sso_credentials.cli.copy_export_button")).not.toBeInTheDocument();
     expect(screen.queryByText("sso_credentials.cli.field_access_key_id")).not.toBeInTheDocument();
   });
+});
+
+describe("localized Simulator CLI guidance", () => {
+  it.each(["en", "ja"] as const)("shows actionable steps in %s", async (locale) => {
+    vi.mocked(useT).mockImplementation(actualI18n.useT);
+    localStorage.setItem("tenkacloud.portal.locale", locale);
+    const messages = { en, ja }[locale].sso_credentials.cli;
+    mockGet.mockResolvedValue(creds({ simulator: true, endpointUrl: "http://127.0.0.1:4566" }));
+    render(
+      <I18nProvider>
+        <CliCredentialsPanel {...baseProps} />
+      </I18nProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: messages.section_header }));
+    fireEvent.click(screen.getByRole("button", { name: messages.issue_button }));
+    expect(await screen.findByText(messages.simulator_steps_header)).toBeInTheDocument();
+    for (const message of [
+      messages.simulator_step_install,
+      messages.simulator_step_export,
+      messages.simulator_step_problem,
+      messages.simulator_s3_note,
+      messages.simulator_endpoint_note,
+      messages.simulator_shell_note,
+    ]) {
+      expect(screen.getByText(message)).toBeInTheDocument();
+    }
+    expect(screen.getAllByRole("listitem")).toHaveLength(4);
+    expect(screen.getByText("aws sts get-caller-identity")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: messages.copy_export_button }));
+    expect(clip).toHaveBeenCalledWith(
+      buildShellExport(
+        creds({
+          simulator: true,
+          endpointUrl: "http://127.0.0.1:4566",
+        }),
+      ),
+    );
+  });
+
+  it("does not show Simulator guidance for real AWS credentials", async () => {
+    await showCreds();
+    expect(
+      screen.queryByText("sso_credentials.cli.simulator_steps_header"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("aws sts get-caller-identity")).not.toBeInTheDocument();
+  });
+
+  it("removes runnable steps when credentials expire while the panel stays open", async () => {
+    vi.useFakeTimers();
+    try {
+      mockGet.mockResolvedValue(
+        creds({
+          simulator: true,
+          endpointUrl: "http://127.0.0.1:4566",
+          expiration: new Date(Date.now() + 2000).toISOString(),
+        }),
+      );
+      renderPanel();
+      fireEvent.click(issueButton());
+      await vi.waitFor(() =>
+        expect(screen.getByText("aws sts get-caller-identity")).toBeInTheDocument(),
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000);
+      });
+      expect(screen.queryByText("aws sts get-caller-identity")).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", {
+          name: "sso_credentials.cli.copy_export_button",
+        }),
+      ).toBeDisabled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(["2020-01-01T00:00:00Z", "not-a-date"])(
+    "withholds runnable instructions and disables export for expiration %s",
+    async (expiration) => {
+      await showCreds({ simulator: true, endpointUrl: "http://127.0.0.1:4566", expiration });
+      expect(screen.getByText("sso_credentials.cli.expired_note")).toBeInTheDocument();
+      expect(screen.queryByText("aws sts get-caller-identity")).not.toBeInTheDocument();
+      const copy = screen.getByRole("button", { name: "sso_credentials.cli.copy_export_button" });
+      expect(copy).toBeDisabled();
+      fireEvent.click(copy);
+      expect(clip).not.toHaveBeenCalled();
+      expect(
+        screen.getByRole("button", { name: "sso_credentials.cli.reissue_button" }),
+      ).toBeEnabled();
+    },
+  );
 });

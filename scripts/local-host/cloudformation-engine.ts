@@ -21,7 +21,7 @@ import {
   type Stack,
 } from "@aws-sdk/client-cloudformation";
 import type { STSClient } from "@aws-sdk/client-sts";
-import type { ParticipantProblemView } from "@tenkacloud/portal-contracts";
+import type { ParticipantProblemView, TargetAccessCapability } from "@tenkacloud/portal-contracts";
 import {
   type ProblemDisruptionEntry,
   type ProblemEndpointSlot,
@@ -112,6 +112,15 @@ const REVIEWED_STACK_PROBLEMS = [
 /** Simulator support requires an unchanged-problem rehearsal, not just catalog discovery. */
 function simulatorProblemSupported(problemId: string): boolean {
   return REVIEWED_STACK_PROBLEMS.some((entry) => entry.problemId === problemId && entry.simulator);
+}
+
+function simulatorAccessCapabilities(
+  problemId: string,
+  consoleReady: boolean,
+): readonly TargetAccessCapability[] {
+  if (!simulatorProblemSupported(problemId)) return [];
+  if (consoleReady) return ["console", "cli-credentials"] as const;
+  return ["cli-credentials"] as const;
 }
 
 interface StackMetadata {
@@ -503,9 +512,11 @@ export class CloudFormationEngine implements RuntimeEngine {
       awsAccountId: awsTargetOf(context.team).accountId,
       ...(this.options.simulatorEndpoint
         ? {
-            accessCapabilities: simulatorProblemSupported(definition.problemId)
-              ? (["cli-credentials"] as const)
-              : [],
+            consoleKind: "simulator" as const,
+            accessCapabilities: simulatorAccessCapabilities(
+              definition.problemId,
+              Boolean(this.options.simulatorConsole && unit?.outputs?.ParameterName),
+            ),
           }
         : {}),
       stackOutputs: Object.fromEntries(

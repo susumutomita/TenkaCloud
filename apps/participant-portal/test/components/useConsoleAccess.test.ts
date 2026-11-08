@@ -127,4 +127,73 @@ describe("Console access capability guard", () => {
     expect(signin).toHaveBeenCalledTimes(1);
     expect(opened).toHaveBeenCalledTimes(1);
   });
+
+  it("opens Simulator during the click, then replaces the blank tab without an opener", async () => {
+    teamView.mockReturnValue({
+      view: {
+        problems: [
+          {
+            jobId: "job-1",
+            provider: "aws",
+            consoleKind: "simulator",
+            accessCapabilities: ["console"],
+          },
+        ],
+      },
+    });
+    const tab = { opener: window, closed: false, location: { replace: vi.fn() }, close: vi.fn() };
+    const opened = vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
+    signin.mockResolvedValue("http://127.0.0.1:4566/_simulator/login#handoff=synthetic");
+    const { result } = renderHook(() => useConsoleAccess(config));
+    await act(() => result.current.openConsole("job-1"));
+    expect(opened).toHaveBeenCalledWith("about:blank", "_blank");
+    expect(tab.opener).toBeNull();
+    expect(tab.location.replace).toHaveBeenCalledWith(
+      "http://127.0.0.1:4566/_simulator/login#handoff=synthetic",
+    );
+  });
+
+  it("does not mint a Simulator handoff when the popup is blocked", async () => {
+    teamView.mockReturnValue({
+      view: {
+        problems: [
+          {
+            jobId: "job-1",
+            provider: "aws",
+            consoleKind: "simulator",
+            accessCapabilities: ["console"],
+          },
+        ],
+      },
+    });
+    vi.spyOn(window, "open").mockReturnValue(null);
+    const { result } = renderHook(() => useConsoleAccess(config));
+    await act(() => result.current.openConsole("job-1"));
+    expect(signin).not.toHaveBeenCalled();
+    expect(result.current.error?.message).toBe("sso_credentials.console_popup_blocked");
+  });
+
+  it("closes a blank Simulator tab when issuance fails and does not navigate a closed tab", async () => {
+    teamView.mockReturnValue({
+      view: {
+        problems: [
+          {
+            jobId: "job-1",
+            provider: "aws",
+            consoleKind: "simulator",
+            accessCapabilities: ["console"],
+          },
+        ],
+      },
+    });
+    const tab = { opener: window, closed: false, location: { replace: vi.fn() }, close: vi.fn() };
+    vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
+    signin.mockRejectedValueOnce(new Error("handoff failed"));
+    const { result } = renderHook(() => useConsoleAccess(config));
+    await act(() => result.current.openConsole("job-1"));
+    expect(tab.close).toHaveBeenCalledTimes(1);
+    tab.closed = true;
+    await act(() => result.current.openConsole("job-1"));
+    expect(tab.location.replace).not.toHaveBeenCalled();
+  });
 });
