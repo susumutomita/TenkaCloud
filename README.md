@@ -74,7 +74,17 @@ With Claude Code installed, run `claude` in the cloned repository and type `/ten
 
 ### Local AWS simulator (explicit opt-in)
 
-To run an unchanged AWS problem against a local TenkaCloud Simulator, start the simulator on the same machine with its private operator token file, then start the host:
+Same-machine loopback hosting starts a managed native Simulator by default. On first use it selects the newest compatible stable release from the newest 100 official GitHub Releases, verifies its `BUILDINFO.json` and binary against that release's `SHA256SUMS`, and writes an owner-only local `simulator-binaries/release-lock.json` under the host data directory. The lock records the version, launcher/control-API protocol and checksums for Linux/macOS amd64/arm64. No Simulator version, source commit or per-platform checksum needs to be updated in the TenkaCloud repository for later releases.
+
+Subsequent starts use that local lock and reverify cached bytes without checking for newer releases. A missing cached binary is downloaded only from the locked version and verified against its recorded checksum. With a valid cache, startup works offline. First use, explicit updates and missing cache downloads require connectivity; errors never silently use corrupt or unverified bytes.
+
+Run `make local LOCAL_ARGS="--update-simulator"` to explicitly select, verify and lock a newer compatible stable release before starting it. Discovery/download/verification failures retain the existing lock and stop startup. Same-version asset changes and automatic downgrades are rejected. The host protocol describes the launcher CLI and local-token control API, not SQLite downgrade compatibility. Once an update is committed, a failed startup does not automatically roll back the binary or persistent state. Updates should be made between sessions with appropriate state backups.
+
+Checksums from the same publisher detect corruption and release inconsistencies; they are not independent protection against a compromised publisher. Downloads remain limited to official GitHub hosts, bounded in size and privately cached. Concurrent release operations fail explicitly; an interrupted operation can leave `simulator-binaries/.release-operation`, which should be removed only after confirming the previous process has stopped. The binary is never built from Go source, and there is no real-AWS fallback.
+
+A compatible official release must actually be published before first use. Until then startup reports that none is available; it does not invent a version or checksum. Use `make local LOCAL_ARGS="--simulator-binary /absolute/path/to/tenkacloud-simulator"` for an existing compatible executable, or `make local LOCAL_ARGS="--no-simulator"` for Docker/browser exercises without Simulator. LAN, public, proxy and VPN hosting never automatically start Simulator. The managed child uses a private persistent database and token, an automatically assigned loopback port, and stops after host operations drain. Restart retains state and token; an unexpected Simulator exit stops the host.
+
+To connect an already running local TenkaCloud Simulator instead, use its existing private operator token file. Relative token-file paths are resolved from the host working directory, not the Simulator checkout. Missing or unsafe files fail before catalog downloads or builds; no token is recreated. Prefer an absolute path:
 
 ```sh
 make local LOCAL_ARGS="--simulator-endpoint http://127.0.0.1:4566 --simulator-token-file /absolute/path/to/simulator-token --simulator-region ap-northeast-1 --simulator-bootstrap"

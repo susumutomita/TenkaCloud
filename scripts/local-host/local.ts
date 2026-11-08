@@ -12,6 +12,7 @@ import { clearLocalHistory, parseLocalClearOptions } from "./local-clear";
 import { runLocalHost } from "./main";
 import { parseOptions } from "./options";
 import { openOrganizerKeyDisplay } from "./organizer-key-output";
+import { preflightSimulatorHosting } from "./simulator-hosting";
 import { HostStore } from "./store";
 
 const sessionSchema = z.object({
@@ -243,6 +244,7 @@ export async function runManagedLocal(
     await runLocalHost(args, { repositoryRoot: root });
     return 0;
   }
+  preflightSimulatorHosting(options.simulator);
   logCatalogImport(() => downloadConfiguredCatalog(root, undefined, catalogDeps));
   process.umask(0o077);
   const directory = realpathSync(privateDirectory(options.dataDirectory));

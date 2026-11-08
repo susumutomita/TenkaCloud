@@ -128,7 +128,7 @@ test("operator token files must be private regular owned files with bounded vali
   expect(() => readSimulatorToken(join(root, "link"))).toThrow("symlinks");
   mkdirSync(join(root, "dir"));
   expect(() => readSimulatorToken(join(root, "dir"))).toThrow("regular file");
-  expect(() => readSimulatorToken(join(root, "missing"))).toThrow("readable");
+  expect(() => readSimulatorToken(join(root, "missing"))).toThrow("not found");
   for (const value of ["short", "!".repeat(64), "x".repeat(258), `${token}\nextra`]) {
     writeFileSync(path, value);
     expect(() => readSimulatorToken(path)).toThrow("valid local operator token");
