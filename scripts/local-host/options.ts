@@ -7,57 +7,75 @@ import { parseDockerNetworkPool } from "./docker-networks";
 import { DEFAULT_GATEWAY_PORTS, gatewayPortsOverlap, parseGatewayPorts } from "./gateway-ports";
 import { simulatorSettings } from "./simulator-hosting";
 
+function parseHostArgs(args: string[]) {
+  try {
+    return parseArgs({
+      args,
+      strict: true,
+      allowPositionals: false,
+      options: {
+        data: { type: "string" },
+        "submission-catalog": { type: "string" },
+        lan: { type: "string" },
+        "unsafe-lan": { type: "boolean", default: false },
+        "unsafe-docker-lan": { type: "boolean", default: false },
+        "admin-port": { type: "string", default: "5174" },
+        "participant-port": { type: "string" },
+        "gateway-ports": { type: "string", default: DEFAULT_GATEWAY_PORTS },
+        "max-active-per-team": {
+          type: "string",
+          default: String(DEFAULT_CONTAINER_LIMITS.perTeam),
+        },
+        "max-active-environments": {
+          type: "string",
+          default: String(DEFAULT_CONTAINER_LIMITS.global),
+        },
+        "container-memory-mib": {
+          type: "string",
+          default: String(DEFAULT_CONTAINER_LIMITS.memoryMiB),
+        },
+        "docker-network-pool": { type: "string" },
+        "competition-network": { type: "boolean", default: false },
+        "vpn-peers": { type: "string" },
+        "no-build": { type: "boolean", default: false },
+        "console-origin": { type: "string" },
+        "web-origin-template": { type: "string" },
+        "web-port": { type: "string", default: "5176" },
+        "web-services": { type: "string", default: "web" },
+        "public-admin-origin": { type: "string" },
+        "public-participant-origin": { type: "string" },
+        "behind-proxy": { type: "boolean", default: false },
+        "unsafe-http": { type: "boolean", default: false },
+        "aws-region": { type: "string" },
+        "simulator-endpoint": { type: "string" },
+        "simulator-token-file": { type: "string" },
+        "simulator-token": { type: "string" },
+        "simulator-binary": { type: "string" },
+        "no-simulator": { type: "boolean", default: false },
+        "simulator-region": { type: "string" },
+        "simulator-bootstrap": { type: "boolean", default: false },
+        help: {
+          type: "boolean",
+          short: "h",
+          default: false,
+        },
+      },
+    });
+  } catch (error) {
+    if (args.some((arg) => arg === "--simulator-token" || arg.startsWith("--simulator-token=")))
+      throw new Error(
+        'Invalid local host arguments. Use make local LOCAL_ARGS="--help"; argument values were withheld.',
+      );
+    throw error;
+  }
+}
+
 export function parseOptions(
   args: string[],
   repositoryRoot: string,
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ) {
-  const { values } = parseArgs({
-    args,
-    strict: true,
-    allowPositionals: false,
-    options: {
-      data: { type: "string" },
-      "submission-catalog": { type: "string" },
-      lan: { type: "string" },
-      "unsafe-lan": { type: "boolean", default: false },
-      "unsafe-docker-lan": { type: "boolean", default: false },
-      "admin-port": { type: "string", default: "5174" },
-      "participant-port": { type: "string" },
-      "gateway-ports": { type: "string", default: DEFAULT_GATEWAY_PORTS },
-      "max-active-per-team": { type: "string", default: String(DEFAULT_CONTAINER_LIMITS.perTeam) },
-      "max-active-environments": {
-        type: "string",
-        default: String(DEFAULT_CONTAINER_LIMITS.global),
-      },
-      "container-memory-mib": {
-        type: "string",
-        default: String(DEFAULT_CONTAINER_LIMITS.memoryMiB),
-      },
-      "docker-network-pool": { type: "string" },
-      "competition-network": { type: "boolean", default: false },
-      "vpn-peers": { type: "string" },
-      "no-build": { type: "boolean", default: false },
-      "console-origin": { type: "string" },
-      "web-origin-template": { type: "string" },
-      "web-port": { type: "string", default: "5176" },
-      "web-services": { type: "string", default: "web" },
-      "public-admin-origin": { type: "string" },
-      "public-participant-origin": { type: "string" },
-      "behind-proxy": { type: "boolean", default: false },
-      "unsafe-http": { type: "boolean", default: false },
-      "aws-region": { type: "string" },
-      "simulator-endpoint": { type: "string" },
-      "simulator-token-file": { type: "string" },
-      "simulator-region": { type: "string" },
-      "simulator-bootstrap": { type: "boolean", default: false },
-      help: {
-        type: "boolean",
-        short: "h",
-        default: false,
-      },
-    },
-  });
+  const { values } = parseHostArgs(args);
   const port = (raw: string): number => {
     if (!/^\d+$/u.test(raw) || Number(raw) < 1024 || Number(raw) > 65535)
       throw new Error("Ports must be integers from 1024 to 65535.");
@@ -95,8 +113,14 @@ export function parseOptions(
     );
   const simulator = simulatorSettings(values);
   assertSimulatorOptions(values, simulator, hostname, Boolean(exposure || appliance));
+  const managedSimulator = managedSimulatorOptions(
+    values,
+    Boolean(simulator),
+    hostname === "127.0.0.1" && !exposure && !appliance && !values["vpn-peers"],
+  );
   return {
     ...(simulator ? { simulator } : {}),
+    ...(managedSimulator ? { managedSimulator } : {}),
     dataDirectory: resolve(values.data ?? joinDefault(repositoryRoot)),
     competitionNetwork: values["competition-network"],
     unsafeDockerLan: values["unsafe-docker-lan"],
@@ -121,6 +145,25 @@ export function parseOptions(
     build: !values["no-build"],
     help: values.help,
   };
+}
+
+function managedSimulatorOptions(
+  values: { "simulator-binary"?: string; "no-simulator"?: boolean; "behind-proxy"?: boolean },
+  explicitSimulator: boolean,
+  loopback: boolean,
+): { binary?: string } | undefined {
+  if (values["no-simulator"] && (explicitSimulator || values["simulator-binary"] !== undefined))
+    throw new Error(
+      "--no-simulator cannot be combined with simulator connection or binary options.",
+    );
+  if (values["simulator-binary"] !== undefined && (explicitSimulator || !loopback))
+    throw new Error("--simulator-binary is only for automatic same-machine simulator startup.");
+  if (explicitSimulator || values["no-simulator"] || !loopback || values["behind-proxy"])
+    return undefined;
+  const binary = values["simulator-binary"];
+  if (binary !== undefined && !binary.trim())
+    throw new Error("--simulator-binary must name an existing executable.");
+  return binary ? { binary: resolve(binary) } : {};
 }
 
 function assertSimulatorOptions(

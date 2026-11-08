@@ -18,15 +18,20 @@ test("the production local engine offers the selected supported local exercises 
   expect(catalog.some((item) => item.runtime === "coordination")).toBe(true);
   expect(catalog.some((item) => item.runtime === "cloudformation")).toBe(false);
 });
-test("local help offers explicit simulator configuration without enabling the legacy AWS flag", async () => {
+test("local help offers managed and explicit simulator configuration without the legacy AWS flag", async () => {
   const log = spyOn(console, "log").mockImplementation(() => undefined);
   try {
     await runLocalHost(["--help"]);
     const output = log.mock.calls.flat().join("\n");
     expect(output).toContain(
-      "AWS service problems require cloud hosting or explicit local simulator configuration",
+      "AWS service problems require cloud hosting or local simulator configuration",
+    );
+    expect(output).toContain(
+      "Same-machine loopback hosting starts the pinned native Simulator automatically",
     );
     for (const flag of [
+      "--no-simulator",
+      "--simulator-binary",
       "--simulator-endpoint",
       "--simulator-token-file",
       "--simulator-region",

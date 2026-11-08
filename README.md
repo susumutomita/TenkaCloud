@@ -74,7 +74,11 @@ With Claude Code installed, run `claude` in the cloned repository and type `/ten
 
 ### Local AWS simulator (explicit opt-in)
 
-To run an unchanged AWS problem against a local TenkaCloud Simulator, start the simulator on the same machine with its private operator token file, then start the host:
+Same-machine loopback hosting selects managed native Simulator startup by default. The host downloads a checksum-pinned official single binary for Linux/macOS (amd64/arm64), caches it privately under the host data directory, and rechecks its SHA-256 before reuse. It never builds Go source or falls back to real AWS. The managed process uses a private persistent SQLite database and token, an automatically assigned loopback port, and stops only after host operations drain. Restart retains its state and token; an unexpected Simulator exit stops the host.
+
+**Release prerequisite:** this draft has no official release pin yet. Default startup fails explicitly until a published version and all four verified asset checksums are pinned in `scripts/local-host/simulator-release-pin.ts`. Do not merge this draft as a working default before that step. Meanwhile, use `make local LOCAL_ARGS="--simulator-binary /absolute/path/to/tenkacloud-simulator"` for an existing compatible executable, or `make local LOCAL_ARGS="--no-simulator"` for Docker/browser exercises without a Simulator download. LAN, public, proxy and VPN hosting never automatically start Simulator.
+
+To connect an already running local TenkaCloud Simulator instead, use its existing private operator token file. Relative token-file paths are resolved from the host working directory, not the Simulator checkout. Missing or unsafe files fail before catalog downloads or builds; no token is recreated. Prefer an absolute path:
 
 ```sh
 make local LOCAL_ARGS="--simulator-endpoint http://127.0.0.1:4566 --simulator-token-file /absolute/path/to/simulator-token --simulator-region ap-northeast-1 --simulator-bootstrap"

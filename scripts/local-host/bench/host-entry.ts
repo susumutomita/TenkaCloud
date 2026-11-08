@@ -2,7 +2,8 @@ import { writeSync } from "node:fs";
 import { runLocalHost } from "../main";
 
 /** The benchmark uses the production engine and listeners, with a private parent-only key pipe. */
-void runLocalHost(process.argv.slice(2), {
+// Measure the HTTP/Docker host, without downloading or starting an unrelated AWS simulator.
+void runLocalHost(["--no-simulator", ...process.argv.slice(2)], {
   onReady(host) {
     // Benchmark state belongs to this run; a retained database needs a fresh key on restart.
     const key = host.organizerKey ?? host.rotateOrganizerKey();

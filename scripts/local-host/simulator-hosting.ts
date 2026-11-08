@@ -7,43 +7,71 @@ import { normalizeSimulatorEndpointUrl } from "@tenkacloud/portal-contracts";
 import { connectCloudHosting } from "./cloud-hosting";
 import { bootstrapSimulatorRole, SIMULATOR_DEPLOY_ROLE } from "./simulator-bootstrap";
 
-export interface SimulatorSettings {
+export type SimulatorSettings = {
   readonly endpoint: string;
-  readonly tokenFile: string;
   readonly region: string;
   readonly bootstrap?: boolean;
-}
+} & ({ readonly tokenFile: string } | { readonly readToken: () => string });
+
+const TOKEN_FORMAT_ERROR =
+  "Simulator input must contain a valid local operator token (32-256 URL-safe characters, optionally followed by one newline in a file). Do not paste its contents into logs.";
 
 /** Opt-in only: neither AWS environment variables nor legacy cloud flags enable simulation. */
 export function simulatorSettings(values: {
   "simulator-endpoint"?: string;
   "simulator-token-file"?: string;
+  "simulator-token"?: string;
   "simulator-region"?: string;
   "simulator-bootstrap"?: boolean;
 }): SimulatorSettings | undefined {
   const endpoint = values["simulator-endpoint"];
   const tokenFile = values["simulator-token-file"];
+  const token = values["simulator-token"];
   const region = values["simulator-region"];
   if (
     endpoint === undefined &&
     tokenFile === undefined &&
+    token === undefined &&
     region === undefined &&
     !values["simulator-bootstrap"]
   )
     return undefined;
-  if (!endpoint || !tokenFile?.trim() || !region)
+  if (tokenFile !== undefined && token !== undefined)
+    throw new Error("Choose --simulator-token-file or --simulator-token, not both.");
+  if (!endpoint || (!tokenFile?.trim() && token === undefined) || !region)
     throw new Error(
-      "Simulator mode requires --simulator-endpoint, --simulator-token-file and --simulator-region together.",
+      "Simulator mode requires --simulator-endpoint, one of --simulator-token-file or --simulator-token, and --simulator-region together.",
     );
+  if (token !== undefined && !/^[A-Za-z0-9_-]{32,256}$/u.test(token))
+    throw new Error(TOKEN_FORMAT_ERROR);
   const localEndpoint = normalizeSimulatorEndpointUrl(endpoint);
   if (!/^(?:af|ap|ca|eu|il|me|mx|sa|us)-[a-z]+-\d{1,2}$/u.test(region))
     throw new Error("Simulator region must be a commercial AWS region identifier.");
   return {
     endpoint: localEndpoint,
-    tokenFile: resolve(tokenFile),
+    // A function keeps direct credentials out of JSON/logged option objects.
+    ...(token !== undefined ? { readToken: () => token } : { tokenFile: resolve(tokenFile ?? "") }),
     region,
     ...(values["simulator-bootstrap"] ? { bootstrap: true } : {}),
   };
+}
+
+class SimulatorTokenFileError extends Error {}
+
+function tokenFileReadError(error: unknown): Error {
+  if (error instanceof SimulatorTokenFileError) return error;
+  const code = error instanceof Error && "code" in error ? error.code : undefined;
+  if (code === "ENOENT" || code === "ENOTDIR")
+    return new Error(
+      "Simulator token file was not found. --simulator-token-file is relative to the host working directory, not the Simulator checkout. Start the Simulator, then pass the absolute path to its existing simulator-token file. No token was created or changed.",
+    );
+  if (code === "EACCES" || code === "EPERM")
+    return new Error(
+      "Simulator token file is not readable by this user. Use the private file owned by the user running both the Simulator and host; do not make it public or run the host with sudo.",
+    );
+  return new Error(
+    "Simulator token file must be a readable, owner-only regular file owned by this user containing a valid local operator token; symlinks are not accepted.",
+  );
 }
 
 /** Bound the read and reject symlinks, devices, shared files and another user's credentials. */
@@ -52,23 +80,25 @@ export function readSimulatorToken(path: string): string {
   try {
     fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     const stat = fstatSync(fd);
-    if (
-      !stat.isFile() ||
-      stat.nlink !== 1 ||
-      (stat.mode & 0o077) !== 0 ||
-      stat.uid !== process.getuid?.() ||
-      stat.size > 257
-    )
-      throw new Error("unsafe file");
+    if (!stat.isFile())
+      throw new SimulatorTokenFileError("Simulator token file must be a regular file.");
+    if (stat.nlink !== 1 || (stat.mode & 0o077) !== 0)
+      throw new SimulatorTokenFileError(
+        "Simulator token file must be owner-only (for example mode 0600), with no hard links. Check the existing Simulator file's metadata; do not copy or recreate its token.",
+      );
+    if (stat.uid !== process.getuid?.())
+      throw new SimulatorTokenFileError(
+        "Simulator token file must be owned by this user. Run the Simulator and host as the same user, without sudo.",
+      );
+    if (stat.size > 257) throw new SimulatorTokenFileError(TOKEN_FORMAT_ERROR);
     const buffer = Buffer.alloc(258);
     const size = readSync(fd, buffer, 0, buffer.length, 0);
     const token = buffer.subarray(0, size).toString("utf8").replace(/\n$/u, "");
-    if (!/^[A-Za-z0-9_-]{32,256}$/u.test(token)) throw new Error("invalid token");
+    if (!/^[A-Za-z0-9_-]{32,256}$/u.test(token))
+      throw new SimulatorTokenFileError(TOKEN_FORMAT_ERROR);
     return token;
-  } catch {
-    throw new Error(
-      "Simulator token file must be a readable, owner-only regular file owned by this user containing a valid local operator token; symlinks are not accepted.",
-    );
+  } catch (error) {
+    throw tokenFileReadError(error);
   } finally {
     if (fd !== undefined) closeSync(fd);
   }
@@ -84,6 +114,13 @@ export function assertSimulatorProxyDisabled(environment = process.env): void {
     throw new Error(
       "Simulator host requires HTTP_PROXY, HTTPS_PROXY and ALL_PROXY (including lowercase variants) to be unset in its process. No request was sent.",
     );
+}
+
+/** Fail before catalog downloads, builds or host state; the connection rechecks before use. */
+export function preflightSimulatorHosting(settings?: SimulatorSettings): void {
+  if (!settings) return;
+  assertSimulatorProxyDisabled();
+  if ("tokenFile" in settings) readSimulatorToken(settings.tokenFile);
 }
 
 function simulatorProxyGuard<Input extends object, Output>(
@@ -125,7 +162,12 @@ export async function connectSimulatorHosting(
 ) {
   if (!settings) return undefined;
   assertSimulatorProxyDisabled();
-  const secretAccessKey = readSimulatorToken(settings.tokenFile);
+  if ("readToken" in settings)
+    console.warn(
+      "WARNING: --simulator-token exposes the operator token in process arguments and may leave it in shell history. Prefer automatic startup or --simulator-token-file. The token is not printed or saved by the host.",
+    );
+  const secretAccessKey =
+    "tokenFile" in settings ? readSimulatorToken(settings.tokenFile) : settings.readToken();
   const { endpoint, region } = settings;
   const connection = await connectCloudHosting(root, directory, region, {
     simulatorEndpoint: endpoint,

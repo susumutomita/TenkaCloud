@@ -7,23 +7,37 @@ import { DEFAULT_GATEWAY_PORTS, formatGatewayPorts } from "./gateway-ports";
 import { parseOptions, vpnListener } from "./options";
 import { openOrganizerKeyDisplay } from "./organizer-key-output";
 import { type RunningLocalHost, startLocalHost } from "./server";
-import { connectSimulatorHosting } from "./simulator-hosting";
+import {
+  connectSimulatorHosting,
+  preflightSimulatorHosting,
+  type SimulatorSettings,
+} from "./simulator-hosting";
+import { withSimulatorSession } from "./simulator-session";
 import { loadVpnPeerPlan } from "./vpn/config";
 import { NativeVpnIngress } from "./vpn/native-ingress";
 
-function waitForStop(signal?: AbortSignal): Promise<void> {
-  return new Promise<void>((accept) => {
-    const stop = () => {
+function hostStopSignal(parent?: AbortSignal) {
+  const controller = new AbortController();
+  const stop = () => controller.abort();
+  process.once("SIGINT", stop);
+  process.once("SIGTERM", stop);
+  parent?.addEventListener("abort", stop, { once: true });
+  if (parent?.aborted) stop();
+  return {
+    signal: controller.signal,
+    close: () => {
       process.off("SIGINT", stop);
       process.off("SIGTERM", stop);
-      signal?.removeEventListener("abort", stop);
-      accept();
-    };
-    process.once("SIGINT", stop);
-    process.once("SIGTERM", stop);
-    if (signal?.aborted) stop();
-    else signal?.addEventListener("abort", stop, { once: true });
-  });
+      parent?.removeEventListener("abort", stop);
+    },
+  };
+}
+
+function waitForStop(signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise((resolve) =>
+    signal.addEventListener("abort", () => resolve(), { once: true }),
+  );
 }
 
 export function announceHost(
@@ -128,24 +142,62 @@ export async function runLocalHost(
   const options = parseOptions(args, root);
   if (options.help) {
     console.log(
-      `TenkaCloud local competition hosting\n\nmake local LOCAL_ARGS="[--data <directory>] [--no-build]"\n  --simulator-endpoint http://127.0.0.1:PORT --simulator-token-file <private-file> --simulator-region ap-northeast-1  Explicit local AWS simulator, never real AWS\n  --simulator-bootstrap  Explicitly create/reuse this installation's limited local Hello World deployment role\n  --submission-catalog <file>  Organizer-owned fixed-edition answer / self-report catalog\n  --admin-port 5174       Host console; loopback unless using public origins\n  --participant-port 5175 Participant portal\n  --gateway-ports ${DEFAULT_GATEWAY_PORTS}  Exercise gateways, leased only by active local environments\n  --max-active-per-team 3  Per-team local environment limit\n  --max-active-environments 12  Host-wide active environment limit\n  --container-memory-mib 4096  Sum of container memory caps, not a hardware benchmark\n  --docker-network-pool <CIDR>  Explicit private /16–/24 pool for compact project networks; must not overlap LAN/VPN routes\n  --competition-network  Fail-closed native Linux 28.4.x team isolation (requires pool, root firewall/nsenter access)\n  --console-origin https://play.example --web-origin-template https://{target}.labs.example  Native console-only appliance behind an operator-managed TLS proxy\n  --web-port 5176 --web-services web  Loopback Web broker and declared HTTP service IDs\n  --vpn-peers <root-owned-json>  Preconfigured dedicated Linux WireGuard ingress (requires boot seal service)\n  --lan <private-ip> --unsafe-lan  Explicit unencrypted hosting; Docker exercises require native isolation unless --unsafe-docker-lan is given\n  --unsafe-docker-lan     With --lan --unsafe-lan only: run Docker exercises with no team network isolation, for trusted participants (new events only)\n  --public-admin-origin https://… --public-participant-origin https://…  Behind a TLS-terminating proxy that passes the original Host header\n  --behind-proxy          Rate-limit by the proxy-appended X-Forwarded-For entry\n\nCodespaces automatically selects exact HTTPS forwarding origins for native public mode; keep organizer port 5174 Private. Port visibility is never changed.\nThe local host uses Bun, or the Node 24 development entry with built interfaces and SQLite. The local Challenge catalog requires Docker Compose. AWS service problems require cloud hosting or explicit local simulator configuration.\nmake local opens the unified competition console. make down stops local environments while retaining their data.`,
+      `TenkaCloud local competition hosting\n\nmake local LOCAL_ARGS="[--data <directory>] [--no-build]"\n  --no-simulator  Start only Docker/browser exercises, without downloading or starting Simulator\n  --simulator-binary <executable>  Override the pinned native release for same-machine startup\n  --simulator-token <token>  Alternative to --simulator-token-file; process arguments and shell history may expose it\n  --simulator-endpoint http://127.0.0.1:PORT --simulator-token-file <private-file> --simulator-region ap-northeast-1  Explicit local AWS simulator, never real AWS\n  --simulator-bootstrap  Explicitly create/reuse this installation's limited local Hello World deployment role\n  --submission-catalog <file>  Organizer-owned fixed-edition answer / self-report catalog\n  --admin-port 5174       Host console; loopback unless using public origins\n  --participant-port 5175 Participant portal\n  --gateway-ports ${DEFAULT_GATEWAY_PORTS}  Exercise gateways, leased only by active local environments\n  --max-active-per-team 3  Per-team local environment limit\n  --max-active-environments 12  Host-wide active environment limit\n  --container-memory-mib 4096  Sum of container memory caps, not a hardware benchmark\n  --docker-network-pool <CIDR>  Explicit private /16–/24 pool for compact project networks; must not overlap LAN/VPN routes\n  --competition-network  Fail-closed native Linux 28.4.x team isolation (requires pool, root firewall/nsenter access)\n  --console-origin https://play.example --web-origin-template https://{target}.labs.example  Native console-only appliance behind an operator-managed TLS proxy\n  --web-port 5176 --web-services web  Loopback Web broker and declared HTTP service IDs\n  --vpn-peers <root-owned-json>  Preconfigured dedicated Linux WireGuard ingress (requires boot seal service)\n  --lan <private-ip> --unsafe-lan  Explicit unencrypted hosting; Docker exercises require native isolation unless --unsafe-docker-lan is given\n  --unsafe-docker-lan     With --lan --unsafe-lan only: run Docker exercises with no team network isolation, for trusted participants (new events only)\n  --public-admin-origin https://… --public-participant-origin https://…  Behind a TLS-terminating proxy that passes the original Host header\n  --behind-proxy          Rate-limit by the proxy-appended X-Forwarded-For entry\n\nCodespaces automatically selects exact HTTPS forwarding origins for native public mode; keep organizer port 5174 Private. Port visibility is never changed.\nThe local host uses Bun, or the Node 24 development entry with built interfaces and SQLite. The local Challenge catalog requires Docker Compose. Same-machine loopback hosting starts the pinned native Simulator automatically. AWS service problems require cloud hosting or local simulator configuration. LAN, public proxy and VPN hosting never start a local Simulator.\nmake local opens the unified competition console. make down stops local environments while retaining their data.`,
     );
     return;
   }
   if (process.platform === "win32")
     throw new Error("Native Windows is not supported; use WSL2 or a macOS/Linux host.");
   process.umask(0o077);
-  if (lifecycle.signal?.aborted) return;
-  if (options.build) await buildHosting(root, "summary");
-  else assertHostCatalogBuild(root);
-  if (lifecycle.signal?.aborted) return;
+  const shutdown = hostStopSignal(lifecycle.signal);
+  try {
+    if (shutdown.signal.aborted) return;
+    preflightSimulatorHosting(options.simulator);
+    if (options.build) await buildHosting(root, "summary");
+    else assertHostCatalogBuild(root);
+    await withSimulatorSession(options, shutdown.signal, async (simulator, signal) => {
+      await runSimulatorHost(root, options, lifecycle, simulator, signal);
+    });
+  } finally {
+    shutdown.close();
+  }
+}
+
+async function serveHost(
+  host: RunningLocalHost,
+  settings: ReturnType<typeof parseOptions>,
+  lifecycle: { onReady?: (host: RunningLocalHost) => void; stopLocalEnvironments?: boolean },
+  signal: AbortSignal,
+): Promise<void> {
+  try {
+    lifecycle.onReady?.(host);
+    // Public hosts recover keys only through a separate private exec terminal.
+    if (!settings.public) displayLocalOrganizerKey(host);
+    announceHost(settings, host, lifecycle.stopLocalEnvironments === true);
+    await waitForStop(signal);
+    console.log("Closing listeners; waiting for in-flight environment operations to finish.");
+  } finally {
+    await host.stop({ stopLocalEnvironments: lifecycle.stopLocalEnvironments });
+  }
+}
+
+async function runSimulatorHost(
+  root: string,
+  options: ReturnType<typeof parseOptions>,
+  lifecycle: { onReady?: (host: RunningLocalHost) => void; stopLocalEnvironments?: boolean },
+  simulator: SimulatorSettings | undefined,
+  signal: AbortSignal,
+): Promise<void> {
+  if (signal.aborted) return;
   console.log("Starting the host server...");
   const vpn = options.vpnPeerPath
     ? new NativeVpnIngress(loadVpnPeerPlan(options.vpnPeerPath))
     : undefined;
-  const connection = await connectSimulatorHosting(root, options.dataDirectory, options.simulator);
+  const connection = await connectSimulatorHosting(root, options.dataDirectory, simulator);
+  if (signal.aborted) return;
   const settings = {
     ...options,
+    ...(simulator ? { simulator } : {}),
     ...(connection ? { accountConnection: connection } : {}),
     ...(vpn ? { ...vpnListener(options, vpn.plan), vpn } : {}),
   };
@@ -160,15 +212,5 @@ export async function runLocalHost(
       connection?.engine((job) => store.team(job.teamId)),
     ),
   );
-  try {
-    lifecycle.onReady?.(host);
-    // A container's controlling TTY can be captured by its log driver. Public hosts
-    // recover keys only through a separate private exec terminal, never startup output.
-    if (!options.public) displayLocalOrganizerKey(host);
-    announceHost(settings, host, lifecycle.stopLocalEnvironments === true);
-    await waitForStop(lifecycle.signal);
-    console.log("Closing listeners; waiting for in-flight environment operations to finish.");
-  } finally {
-    await host.stop({ stopLocalEnvironments: lifecycle.stopLocalEnvironments });
-  }
+  await serveHost(host, settings, lifecycle, signal);
 }
