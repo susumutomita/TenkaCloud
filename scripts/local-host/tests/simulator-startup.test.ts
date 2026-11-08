@@ -55,7 +55,9 @@ test("wrong relative token path fails before catalog acquisition; the sibling's 
   const invoke = (path: string) => {
     const result = Bun.spawnSync([process.execPath, command, "start", ...flags(path)], {
       cwd: host,
-      env: withoutProxy(),
+      // Never inherit CI's selected catalog: valid credentials must reach a deterministic
+      // local import failure, without downloading or starting a real host.
+      env: { ...withoutProxy(), CATALOG_SOURCES: join(host, "missing-catalog-sources.json") },
     });
     expect(result.exitCode).toBe(1);
     const output = result.stdout.toString() + result.stderr.toString();
