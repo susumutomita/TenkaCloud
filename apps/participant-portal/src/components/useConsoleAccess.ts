@@ -47,6 +47,28 @@ export interface ConsoleAccess {
   readonly dismissError: () => void;
 }
 
+function reserveSimulatorWindow(t: TranslateFn) {
+  const tab = window.open("about:blank", "_blank");
+  if (!tab) throw new Error(t("sso_credentials.console_popup_blocked"));
+  tab.opener = null;
+  return {
+    navigate: (url: string) => {
+      if (!tab.closed) tab.location.replace(url);
+    },
+    close: () => tab.close(),
+  };
+}
+
+function consoleDestination(kind: "simulator" | undefined, t: TranslateFn) {
+  if (kind === "simulator") return reserveSimulatorWindow(t);
+  return {
+    navigate: (url: string) => {
+      void window.open(url, "_blank", "noopener,noreferrer");
+    },
+    close: () => undefined,
+  };
+}
+
 /**
  * AWS Console ワンクリック login の共有 hook。SSO Credentials ページと TopNavigation の
  * 常設 Console 導線 (Issue #1919) が同じロジックを使う (= 重複排除)。
@@ -84,10 +106,15 @@ export function useConsoleAccess(config: AppConfig): ConsoleAccess {
       }
       setPending(jobId);
       setError(null);
+      // Open while the click still carries browser user activation. The code is
+      // one-use and arrives later; no operator credential enters this window.
+      let consoleWindow: ReturnType<typeof reserveSimulatorWindow> | undefined;
       try {
+        consoleWindow = consoleDestination(problem.consoleKind, t);
         const loginUrl = await getConsoleSigninUrl(config.apiBaseUrl, sessionToken, jobId);
-        window.open(loginUrl, "_blank", "noopener,noreferrer");
+        consoleWindow.navigate(loginUrl);
       } catch (err) {
+        consoleWindow?.close();
         const message = describeOpenConsoleError(err, t);
         if (message === "auth_logout") {
           auth.logout();

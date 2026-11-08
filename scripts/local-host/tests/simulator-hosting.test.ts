@@ -194,8 +194,9 @@ test("simulator SDK rechecks proxy configuration after startup before signing an
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
-    fetch: () => {
+    fetch: (request) => {
       requests++;
+      if (new URL(request.url).pathname === "/_simulator/v1/capabilities") return Response.json({});
       return new Response(
         "<GetCallerIdentityResponse><GetCallerIdentityResult><Account>999999999999</Account><Arn>arn:aws:iam::999999999999:root</Arn><UserId>synthetic</UserId></GetCallerIdentityResult></GetCallerIdentityResponse>",
         { headers: { "Content-Type": "text/xml" } },
@@ -212,7 +213,7 @@ test("simulator SDK rechecks proxy configuration after startup before signing an
       tokenFile,
     });
     if (!connection) throw new Error("Simulator connection missing");
-    expect(requests).toBe(1);
+    expect(requests).toBe(2);
     for (const key of [
       "HTTP_PROXY",
       "http_proxy",
@@ -225,7 +226,7 @@ test("simulator SDK rechecks proxy configuration after startup before signing an
       await expect(connection.verify("000000000000", "SyntheticRole")).rejects.toThrow(
         "No request was sent",
       );
-      expect(requests).toBe(1);
+      expect(requests).toBe(2);
       Reflect.deleteProperty(process.env, key);
     }
   } finally {

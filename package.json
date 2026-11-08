@@ -15,6 +15,7 @@
     "start": "bun run scripts/local-host/main.ts",
     "bench:host": "bun run scripts/local-host/bench/capacity.ts",
     "test:simulator-hello": "bun run scripts/local-host/integration/simulator-hello.ts",
+    "test:simulator-console": "bun run scripts/local-host/integration/simulator-console.ts",
     "test:host": "bun run check:portable-domain && bun test ./scripts/local-host/tests/*.test.ts ./scripts/local-host/container/*.test.ts ./scripts/lib/*.test.ts && bun run scripts/local-host/tests/run.ts",
     "typecheck:host": "tsc --noEmit -p tsconfig.host.json",
     "tenkacloud": "bun run scripts/tenkacloud.ts",
@@ -65,6 +66,7 @@
   "author": "Susumu Tomita (https://susumutomita.netlify.app/)",
   "license": "Apache-2.0",
   "dependencies": {
+    "@aws-crypto/sha256-js": "5.2.0",
     "@aws-sdk/client-cloudformation": "3.1161.0",
     "@aws-sdk/client-dynamodb": "3.1161.0",
     "@aws-sdk/client-ssm": "3.1161.0",
@@ -72,6 +74,7 @@
     "@aws-sdk/lib-dynamodb": "3.1161.0",
     "@modelcontextprotocol/server": "2.4.0",
     "@node-saml/node-saml": "5.1.0",
+    "@smithy/signature-v4": "5.7.5",
     "@tenkacloud/coordination-plugin-sdk": "workspace:*",
     "@xmldom/xmldom": "0.9.12",
     "esbuild": "^0.28.2",

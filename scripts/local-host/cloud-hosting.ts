@@ -21,7 +21,7 @@ export interface CloudHosting {
 
 type AwsClients = Pick<
   CloudFormationEngineOptions,
-  "sts" | "cloudFormation" | "ssm" | "federationFetch" | "simulatorEndpoint"
+  "sts" | "cloudFormation" | "ssm" | "federationFetch" | "simulatorEndpoint" | "simulatorConsole"
 >;
 
 /** Credentials come from the AWS SDK's default chain, never from a flag. */
