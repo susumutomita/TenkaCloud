@@ -143,6 +143,7 @@ export function buildConsoleUtility(
     readonly awsAccountId?: string;
     readonly provider?: string;
     readonly accessCapabilities?: readonly string[];
+    readonly consoleKind?: "simulator";
   }[],
   openConsole: (jobId: string) => void,
   navigate: (href: string) => void,
@@ -154,7 +155,11 @@ export function buildConsoleUtility(
   if (consolable.length === 0) {
     return {
       type: "button",
-      text: t("nav.open_console"),
+      text: t(
+        problems.some((problem) => problem.consoleKind === "simulator")
+          ? "nav.open_simulator_console"
+          : "nav.open_console",
+      ),
       iconName: "external",
       onClick: () => navigate("/tools/sso"),
     };
@@ -163,14 +168,18 @@ export function buildConsoleUtility(
     const only = consolable[0];
     return {
       type: "button",
-      text: t("nav.open_console"),
+      text: t(only.consoleKind === "simulator" ? "nav.open_simulator_console" : "nav.open_console"),
       iconName: "external",
       onClick: () => openConsole(only.jobId),
     };
   }
   return {
     type: "menu-dropdown",
-    text: t("nav.open_console"),
+    text: t(
+      consolable.every((problem) => problem.consoleKind === "simulator")
+        ? "nav.open_simulator_console"
+        : "nav.open_console",
+    ),
     iconName: "external",
     items: consolable.map((p) => ({ id: p.jobId, text: p.problemId })),
     onItemClick: ({ detail }) => openConsole(detail.id),

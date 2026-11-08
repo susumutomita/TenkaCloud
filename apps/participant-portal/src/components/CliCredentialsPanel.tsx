@@ -190,17 +190,12 @@ function CliCredentialsDisplay({
           revealed
         />
       )}
-      {credentials.endpointUrl !== undefined && (
-        <Box variant="small" color="text-body-secondary">
-          Simulator setup requires AWS CLI and defines an aws shell function that forces this local
-          endpoint. Changing or overriding the endpoint is refused. Use a fresh shell to return to
-          real AWS.
-        </Box>
-      )}
+      {credentials.endpointUrl !== undefined && !expired && <SimulatorCliInstructions />}
       <SpaceBetween size="xs" direction="horizontal">
         <Button
           variant="normal"
           iconName="copy"
+          disabled={expired}
           onClick={() => void writeToClipboard(exportSnippet)}
         >
           {t("sso_credentials.cli.copy_export_button")}
@@ -221,6 +216,28 @@ function CliCredentialsDisplay({
         {t("sso_credentials.cli.security_note")}
       </Box>
     </SpaceBetween>
+  );
+}
+
+function SimulatorCliInstructions() {
+  const t = useT();
+  return (
+    <Alert type="info" header={t("sso_credentials.cli.simulator_steps_header")}>
+      <SpaceBetween size="xs">
+        <ol>
+          <li>{t("sso_credentials.cli.simulator_step_install")}</li>
+          <li>{t("sso_credentials.cli.simulator_step_export")}</li>
+          <li>
+            {t("sso_credentials.cli.simulator_step_verify")}{" "}
+            <code>aws sts get-caller-identity</code>
+          </li>
+          <li>{t("sso_credentials.cli.simulator_step_problem")}</li>
+        </ol>
+        <Box variant="small">{t("sso_credentials.cli.simulator_s3_note")}</Box>
+        <Box variant="small">{t("sso_credentials.cli.simulator_endpoint_note")}</Box>
+        <Box variant="small">{t("sso_credentials.cli.simulator_shell_note")}</Box>
+      </SpaceBetween>
+    </Alert>
   );
 }
 

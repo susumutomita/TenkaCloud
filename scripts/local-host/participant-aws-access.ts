@@ -1,7 +1,12 @@
 import { AssumeRoleCommand, type AssumeRoleCommandOutput } from "@aws-sdk/client-sts";
 import { z } from "zod";
 import { HostError, type Job, type Team } from "./model";
-import { ParticipantAssumeRoleError, type ParticipantAwsAccess } from "./participant-aws-contract";
+import {
+  ParticipantAssumeRoleError,
+  type ParticipantAwsAccess,
+  type ParticipantSessionCredentials,
+  type SimulatorConsoleIssuer,
+} from "./participant-aws-contract";
 
 const FEDERATION_ENDPOINT = "https://signin.aws.amazon.com/federation";
 const SESSION_SECONDS = 3600;
@@ -12,6 +17,7 @@ const unitSchema = z.object({
   roleArn: z.string().regex(/^arn:aws:iam::\d{12}:role\/[A-Za-z0-9+=,.@_/-]+$/u),
   outputs: z.object({
     ParticipantViewerRoleArn: z.string().regex(/^arn:aws:iam::\d{12}:role\/[A-Za-z0-9+=,.@_/-]+$/u),
+    ParameterName: z.string().optional(),
   }),
 });
 const credentialsSchema = z.object({
@@ -28,14 +34,10 @@ interface ConsoleTarget {
   readonly region: string;
   readonly deployRoleArn: string;
   readonly viewerRoleArn: string;
+  readonly parameterName?: string;
 }
 
-interface SessionCredentials {
-  readonly accessKeyId: string;
-  readonly secretAccessKey: string;
-  readonly sessionToken: string;
-  readonly expiration: Date;
-}
+type SessionCredentials = ParticipantSessionCredentials;
 
 interface AccessStsClient {
   send(
@@ -47,6 +49,7 @@ interface AccessStsClient {
 export interface ParticipantAwsClients {
   readonly sts: AccessStsClient;
   readonly federationFetch?: (url: string, init: RequestInit) => Promise<Response>;
+  readonly simulatorConsole?: SimulatorConsoleIssuer;
 }
 
 export type { ParticipantAwsAccess } from "./participant-aws-contract";
@@ -84,6 +87,7 @@ function consoleTarget(job: Job, team: Team): ConsoleTarget {
     region: unit.region,
     deployRoleArn,
     viewerRoleArn,
+    parameterName: unit.outputs.ParameterName,
   };
 }
 
@@ -188,10 +192,10 @@ export async function participantAwsAccess(args: {
   readonly endpointUrl?: string;
   readonly assertCurrent: () => void;
 }): Promise<ParticipantAwsAccess> {
-  if (args.endpointUrl && args.kind === "console")
+  if (args.endpointUrl && args.kind === "console" && !args.clients.simulatorConsole)
     throw new HostError(
       409,
-      "AWS console access is unavailable in simulator mode. Use local CLI credentials.",
+      "This Simulator version does not support participant Console access. Ask the organizer to update Simulator; CLI access remains available.",
       "console_unavailable",
     );
   const target = consoleTarget(args.job, args.team);
@@ -225,6 +229,16 @@ export async function participantAwsAccess(args: {
         awsAccountId: target.accountId,
       },
     };
+  }
+  if (args.endpointUrl) {
+    if (!target.parameterName || !args.clients.simulatorConsole)
+      throw new HostError(409, "This environment has no Simulator Console target.", "not_ready");
+    const loginUrl = await args.clients.simulatorConsole(
+      { credentials: viewer, parameterName: target.parameterName, region: target.region },
+      args.assertCurrent,
+    );
+    args.assertCurrent();
+    return { kind: "console", loginUrl };
   }
   const loginUrl = await consoleUrl(
     viewer,

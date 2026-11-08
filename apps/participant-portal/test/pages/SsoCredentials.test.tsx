@@ -148,6 +148,36 @@ describe("SsoCredentialsPage render branches", () => {
     expect(screen.getByTestId("cli-job-1")).toBeInTheDocument();
   });
 
+  it("labels compatible Simulator access and explains an older CLI-only connection", () => {
+    mockTeamView.mockReturnValue({
+      view: {
+        problems: [
+          problem({ consoleKind: "simulator", accessCapabilities: ["console", "cli-credentials"] }),
+        ],
+      },
+      error: undefined,
+    });
+    const rendered = renderPage();
+    expect(
+      screen.getByRole("button", {
+        name: "sso_credentials.open_simulator_console_button (hello-world)",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("sso_credentials.open_console_button")).not.toBeInTheDocument();
+    mockTeamView.mockReturnValue({
+      view: {
+        problems: [problem({ consoleKind: "simulator", accessCapabilities: ["cli-credentials"] })],
+      },
+      error: undefined,
+    });
+    rendered.rerender(<SsoCredentialsPage config={config} />);
+    expect(screen.getByText("sso_credentials.simulator_console_update")).toBeInTheDocument();
+    expect(screen.getByTestId("cli-job-1")).toBeInTheDocument();
+    expect(
+      screen.queryByText("sso_credentials.open_simulator_console_button"),
+    ).not.toBeInTheDocument();
+  });
+
   it("should render a non-AWS problem with its provider instead of dropping it", () => {
     // #2233: 非 AWS 問題は SSO ページから消さない。provider 名と説明を出し、
     // AWS Console ボタン / CLI panel は出さない (external-portal 導線は RC-32 第3弾)。

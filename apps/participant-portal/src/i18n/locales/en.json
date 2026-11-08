@@ -13,6 +13,7 @@
     "fetch_status_failed": "Failed to fetch status"
   },
   "nav": {
+    "open_simulator_console": "Open Simulator Console",
     "problems": "Problems",
     "notifications": "Notifications",
     "menu_header": "Menu",
@@ -303,6 +304,9 @@
     "info_diagram_open": "Open the diagram in a new tab"
   },
   "sso_credentials": {
+    "open_simulator_console_button": "Open Simulator Console",
+    "simulator_console_update": "This Simulator does not support participant Console access yet. Ask the organizer to update the Simulator. You can still use the CLI.",
+    "console_popup_blocked": "The Console could not open. Allow pop-ups for this site, then try again.",
     "aws_access_unavailable": "AWS access is not available for this deployment. Check its current state or ask the organizer.",
     "title": "SSO Credentials",
     "description": "Temporary access to the AWS environment prepared for your team. Available access methods depend on the problem.",
@@ -331,6 +335,14 @@
       "reveal_secrets_button": "Reveal secrets",
       "hide_secrets_button": "Hide secrets",
       "copy_export_button": "Copy export snippet",
+      "simulator_steps_header": "Use these credentials in a terminal",
+      "simulator_step_install": "Install AWS CLI before starting.",
+      "simulator_step_export": "Open a fresh Bash or Zsh terminal. Click “Copy export snippet” below, paste the entire snippet into that terminal, and run it.",
+      "simulator_step_verify": "In the same terminal, check your connection by running:",
+      "simulator_step_problem": "After the identity check succeeds, follow the commands in this problem’s instructions in the same terminal.",
+      "simulator_s3_note": "Do not use aws s3 ls to check the connection. These Simulator STS credentials currently support STS, IAM, CloudFormation, and SSM, but not S3. S3 can return InvalidClientTokenId even when the credentials work.",
+      "simulator_endpoint_note": "AWS_ENDPOINT_URL is the local Simulator API endpoint, not a browser Console URL. Do not paste these access keys or the session token into a Console login form.",
+      "simulator_shell_note": "The snippet defines an aws shell function that forces this local endpoint and refuses endpoint overrides. To return to real AWS, open another fresh terminal instead of changing the endpoint.",
       "field_access_key_id": "AWS_ACCESS_KEY_ID",
       "field_secret_access_key": "AWS_SECRET_ACCESS_KEY",
       "field_session_token": "AWS_SESSION_TOKEN",

@@ -30,6 +30,17 @@ function externalPortalHref(problem: ParticipantProblemView): string | undefined
   return externalPortalUrl(problemProvider(problem));
 }
 
+function consoleButtonText(problem: ParticipantProblemView, t: ReturnType<typeof useT>) {
+  if (problem.consoleKind === "simulator") {
+    const label = t("sso_credentials.open_simulator_console_button");
+    return { label, ariaLabel: `${label} (${problem.problemId})` };
+  }
+  return {
+    label: t("sso_credentials.open_console_button"),
+    ariaLabel: t("sso_credentials.open_console_aria", { problemId: problem.problemId }),
+  };
+}
+
 /**
  * AWS Console ワンクリック login。競技者は自前 AWS ログイン不要で、Portal の button
  * を押すと backend Lambda が STS AssumeRole + signin federation を実行して
@@ -106,12 +117,10 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
                       iconName="external"
                       loading={pending === problem.jobId}
                       disabled={pending !== null && pending !== problem.jobId}
-                      ariaLabel={t("sso_credentials.open_console_aria", {
-                        problemId: problem.problemId,
-                      })}
+                      ariaLabel={consoleButtonText(problem, t).ariaLabel}
                       onClick={() => void openConsole(problem.jobId)}
                     >
-                      {t("sso_credentials.open_console_button")}
+                      {consoleButtonText(problem, t).label}
                     </Button>
                   )
                 }
@@ -121,6 +130,10 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
             }
           >
             <SpaceBetween size="m">
+              {problem.consoleKind === "simulator" &&
+                !hasAwsAccessCapability(problem, "console") && (
+                  <Alert type="info">{t("sso_credentials.simulator_console_update")}</Alert>
+                )}
               {!hasAwsAccessCapability(problem, "console") &&
                 !hasAwsAccessCapability(problem, "cli-credentials") && (
                   <Box>{t("sso_credentials.aws_access_unavailable")}</Box>

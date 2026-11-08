@@ -51,7 +51,7 @@ export function announceHost(
 ): void {
   if (options.simulator)
     console.log(
-      `AWS simulator: ${options.simulator.endpoint} (${options.simulator.region}); AWS console federation is unavailable. Local competitor account: 000000000000; deployment role: TenkaCloud-SimulatorDeploy-Role.`,
+      `AWS simulator: ${options.simulator.endpoint} (${options.simulator.region}); participant Console access is provided by compatible Simulator versions, never real AWS federation. Local competitor account: 000000000000; deployment role: TenkaCloud-SimulatorDeploy-Role.`,
     );
   if (options.consoleAppliance) {
     console.log(

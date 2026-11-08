@@ -9,6 +9,7 @@ import { CloudFormationEngine } from "../cloudformation-engine";
 import { CompetitionEngine } from "../competition-engine";
 import { startHttpHost } from "../http";
 import type { Job } from "../model";
+import type { SimulatorConsoleIssuer } from "../participant-aws-contract";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
 import { createTemporaryDirectory, removeTemporaryDirectory } from "../temporary-directory";
@@ -24,7 +25,12 @@ function roleStage(input: AssumeRoleCommandInput) {
 }
 
 export async function createParticipantAwsFixture(
-  options: { withAws?: boolean; staticRoot?: string; simulatorEndpoint?: string } = {},
+  options: {
+    withAws?: boolean;
+    staticRoot?: string;
+    simulatorEndpoint?: string;
+    simulatorConsole?: SimulatorConsoleIssuer;
+  } = {},
 ) {
   const directory = createTemporaryDirectory(root, "tenka-console-");
   const database = join(directory, "host.sqlite");
@@ -71,6 +77,7 @@ export async function createParticipantAwsFixture(
   };
   const cloud = new CloudFormationEngine(root, {
     simulatorEndpoint: options.simulatorEndpoint,
+    simulatorConsole: options.simulatorConsole,
     region: "ap-northeast-1",
     externalId: "host-external-id-0123456789",
     operatorAccountId: async () => "999999999999",
@@ -195,6 +202,7 @@ export async function createParticipantAwsFixture(
         stackName: `team-${index}`,
         outputs: {
           ParticipantViewerRoleArn: `arn:aws:iam::${accountId}:role/hello-world-viewer-${index}`,
+          ParameterName: `/tc-hello-world-team-${index}/hello`,
           ParameterValue: "private-flag",
         },
       }),
