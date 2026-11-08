@@ -27,7 +27,7 @@ test("local help offers managed and explicit simulator configuration without the
       "AWS service problems require cloud hosting or local simulator configuration",
     );
     expect(output).toContain(
-      "Same-machine loopback hosting starts the pinned native Simulator automatically",
+      "Same-machine loopback hosting starts a locally locked native Simulator automatically",
     );
     for (const flag of [
       "--no-simulator",

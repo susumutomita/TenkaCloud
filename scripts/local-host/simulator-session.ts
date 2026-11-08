@@ -1,18 +1,16 @@
 import { join } from "node:path";
 import { startManagedSimulator } from "./managed-simulator";
 import { assertSimulatorProxyDisabled, type SimulatorSettings } from "./simulator-hosting";
-import { ensureSimulatorBinary } from "./simulator-release";
-import { officialSimulatorRelease } from "./simulator-release-pin";
+import { ensureOfficialSimulatorBinary } from "./simulator-release-lock";
 
 interface Options {
   readonly dataDirectory: string;
   readonly simulator?: SimulatorSettings;
-  readonly managedSimulator?: { readonly binary?: string };
+  readonly managedSimulator?: { readonly binary?: string; readonly update?: boolean };
 }
 interface Dependencies {
   readonly start?: typeof startManagedSimulator;
-  readonly install?: typeof ensureSimulatorBinary;
-  readonly release?: typeof officialSimulatorRelease;
+  readonly install?: typeof ensureOfficialSimulatorBinary;
 }
 
 /** Keep the native process alive until host operations drain, then stop only our child. */
@@ -27,9 +25,9 @@ export async function withSimulatorSession(
   assertSimulatorProxyDisabled();
   const binary =
     options.managedSimulator.binary ??
-    (await (dependencies.install ?? ensureSimulatorBinary)({
+    (await (dependencies.install ?? ensureOfficialSimulatorBinary)({
       cacheDirectory: join(options.dataDirectory, "simulator-binaries"),
-      release: (dependencies.release ?? officialSimulatorRelease)(),
+      update: options.managedSimulator.update,
       signal,
     }));
   const startup = new AbortController();

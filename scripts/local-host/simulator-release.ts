@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { constants, type Stats } from "node:fs";
 import { type FileHandle, link, lstat, mkdir, open, unlink } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { consumeSimulatorStream } from "./simulator-release-stream";
 
 export type SimulatorReleaseAsset =
   `tenkacloud-simulator_${"linux" | "darwin"}_${"amd64" | "arm64"}`;
@@ -31,7 +32,7 @@ function missing(error: unknown): boolean {
   return (error as NodeJS.ErrnoException).code === "ENOENT";
 }
 
-async function privateCache(directory: string): Promise<void> {
+export async function prepareSimulatorCache(directory: string): Promise<void> {
   // Check every existing component before mkdir: recursive mkdir alone follows symlinks.
   const parent = dirname(directory);
   if (parent !== directory) await checkParents(parent);
@@ -104,7 +105,7 @@ async function verifyCached(path: string, checksum: string, maxBytes: number): P
   }
 }
 
-async function releaseResponse(
+export async function simulatorReleaseResponse(
   url: string,
   fetcher: (url: string, init: RequestInit) => Promise<Response>,
   signal: AbortSignal,
@@ -133,14 +134,14 @@ async function releaseResponse(
   throw new Error("Simulator release exceeded the redirect limit.");
 }
 
-/** Installs only the official, checksum-pinned release. Never builds source or executes downloads. */
+/** Installs only an official release whose checksums were verified by the release resolver. Never builds source or executes downloads. */
 export async function ensureSimulatorBinary(
   options: { cacheDirectory: string; release: SimulatorRelease; signal?: AbortSignal },
   dependencies: Dependencies = {},
 ): Promise<string> {
   const { release } = options;
   if (!/^v\d+\.\d+\.\d+(?:-[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*)?$/.test(release.version))
-    throw new Error("Simulator release must have a pinned semantic version tag.");
+    throw new Error("Simulator release must have a semantic version tag.");
   const asset = assetFor(
     dependencies.platform ?? process.platform,
     dependencies.arch ?? process.arch,
@@ -150,7 +151,7 @@ export async function ensureSimulatorBinary(
     throw new Error("Simulator release is missing a trusted SHA-256 checksum for this platform.");
   const maxBytes = dependencies.maxBytes ?? MAX_BYTES;
   const directory = resolve(options.cacheDirectory);
-  await privateCache(directory);
+  await prepareSimulatorCache(directory);
   const destination = join(directory, `${release.version}-${asset}`);
   options.signal?.throwIfAborted();
   if (await verifyCached(destination, checksum, maxBytes)) return destination;
@@ -175,7 +176,7 @@ async function downloadBinary(
   const temporary = join(directory, `.download-${randomUUID()}`);
   let created = false;
   try {
-    const response = await releaseResponse(
+    const response = await simulatorReleaseResponse(
       `${RELEASE_URL}/${release.version}/${asset}`,
       dependencies.fetch ?? globalThis.fetch,
       controller.signal,
@@ -222,7 +223,7 @@ async function validatedBody(
   if (!response.ok || !response.body) {
     await response.body?.cancel();
     throw new Error(
-      "Simulator release is unavailable. Check connectivity and that the pinned official release is published, or supply an explicit simulator binary.",
+      "Simulator release is unavailable. Check connectivity and that the locked official release is published, or supply an explicit simulator binary.",
     );
   }
   const length = response.headers.get("content-length");
@@ -240,29 +241,21 @@ async function writeVerifiedBinary(
   maxBytes: number,
   signal: AbortSignal,
 ): Promise<void> {
-  const reader = body.getReader();
   const hash = createHash("sha256");
   let size = 0;
   try {
-    for (;;) {
-      signal.throwIfAborted();
-      const { done, value } = await reader.read();
-      if (done) break;
+    await consumeSimulatorStream(body, signal, async (value) => {
       size += value.byteLength;
       if (size > maxBytes) throw new Error("Simulator release exceeds the binary size limit.");
       hash.update(value);
       await file.writeFile(value);
-    }
+    });
     signal.throwIfAborted();
     if (size === 0 || hash.digest("hex") !== checksum)
       throw new Error("Simulator release checksum mismatch; download discarded.");
     await file.sync();
     await file.chmod(0o700);
   } finally {
-    await reader.cancel().catch(() => {
-      /* Preserve the original download error. */
-    });
-    reader.releaseLock();
     await file.close();
   }
 }

@@ -127,7 +127,7 @@ test("rejects unsupported platforms, path-like tags and missing checksum before 
       { ...options, release: { ...release, version: "../../escape" } },
       { ...platform, fetch: fetcher },
     ),
-  ).rejects.toThrow("pinned semantic");
+  ).rejects.toThrow("semantic");
   await expect(
     ensureSimulatorBinary(
       {
@@ -259,4 +259,28 @@ test("cancellation and timeout clean up and sanitize private fetch errors", asyn
       }),
     }),
   ).rejects.toThrow("check connectivity");
+});
+
+test("pending binary read and nonsettling cancellation cannot prevent timeout cleanup", async () => {
+  const options = await setup();
+  const body = new ReadableStream<Uint8Array>({
+    cancel: () =>
+      new Promise<void>(() => {
+        /* Simulate an uncooperative underlying stream. */
+      }),
+  });
+  const pending = ensureSimulatorBinary(options, {
+    ...platform,
+    timeoutMs: 10,
+    fetch: async () => new Response(body),
+  });
+  const outcome = await Promise.race([
+    pending.then(
+      () => "unexpected success",
+      (error: Error) => error.message,
+    ),
+    new Promise<string>((resolve) => setTimeout(() => resolve("still pending"), 100)),
+  ]);
+  expect(outcome).toContain("timed out");
+  expect(await readdir(options.cacheDirectory)).toEqual([]);
 });

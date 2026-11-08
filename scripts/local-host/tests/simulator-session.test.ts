@@ -1,7 +1,6 @@
 /* eslint-disable sonarjs/no-clear-text-protocols -- Numeric loopback is the simulator transport contract. */
 import { afterEach, expect, test } from "bun:test";
 import { parseOptions } from "../options";
-import { officialSimulatorRelease } from "../simulator-release-pin";
 import { withSimulatorSession } from "../simulator-session";
 
 const saved = { ...process.env };
@@ -55,10 +54,6 @@ test("loopback defaults to managed simulator; opt-out and explicit external conn
     // eslint-disable-next-line sonarjs/no-hardcoded-ip -- Parsing fixture only; no connection is made.
     parseOptions(["--lan", "192.168.1.2", "--unsafe-lan"], "/fixture", {}).managedSimulator,
   ).toBeUndefined();
-});
-
-test("unpublished official release fails explicitly rather than inventing a pin", () => {
-  expect(() => officialSimulatorRelease()).toThrow("has not been pinned");
 });
 
 test("explicit native binary bypasses download and shuts down after host drains", async () => {
@@ -221,4 +216,19 @@ test("proxy flags never silently discard an explicit native binary", () => {
       {},
     ),
   ).toThrow("only for automatic same-machine simulator startup");
+});
+
+test("explicit release update is only available for automatic same-machine Simulator startup", () => {
+  expect(parseOptions(["--update-simulator"], "/fixture", {}).managedSimulator).toEqual({
+    update: true,
+  });
+  for (const extra of [
+    ["--no-simulator"],
+    ["--simulator-binary", "/fixture/native"],
+    // eslint-disable-next-line sonarjs/no-hardcoded-ip -- Private LAN parsing fixture; no connection is made.
+    ["--lan", "10.10.10.10", "--unsafe-lan"],
+  ])
+    expect(() => parseOptions(["--update-simulator", ...extra], "/fixture", {})).toThrow(
+      "--update-simulator",
+    );
 });

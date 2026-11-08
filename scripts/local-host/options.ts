@@ -52,6 +52,7 @@ function parseHostArgs(args: string[]) {
         "simulator-token": { type: "string" },
         "simulator-binary": { type: "string" },
         "no-simulator": { type: "boolean", default: false },
+        "update-simulator": { type: "boolean", default: false },
         "simulator-region": { type: "string" },
         "simulator-bootstrap": { type: "boolean", default: false },
         help: {
@@ -148,10 +149,26 @@ export function parseOptions(
 }
 
 function managedSimulatorOptions(
-  values: { "simulator-binary"?: string; "no-simulator"?: boolean; "behind-proxy"?: boolean },
+  values: {
+    "simulator-binary"?: string;
+    "no-simulator"?: boolean;
+    "behind-proxy"?: boolean;
+    "update-simulator"?: boolean;
+  },
   explicitSimulator: boolean,
   loopback: boolean,
-): { binary?: string } | undefined {
+): { binary?: string; update?: boolean } | undefined {
+  if (
+    values["update-simulator"] &&
+    (values["no-simulator"] ||
+      values["simulator-binary"] !== undefined ||
+      explicitSimulator ||
+      !loopback ||
+      values["behind-proxy"])
+  )
+    throw new Error(
+      "--update-simulator is only for automatic same-machine Simulator startup, without --no-simulator or an explicit connection/binary.",
+    );
   if (values["no-simulator"] && (explicitSimulator || values["simulator-binary"] !== undefined))
     throw new Error(
       "--no-simulator cannot be combined with simulator connection or binary options.",
@@ -163,7 +180,8 @@ function managedSimulatorOptions(
   const binary = values["simulator-binary"];
   if (binary !== undefined && !binary.trim())
     throw new Error("--simulator-binary must name an existing executable.");
-  return binary ? { binary: resolve(binary) } : {};
+  if (binary) return { binary: resolve(binary) };
+  return values["update-simulator"] ? { update: true } : {};
 }
 
 function assertSimulatorOptions(
