@@ -11,8 +11,8 @@ import {
 import { consumeSimulatorStream } from "./simulator-release-stream";
 
 const REPOSITORY = "https://github.com/susumutomita/TenkaCloudSimulator";
-const RELEASES =
-  "https://api.github.com/repos/susumutomita/TenkaCloudSimulator/releases?per_page=100";
+const RELEASE_API = "https://api.github.com/repos/susumutomita/TenkaCloudSimulator/releases";
+const RELEASES = `${RELEASE_API}?per_page=100`;
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const version = z.string().regex(/^v(?:0|[1-9]\d{0,8})\.(?:0|[1-9]\d{0,8})\.(?:0|[1-9]\d{0,8})$/u);
 const lockSchema = z
@@ -223,8 +223,7 @@ async function resolveCandidate(
   fetcher: Fetcher,
   signal: AbortSignal,
 ): Promise<ReleaseLock | undefined> {
-  const base = `${REPOSITORY}/releases/download/${tag}`;
-  const sums = await metadata(`${base}/SHA256SUMS`, fetcher, signal, 65_536, true);
+  const sums = await releaseMetadata(tag, "SHA256SUMS", fetcher, signal, true);
   if (sums === "") return undefined;
   const checksums: Record<string, string> = {};
   for (const line of sums.trimEnd().split("\n")) {
@@ -235,7 +234,7 @@ async function resolveCandidate(
       throw new Error("Simulator release checksum manifest is invalid or duplicated.");
     checksums[name] = checksum;
   }
-  const build = await metadata(`${base}/BUILDINFO.json`, fetcher, signal, 65_536);
+  const build = await releaseMetadata(tag, "BUILDINFO.json", fetcher, signal);
   if (createHash("sha256").update(build).digest("hex") !== checksums["BUILDINFO.json"])
     throw new Error("Simulator BUILDINFO checksum mismatch; release rejected.");
   const info = z
@@ -261,14 +260,80 @@ async function resolveCandidate(
   return parsed.data;
 }
 
+/** Only transient download gateway failures use the official API, once, within the same deadline. */
+async function releaseMetadata(
+  tag: string,
+  name: "SHA256SUMS" | "BUILDINFO.json",
+  fetcher: Fetcher,
+  signal: AbortSignal,
+  missingAllowed = false,
+): Promise<string> {
+  const url = `${REPOSITORY}/releases/download/${tag}/${name}`;
+  return metadata(url, fetcher, signal, 65_536, missingAllowed, async () => {
+    const raw = parseMetadata(
+      await metadata(`${RELEASE_API}/tags/${tag}`, fetcher, signal, 2 * 1024 * 1024),
+    );
+    const release = z
+      .object({
+        tag_name: z.literal(tag),
+        draft: z.literal(false),
+        prerelease: z.literal(false),
+        assets: z.array(
+          z.object({
+            id: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+            name: z.string(),
+            url: z.string(),
+            browser_download_url: z.string(),
+            state: z.string(),
+          }),
+        ),
+      })
+      .safeParse(raw);
+    if (!release.success)
+      throw new Error(
+        "Simulator release asset API metadata is invalid; the existing lock was retained.",
+      );
+    const matches = release.data.assets.filter((asset) => asset.name === name);
+    const asset = matches[0];
+    if (
+      matches.length !== 1 ||
+      !asset ||
+      asset.state !== "uploaded" ||
+      asset.browser_download_url !== url ||
+      asset.url !== `${RELEASE_API}/assets/${asset.id}`
+    )
+      throw new Error(
+        "Simulator release asset API identity mismatch; the existing lock was retained.",
+      );
+    // Construct the endpoint from the verified ID, never fetch a supplied URL or attach credentials.
+    return simulatorReleaseResponse(
+      `${RELEASE_API}/assets/${asset.id}`,
+      (target, init) =>
+        fetcher(target, { ...init, headers: { Accept: "application/octet-stream" } }),
+      signal,
+    );
+  });
+}
+
 async function metadata(
   url: string,
   fetcher: Fetcher,
   signal: AbortSignal,
   limit: number,
   missingAllowed = false,
+  fallback?: () => Promise<Response>,
 ): Promise<string> {
-  const response = await simulatorReleaseResponse(url, fetcher, signal);
+  let response = await simulatorReleaseResponse(url, fetcher, signal);
+  if (fallback && [502, 503, 504].includes(response.status)) {
+    // A stalled error-body cancellation must not consume the recovery deadline forever.
+    void response.body?.cancel().catch(() => {
+      /* The fallback response, not the discarded gateway body, determines the result. */
+    });
+    signal.throwIfAborted();
+    response = await fallback();
+    // A missing API asset is a failed recovery, not permission to select an older release.
+    missingAllowed = false;
+  }
   if (missingAllowed && response.status === 404) {
     await response.body?.cancel();
     return "";
@@ -276,7 +341,7 @@ async function metadata(
   if (!response.ok || !response.body) {
     await response.body?.cancel();
     throw new Error(
-      "Simulator release metadata unavailable; check connectivity or GitHub rate limits. The existing lock was retained.",
+      `Simulator release metadata unavailable (HTTP ${response.status}); check connectivity or GitHub rate limits. The existing lock was retained.`,
     );
   }
   const chunks: Uint8Array[] = [];
