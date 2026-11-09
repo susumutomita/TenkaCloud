@@ -555,3 +555,54 @@ test("a nonsettling gateway-body cancellation cannot stall metadata recovery", a
   expect(cancelled).toBe(true);
   expect(await readdir(options.cacheDirectory)).not.toContain(".release-operation");
 });
+
+test("binary API recovery updates lock only after verified bytes; failures preserve old lock and binary", async () => {
+  for (const corrupt of [false, true]) {
+    const options = await setup();
+    const oldBinary = await ensureOfficialSimulatorBinary(options, transport());
+    const lockPath = join(options.cacheDirectory, "release-lock.json");
+    const oldLock = await readFile(lockPath);
+    const selected = fixture("v0.2.0");
+    const deps = transport([selected]);
+    const name = "tenkacloud-simulator_linux_amd64";
+    const url = `https://github.com/susumutomita/TenkaCloudSimulator/releases/download/${selected.version}/${name}`;
+    const api = "https://api.github.com/repos/susumutomita/TenkaCloudSimulator/releases";
+    const fetch = async (target: string, init: RequestInit) => {
+      if (target === url) return new Response("gateway", { status: 504 });
+      if (target === `${api}/tags/${selected.version}`)
+        return Response.json({
+          tag_name: selected.version,
+          draft: false,
+          prerelease: false,
+          assets: [
+            {
+              id: 321,
+              name,
+              state: "uploaded",
+              browser_download_url: url,
+              url: `${api}/assets/321`,
+            },
+          ],
+        });
+      if (target === `${api}/assets/321`)
+        return new Response(corrupt ? "corrupt" : selected.binary);
+      return deps.fetch(target, init);
+    };
+    const operation = ensureOfficialSimulatorBinary(
+      { ...options, update: true },
+      { ...deps, fetch },
+    );
+    if (corrupt) {
+      await expect(operation).rejects.toThrow("checksum mismatch");
+      expect(await readFile(lockPath)).toEqual(oldLock);
+      expect((await readdir(options.cacheDirectory)).sort()).toEqual([
+        "release-lock.json",
+        "v0.1.0-tenkacloud-simulator_linux_amd64",
+      ]);
+    } else {
+      expect(await readFile(await operation, "utf8")).toBe(selected.binary);
+      expect(JSON.parse(await readFile(lockPath, "utf8")).version).toBe(selected.version);
+    }
+    expect(await readFile(oldBinary, "utf8")).toBe(fixture().binary);
+  }
+});

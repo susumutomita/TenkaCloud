@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { constants, type Stats } from "node:fs";
 import { type FileHandle, link, lstat, mkdir, open, unlink } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { officialSimulatorAssetResponse, simulatorReleaseResponse } from "./simulator-release-http";
 import { consumeSimulatorStream } from "./simulator-release-stream";
 
 export type SimulatorReleaseAsset =
@@ -105,35 +106,6 @@ async function verifyCached(path: string, checksum: string, maxBytes: number): P
   }
 }
 
-export async function simulatorReleaseResponse(
-  url: string,
-  fetcher: (url: string, init: RequestInit) => Promise<Response>,
-  signal: AbortSignal,
-): Promise<Response> {
-  for (let redirects = 0; redirects <= 3; redirects++) {
-    const response = await fetcher(url, { signal, redirect: "manual", credentials: "omit" });
-    if (![301, 302, 303, 307, 308].includes(response.status)) return response;
-    await response.body?.cancel();
-    const location = response.headers.get("location");
-    if (!location) throw new Error("Simulator release returned an invalid redirect.");
-    const target = new URL(location, url);
-    if (
-      target.protocol !== "https:" ||
-      target.username ||
-      target.password ||
-      target.port ||
-      ![
-        "github.com",
-        "release-assets.githubusercontent.com",
-        "objects.githubusercontent.com",
-      ].includes(target.hostname)
-    )
-      throw new Error("Simulator release redirected outside the trusted GitHub download hosts.");
-    url = target.href;
-  }
-  throw new Error("Simulator release exceeded the redirect limit.");
-}
-
 /** Installs only an official release whose checksums were verified by the release resolver. Never builds source or executes downloads. */
 export async function ensureSimulatorBinary(
   options: { cacheDirectory: string; release: SimulatorRelease; signal?: AbortSignal },
@@ -176,11 +148,7 @@ async function downloadBinary(
   const temporary = join(directory, `.download-${randomUUID()}`);
   let created = false;
   try {
-    const response = await simulatorReleaseResponse(
-      `${RELEASE_URL}/${release.version}/${asset}`,
-      dependencies.fetch ?? globalThis.fetch,
-      controller.signal,
-    );
+    const response = await binaryResponse(release.version, asset, dependencies, controller.signal);
     const body = await validatedBody(response, maxBytes);
     const file = await open(
       temporary,
@@ -216,19 +184,44 @@ async function downloadBinary(
   }
 }
 
+async function binaryResponse(
+  tag: string,
+  asset: SimulatorReleaseAsset,
+  dependencies: Dependencies,
+  signal: AbortSignal,
+): Promise<Response> {
+  const fetcher = dependencies.fetch ?? globalThis.fetch;
+  const response = await simulatorReleaseResponse(
+    `${RELEASE_URL}/${tag}/${asset}`,
+    fetcher,
+    signal,
+  );
+  if (![502, 503, 504].includes(response.status)) return response;
+  // Do not let a stalled gateway body consume the original download deadline.
+  void response.body?.cancel().catch(() => {
+    /* Intentionally ignore cancellation settlement. */
+  });
+  signal.throwIfAborted();
+  return officialSimulatorAssetResponse(tag, asset, fetcher, signal);
+}
+
 async function validatedBody(
   response: Response,
   maxBytes: number,
 ): Promise<ReadableStream<Uint8Array>> {
   if (!response.ok || !response.body) {
-    await response.body?.cancel();
+    void response.body?.cancel().catch(() => {
+      /* Intentionally ignore cancellation settlement. */
+    });
     throw new Error(
-      "Simulator release is unavailable. Check connectivity and that the locked official release is published, or supply an explicit simulator binary.",
+      `Simulator release binary unavailable (HTTP ${response.status}); check connectivity and GitHub availability, then retry or supply --simulator-binary. Existing locked bytes were not changed.`,
     );
   }
   const length = response.headers.get("content-length");
   if (length && (!/^\d+$/.test(length) || Number(length) > maxBytes)) {
-    await response.body.cancel();
+    void response.body.cancel().catch(() => {
+      /* Intentionally ignore cancellation settlement. */
+    });
     throw new Error("Simulator release exceeds the binary size limit.");
   }
   return response.body;

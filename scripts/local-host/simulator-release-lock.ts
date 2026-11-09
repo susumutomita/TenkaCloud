@@ -3,12 +3,8 @@ import { constants, type Stats } from "node:fs";
 import { link, lstat, mkdir, open, rename, rmdir, unlink } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { z } from "zod";
-import {
-  ensureSimulatorBinary,
-  prepareSimulatorCache,
-  simulatorReleaseResponse,
-} from "./simulator-release";
-import { consumeSimulatorStream } from "./simulator-release-stream";
+import { ensureSimulatorBinary, prepareSimulatorCache } from "./simulator-release";
+import { metadata, officialSimulatorAssetResponse, parseMetadata } from "./simulator-release-http";
 
 const REPOSITORY = "https://github.com/susumutomita/TenkaCloudSimulator";
 const RELEASE_API = "https://api.github.com/repos/susumutomita/TenkaCloudSimulator/releases";
@@ -270,94 +266,6 @@ async function releaseMetadata(
 ): Promise<string> {
   const url = `${REPOSITORY}/releases/download/${tag}/${name}`;
   return metadata(url, fetcher, signal, 65_536, missingAllowed, async () => {
-    const raw = parseMetadata(
-      await metadata(`${RELEASE_API}/tags/${tag}`, fetcher, signal, 2 * 1024 * 1024),
-    );
-    const release = z
-      .object({
-        tag_name: z.literal(tag),
-        draft: z.literal(false),
-        prerelease: z.literal(false),
-        assets: z.array(
-          z.object({
-            id: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
-            name: z.string(),
-            url: z.string(),
-            browser_download_url: z.string(),
-            state: z.string(),
-          }),
-        ),
-      })
-      .safeParse(raw);
-    if (!release.success)
-      throw new Error(
-        "Simulator release asset API metadata is invalid; the existing lock was retained.",
-      );
-    const matches = release.data.assets.filter((asset) => asset.name === name);
-    const asset = matches[0];
-    if (
-      matches.length !== 1 ||
-      !asset ||
-      asset.state !== "uploaded" ||
-      asset.browser_download_url !== url ||
-      asset.url !== `${RELEASE_API}/assets/${asset.id}`
-    )
-      throw new Error(
-        "Simulator release asset API identity mismatch; the existing lock was retained.",
-      );
-    // Construct the endpoint from the verified ID, never fetch a supplied URL or attach credentials.
-    return simulatorReleaseResponse(
-      `${RELEASE_API}/assets/${asset.id}`,
-      (target, init) =>
-        fetcher(target, { ...init, headers: { Accept: "application/octet-stream" } }),
-      signal,
-    );
+    return officialSimulatorAssetResponse(tag, name, fetcher, signal);
   });
-}
-
-async function metadata(
-  url: string,
-  fetcher: Fetcher,
-  signal: AbortSignal,
-  limit: number,
-  missingAllowed = false,
-  fallback?: () => Promise<Response>,
-): Promise<string> {
-  let response = await simulatorReleaseResponse(url, fetcher, signal);
-  if (fallback && [502, 503, 504].includes(response.status)) {
-    // A stalled error-body cancellation must not consume the recovery deadline forever.
-    void response.body?.cancel().catch(() => {
-      /* The fallback response, not the discarded gateway body, determines the result. */
-    });
-    signal.throwIfAborted();
-    response = await fallback();
-    // A missing API asset is a failed recovery, not permission to select an older release.
-    missingAllowed = false;
-  }
-  if (missingAllowed && response.status === 404) {
-    await response.body?.cancel();
-    return "";
-  }
-  if (!response.ok || !response.body) {
-    await response.body?.cancel();
-    throw new Error(
-      `Simulator release metadata unavailable (HTTP ${response.status}); check connectivity or GitHub rate limits. The existing lock was retained.`,
-    );
-  }
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  await consumeSimulatorStream(response.body, signal, (value) => {
-    size += value.byteLength;
-    if (size > limit) throw new Error("Simulator release metadata exceeds the size limit.");
-    chunks.push(value);
-  });
-  return new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks));
-}
-
-function parseMetadata(text: string): unknown {
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new Error("Simulator release metadata is invalid JSON; no lock was changed.");
-  }
 }

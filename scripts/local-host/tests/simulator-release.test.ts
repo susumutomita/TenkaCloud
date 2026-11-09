@@ -284,3 +284,215 @@ test("pending binary read and nonsettling cancellation cannot prevent timeout cl
   expect(outcome).toContain("timed out");
   expect(await readdir(options.cacheDirectory)).toEqual([]);
 });
+
+const api = "https://api.github.com/repos/susumutomita/TenkaCloudSimulator/releases";
+const binaryName = "tenkacloud-simulator_linux_amd64";
+const downloadUrl = `https://github.com/susumutomita/TenkaCloudSimulator/releases/download/${release.version}/${binaryName}`;
+function assetMetadata() {
+  return {
+    tag_name: release.version,
+    draft: false,
+    prerelease: false,
+    assets: [
+      {
+        id: 123,
+        name: binaryName,
+        state: "uploaded",
+        url: `${api}/assets/123`,
+        browser_download_url: downloadUrl,
+      },
+    ],
+  };
+}
+function firstAsset(info: ReturnType<typeof assetMetadata>) {
+  const asset = info.assets[0];
+  if (!asset) throw new Error("fixture asset missing");
+  return asset;
+}
+function fallbackTransport(
+  options: { primary?: () => Response; metadata?: () => Response; binary?: () => Response } = {},
+) {
+  const calls: string[] = [];
+  const signals: AbortSignal[] = [];
+  return {
+    calls,
+    signals,
+    fetch: async (url: string, init: RequestInit) => {
+      calls.push(url);
+      if (init.signal) signals.push(init.signal);
+      expect(init.credentials).toBe("omit");
+      expect(init.redirect).toBe("manual");
+      if (url === downloadUrl)
+        return options.primary?.() ?? new Response("gateway", { status: 504 });
+      if (url === `${api}/tags/${release.version}`) {
+        expect(init.headers).toBeUndefined();
+        return options.metadata?.() ?? Response.json(assetMetadata());
+      }
+      expect(url).toBe(`${api}/assets/123`);
+      expect(init.headers).toEqual({ Accept: "application/octet-stream" });
+      return options.binary?.() ?? new Response(bytes);
+    },
+  };
+}
+
+test("binary gateway failures recover once through the exact official asset with the same deadline", async () => {
+  for (const status of [502, 503, 504]) {
+    const options = await setup();
+    const deps = fallbackTransport({ primary: () => new Response("gateway", { status }) });
+    const path = await ensureSimulatorBinary(options, { ...platform, ...deps });
+    expect(await readFile(path)).toEqual(Buffer.from(bytes));
+    expect((await stat(path)).mode & 0o777).toBe(0o700);
+    expect(deps.calls).toEqual([
+      downloadUrl,
+      `${api}/tags/${release.version}`,
+      `${api}/assets/123`,
+    ]);
+    expect(new Set(deps.signals).size).toBe(1);
+  }
+});
+
+test("binary failures other than transient gateways never attempt API recovery", async () => {
+  for (const status of [400, 401, 403, 404, 429, 500, 501]) {
+    const options = await setup();
+    const deps = fallbackTransport({ primary: () => new Response("private", { status }) });
+    await expect(ensureSimulatorBinary(options, { ...platform, ...deps })).rejects.toThrow(
+      `HTTP ${status}`,
+    );
+    expect(deps.calls).toEqual([downloadUrl]);
+    expect(await readdir(options.cacheDirectory)).toEqual([]);
+  }
+});
+
+test("binary fallback rejects ambiguous, spoofed, incomplete, or unsafe official asset identities", async () => {
+  const mutations: ((info: ReturnType<typeof assetMetadata>) => void)[] = [
+    (info) => {
+      info.tag_name = "v9.0.0";
+    },
+    (info) => {
+      info.draft = true;
+    },
+    (info) => {
+      info.prerelease = true;
+    },
+    (info) => {
+      info.assets.push({ ...firstAsset(info) });
+    },
+    (info) => {
+      firstAsset(info).name = "wrong";
+    },
+    (info) => {
+      firstAsset(info).state = "new";
+    },
+    (info) => {
+      firstAsset(info).id = -1;
+    },
+    (info) => {
+      firstAsset(info).id = 1.5;
+    },
+    (info) => {
+      firstAsset(info).id = Number.MAX_SAFE_INTEGER + 1;
+    },
+    (info) => {
+      firstAsset(info).url = "https://evil.example/assets/123";
+    },
+    (info) => {
+      firstAsset(info).browser_download_url = `${downloadUrl}?spoof=1`;
+    },
+  ];
+  for (const mutate of mutations) {
+    const options = await setup();
+    const info = assetMetadata();
+    mutate(info);
+    const deps = fallbackTransport({ metadata: () => Response.json(info) });
+    await expect(ensureSimulatorBinary(options, { ...platform, ...deps })).rejects.toThrow(
+      "asset API",
+    );
+    expect(deps.calls.length).toBe(2);
+    expect(await readdir(options.cacheDirectory)).toEqual([]);
+  }
+});
+
+test("binary recovery keeps checksum, length, streamed bounds, and one-attempt enforcement", async () => {
+  for (const binary of [
+    () => new Response("wrong hash"),
+    () => new Response(null),
+    () => new Response(bytes, { headers: { "content-length": "999" } }),
+    () => new Response(new Uint8Array(999)),
+    () => new Response("gateway again", { status: 504 }),
+    () => new Response("missing", { status: 404 }),
+    () =>
+      new Response(null, {
+        status: 302,
+        headers: { location: "https://evil.example/?secret=private" },
+      }),
+  ]) {
+    const options = await setup();
+    const deps = fallbackTransport({ binary });
+    await expect(
+      ensureSimulatorBinary(options, { ...platform, ...deps, maxBytes: 100 }),
+    ).rejects.toThrow("Simulator");
+    expect(deps.calls.length).toBe(3);
+    expect(await readdir(options.cacheDirectory)).toEqual([]);
+  }
+});
+
+test("binary API metadata and body obey cancellation, deadline, and metadata size limits", async () => {
+  for (const phase of ["metadata", "binary"] as const) {
+    for (const cancel of [false, true]) {
+      const options = await setup();
+      const controller = new AbortController();
+      const deps = fallbackTransport({
+        [phase]: () =>
+          new Response(
+            new ReadableStream({
+              start() {
+                if (cancel) controller.abort();
+              },
+              cancel() {
+                return new Promise(() => {
+                  /* Intentionally ignore cancellation settlement. */
+                });
+              },
+            }),
+          ),
+      });
+      await expect(
+        ensureSimulatorBinary(
+          { ...options, signal: controller.signal },
+          {
+            ...platform,
+            ...deps,
+            timeoutMs: 20,
+          },
+        ),
+      ).rejects.toThrow("cancelled or timed out");
+      expect(await readdir(options.cacheDirectory)).toEqual([]);
+    }
+  }
+  const options = await setup();
+  const deps = fallbackTransport({ metadata: () => new Response(" ".repeat(2 * 1024 * 1024 + 1)) });
+  await expect(ensureSimulatorBinary(options, { ...platform, ...deps })).rejects.toThrow(
+    "metadata exceeds",
+  );
+  expect(deps.calls.length).toBe(2);
+  expect(await readdir(options.cacheDirectory)).toEqual([]);
+});
+
+test("binary recovery is not blocked by nonsettling gateway cancellation", async () => {
+  const options = await setup();
+  const deps = fallbackTransport({
+    primary: () =>
+      new Response(
+        new ReadableStream({
+          cancel() {
+            return new Promise(() => {
+              /* Intentionally ignore cancellation settlement. */
+            });
+          },
+        }),
+        { status: 504 },
+      ),
+  });
+  const path = await ensureSimulatorBinary(options, { ...platform, ...deps, timeoutMs: 100 });
+  expect(await readFile(path)).toEqual(Buffer.from(bytes));
+});
