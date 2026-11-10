@@ -63,3 +63,17 @@ test("leaving a video slide stops media and restores the YouTube play button", (
   expect(youtube.document.querySelector("iframe")).toBeNull();
   expect(play?.hidden).toBe(false);
 });
+
+test("slide 14 hosts the Simulator demo video and pauses it when leaving", () => {
+  const { document, paused } = openDeck(appendixPath, "#14");
+  const video = document.querySelector("#slide-14 video");
+  const source = document.querySelector("#slide-14 video source");
+  expect(document.querySelector("#slide-14")?.classList.contains("video-slide")).toBe(true);
+  expect(source?.getAttribute("src")).toBe("simulator-demo.mp4");
+  expect(document.querySelector("#slide-14 video")?.getAttribute("poster")).toBe(
+    "simulator-demo-poster.jpg",
+  );
+  expect(paused).not.toContain(video);
+  document.querySelector<HTMLButtonElement>("#previous")?.click();
+  expect(paused).toContain(video);
+});

@@ -17,7 +17,7 @@ Checked on 2026-11-04 against repository main `f99b3d9a00076a2a5e97f1d4d9b0b20a7
 | AWS operations / Cryptography Battle video | [Existing capture record](../jaws-yokohama-2026/assets/recorded-demo.md), 2026-09-15. Historical recording; current instructions link to the organizer guide. |
 | June kickoff | [PR #1739](https://github.com/susumutomita/TenkaCloud/pull/1739). |
 | August/September events and feedback | [PR #3485](https://github.com/susumutomita/TenkaCloud/pull/3485), [UG #1](https://tenkacloud.com/tenkacloud-ug-1/), [JAWS Yokohama](https://tenkacloud.com/jaws-yokohama-2026/). |
-| Simulator | [Development repository](https://github.com/susumutomita/TenkaCloudSimulator). Only the final slide describes it, explicitly unreleased / in development. |
+| Simulator | [Development repository](https://github.com/susumutomita/TenkaCloudSimulator). Final slide (`#14`) keeps 開発中 · 未リリース. Local demo video (`simulator-demo.mp4`) shows `make local` → register/verify → event create/deploy/start → Hello World via CLI / console / API Doc → submit/score. Only Hello World works in Simulator mode so far. Independent simulator, not official AWS. No purchase/adoption claim. Provenance: [recorded-demo.md](recorded-demo.md). |
 
 The latest published release returned by GitHub was v2.6.12 (2026-10-29). This change makes no v2.7.0 publication claim.
 
@@ -28,6 +28,7 @@ Headless Chromium 154 on Linux, static server rooted at `landing/`:
 - 1440 × 900 and 390 × 844: all 14 slides; no horizontal overflow or missing images.
 - Desktop: all slide boundaries fit the viewport. Screenshots of the Appendix and mobile video slide inspected.
 - Native MP4: actual playback advances at both sizes; no media error; moving to another slide pauses playback.
+- Slide 14 Simulator demo: native MP4 loads (`simulator-demo.mp4`); playback advances; leaving the slide pauses media. Layout checked at 1280 × 800.
 - YouTube: clicking creates the expected privacy-enhanced embed with start 0 / end 60; leaving the slide removes the iframe and restores the button. Actual remote playback is not verified here.
 - Print: all 14 slides display; both posters load and display; video players hide. Chromium PDF has 14 pages.
 - Main four slide sections compared with Git HEAD: identical after removing the permitted numbering and label metadata, plus the subsequently requested logo images/classes. Cover draft notice retained.

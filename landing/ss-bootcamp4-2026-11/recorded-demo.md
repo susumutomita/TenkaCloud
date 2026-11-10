@@ -22,6 +22,16 @@ Reuse [the existing public YouTube video](https://www.youtube.com/watch?v=o39ZWx
 
 The player loads YouTube only after a click, and removes its iframe on slide navigation. A direct YouTube link remains available. Network access to YouTube is required.
 
+## Simulator (local demo)
+
+- Published copy: [simulator-demo.mp4](simulator-demo.mp4), 67.1 seconds, H.264, 1280 × 800, silent with Japanese step headings. No open/end cards.
+- SHA-256: `e3c8906233d3a5f270e091177c04cea46539482b11ecfde8776a8056e77101dc`.
+- Poster: [simulator-demo-poster.jpg](simulator-demo-poster.jpg), 1280 × 800, still from the Correct submission frame.
+- Source recording on the agent box, 2026-11-10 (Asia/Tokyo): `make local` with a Simulator binary built from TenkaCloudSimulator main `cc30d5e`, against TenkaCloud `f5783ac`. Host and Simulator ran on the same machine. No real AWS account, no production deploy, no Docker host.
+- Operations shown: start Simulator via `make local`, register and verify the Simulator as an account, create an event, deploy Hello World, start the event, solve via AWS CLI, Simulator console GUI and Simulator API Doc GetParameter, submit, Correct +100 pt, scoreboard.
+- Edits: waiting time, failed attempts and private chat removed; problem-statement crop excludes “runs on real AWS” wording. Organizer/team keys, Simulator credentials and the answer flag are local-only throwaway values from this take and are shown unmasked by owner decision. No private conversation remains on screen.
+- Inspection: ffmpeg decode of the published MP4; midpoints for CLI, GUI Parameter Store value, API Doc 200 OK, Correct and scoreboard reviewed before publication.
+
 ## Deliberately unused material
 
 The 30-second LP video shows an older browser-demo-to-AWS narrative. The older Mac startup videos also contain historical steps. The Appendix instead links current startup documentation. No new Cloud Master or email-game footage was captured; those slides link the playable pages.
