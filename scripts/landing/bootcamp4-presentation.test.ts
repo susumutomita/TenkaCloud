@@ -37,11 +37,12 @@ test("the closing slide leads to a distinctly numbered Appendix and supports dee
   const { document } = openDeck(appendixPath, "#4");
   expect(document.querySelector("#position")?.textContent).toBe("本編 4 / 4");
   document.querySelector<HTMLButtonElement>("#next")?.click();
-  expect(document.querySelector("#position")?.textContent).toBe("Appendix 1 / 10");
+  expect(document.querySelector("#position")?.textContent).toBe("Appendix 1 / 11");
   expect(document.querySelector(".slide:not([hidden]) h2")?.textContent).toBe("ここから Appendix");
-  const last = openDeck(appendixPath, "#14");
-  expect(last.document.querySelector("#position")?.textContent).toBe("Appendix 10 / 10");
+  const last = openDeck(appendixPath, "#15");
+  expect(last.document.querySelector("#position")?.textContent).toBe("Appendix 11 / 11");
   expect(last.document.querySelector<HTMLButtonElement>("#next")?.disabled).toBe(true);
+  expect(last.document.querySelectorAll("#deck > .slide")).toHaveLength(15);
 });
 
 test("leaving a video slide stops media and restores the YouTube play button", () => {
@@ -76,4 +77,19 @@ test("slide 14 hosts the Simulator demo video and pauses it when leaving", () =>
   expect(paused).not.toContain(video);
   document.querySelector<HTMLButtonElement>("#previous")?.click();
   expect(paused).toContain(video);
+});
+
+test("slide 15 hosts the 60-second introduction shared with the LP and pauses it when leaving", () => {
+  const { document, paused } = openDeck(appendixPath, "#15");
+  const video = document.querySelector("#slide-15 video");
+  expect(document.querySelector("#slide-15")?.classList.contains("video-slide")).toBe(true);
+  expect(document.querySelector("#slide-15 video source")?.getAttribute("src")).toBe(
+    "../videos/lp/tenkacloud-60s.mp4",
+  );
+  expect(video?.getAttribute("poster")).toBe("intro-60s-poster.jpg");
+  expect(document.querySelector("#slide-15 .fine")?.textContent).toContain("開発中・未リリース");
+  expect(paused).not.toContain(video);
+  document.querySelector<HTMLButtonElement>("#previous")?.click();
+  expect(paused).toContain(video);
+  expect(document.querySelector("#position")?.textContent).toBe("Appendix 10 / 11");
 });

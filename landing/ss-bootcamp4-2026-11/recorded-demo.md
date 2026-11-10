@@ -32,6 +32,17 @@ The player loads YouTube only after a click, and removes its iframe on slide nav
 - Edits: waiting time, failed attempts and private chat removed; problem-statement crop excludes “runs on real AWS” wording. Organizer/team keys, Simulator credentials and the answer flag are local-only throwaway values from this take and are shown unmasked by owner decision. No private conversation remains on screen.
 - Inspection: ffmpeg decode of the published MP4; midpoints for CLI, GUI Parameter Store value, API Doc 200 OK, Correct and scoreboard reviewed before publication.
 
+## 60-second introduction
+
+- Published copy: [tenkacloud-60s.mp4](../videos/lp/tenkacloud-60s.mp4), shared with the LP. 64.0 seconds, H.264, 1920 × 1080, 30 fps, with music and no narration.
+- SHA-256: `7034983ea908d6965a29d948222ad8f692ff9842acf82afa2c91dcdeb14eacbd`.
+- Poster: [intro-60s-poster.jpg](intro-60s-poster.jpg), 1280 × 720, still from second 8.6 (the title card, not a product screen).
+- Source and capture conditions: [introduction video record](../../docs/assets/lp-60s/README.md). Recorded 2026-11-10 (UTC) from one local run of TenkaCloud `f5783ac` with a Simulator binary built from TenkaCloudSimulator `36e72c4`. No real AWS account and no Docker host.
+- Operations shown: participant solves Hello World and takes first place, organizer runs `make local` and starts an event, the participant reads the parameter in the Simulator console, the Simulator's AWS, Google Cloud, Azure and Sakura consoles, a live Cryptography Battle.
+- Edits: crops, zooms and gold outlines over the captured screens. The terminal panel is typeset from real `make local` output lines. Organizer key, team keys, Simulator token and the answer flag are masked on screen.
+- Scope: the Simulator is under development and unreleased; Hello World is the one problem played on it. The Google Cloud, Azure and Sakura scenes are Simulator console operations, not competition problems.
+- Inspection: ffmpeg decode of the published MP4; contact sheets of every scene and enlarged views of the masked fields reviewed. The audio was measured (−15.0 LUFS) but not auditioned by the recorder.
+
 ## Deliberately unused material
 
 The 30-second LP video shows an older browser-demo-to-AWS narrative. The older Mac startup videos also contain historical steps. The Appendix instead links current startup documentation. No new Cloud Master or email-game footage was captured; those slides link the playable pages.

@@ -30,11 +30,11 @@ TenkaCloud は、ハンズオン形式のクラウド競技会を開くための
 </tr>
 </table>
 
-<a href="./landing/videos/lp/tenkacloud-30s.mp4">
-  <img src="./docs/assets/lp-30s/tenkacloud-30s-preview.gif" alt="30 秒でわかる TenkaCloud: ブラウザで遊ぶ → 得点する → AWS で自分のイベントを開く" width="800">
+<a href="./landing/videos/lp/tenkacloud-60s.mp4">
+  <img src="./docs/assets/lp-60s/tenkacloud-60s-preview.gif" alt="1 分でわかる TenkaCloud: 参加者ポータルで解いて得点する → PC 1 台で大会を開く → ローカルの Simulator で AWS の問題を解く" width="800">
 </a>
 <br>
-<sub>30 秒でわかる TenkaCloud (音声なし・日英字幕)。現在の起動手順は以下を参照してください。<a href="./landing/videos/lp/tenkacloud-30s.mp4">16:9 MP4</a> · <a href="./landing/videos/lp/tenkacloud-30s-vertical.mp4">9:16 MP4</a></sub>
+<sub>1 分でわかる TenkaCloud (64 秒・音楽あり・ナレーションなし)。画面はすべてローカルで起動して撮影した実物です。Simulator の場面で動かしているのは、連携を検証済みの Hello World です。<a href="./docs/assets/lp-60s/README.md">収録条件</a>。現在の起動手順は以下を参照してください。以前の 30 秒版 (音声なし): <a href="./landing/videos/lp/tenkacloud-30s.mp4">16:9 MP4</a> · <a href="./landing/videos/lp/tenkacloud-30s-vertical.mp4">9:16 MP4</a></sub>
 
 [ランディングページ](https://tenkacloud.com) · [役割別マニュアル](https://tenkacloud.com/docs/manual/) · [デモポータル](https://tenkacloud.com/portal-demo/?demo=1) · [クイックスタート](#クイックスタート) · [自分の問題を追加する](#自分の問題を追加する)
 

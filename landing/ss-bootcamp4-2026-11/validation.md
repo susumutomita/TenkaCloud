@@ -49,6 +49,16 @@ The cover title has a prominent mark next to its existing text. Every slide foot
 
 Verified all 14 slides at 1440 × 900 and 390 × 844: logo images loaded, no horizontal overflow. The first four sections match the previous commit after removing only the newly added logo images and classes. In print all 15 logo instances display, both video posters remain visible, and the PDF remains 14 pages.
 
+## Introduction video slide
+
+The owner asked for the 60-second introduction in this deck. It is added as the last Appendix slide (Appendix 11 / 11, slide 15) so the four main slides and the existing Appendix order are unchanged. The Appendix labels, the footer count and the deck test were updated from 10 to 11.
+
+The slide reuses the LP copy at `../videos/lp/tenkacloud-60s.mp4` rather than a second file. Its fine print repeats the scope stated on the Simulator slide: under development and unreleased, Hello World only, no Docker and no real AWS deployment. [Capture conditions](recorded-demo.md#60-second-introduction).
+
+Verified slide 15 at 1440 × 900 and 390 × 844: no horizontal overflow, the video metadata loads (1920 × 1080, 64 seconds), the counter reads Appendix 11 / 11 and Next is disabled. At 1440 × 900 the slide fits the viewport. In print the player is hidden, the poster is shown, all 16 logo instances and four posters load, and the PDF is 15 pages. The other 14 slides were not re-inspected beyond the automated deck test.
+
+The video has music. Its level was measured but it was not auditioned in this environment; listen to it on the presentation machine before the talk.
+
 ## Remaining external verification
 
 This execution environment refuses production and YouTube network connections (`ERR_TUNNEL_CONNECTION_FAILED` / HTTP 403). It cannot freshly confirm public email-game availability or real YouTube playback. Before marking the Draft ready, verify the public game links and play YouTube at both requested sizes in an unrestricted browser. The repository media playback and print checks above do not substitute for that check.
