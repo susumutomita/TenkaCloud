@@ -55,7 +55,9 @@ The owner asked for the 60-second introduction in this deck. It is added as the 
 
 The slide reuses the LP copy at `../videos/lp/tenkacloud-60s.mp4` rather than a second file. Its fine print repeats the scope stated on the Simulator slide: under development and unreleased, Hello World only, no Docker and no real AWS deployment. [Capture conditions](recorded-demo.md#60-second-introduction).
 
-Verified slide 15 at 1440 × 900 and 390 × 844: no horizontal overflow, the video metadata loads (1920 × 1080, 64 seconds), the counter reads Appendix 11 / 11 and Next is disabled. At 1440 × 900 the slide fits the viewport. In print the player is hidden, the poster is shown, all 16 logo instances and four posters load, and the PDF is 15 pages. The other 14 slides were not re-inspected beyond the automated deck test.
+On 2026-11-11 the introduction video was replaced with the 61-second cut, and the list and fine print on the slide were rewritten to match it. The checks below were rerun against the new file.
+
+Verified slide 15 at 1440 × 900 and 390 × 844: no horizontal overflow, the video metadata loads (1920 × 1080, 61 seconds), the counter reads Appendix 11 / 11 and Next is disabled. At 1440 × 900 the slide fits the viewport. In print the player is hidden, the poster is shown, all 16 logo instances and four posters load, and the PDF is 15 pages. The other 14 slides were not re-inspected beyond the automated deck test.
 
 The video has music. Its level was measured but it was not auditioned in this environment; listen to it on the presentation machine before the talk.
 
