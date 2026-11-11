@@ -31,10 +31,10 @@ Participants can also use a local AI agent through [stdio or cloud Streamable HT
 </table>
 
 <a href="./landing/videos/lp/tenkacloud-60s.mp4">
-  <img src="./docs/assets/lp-60s/tenkacloud-60s-preview.gif" alt="64-second TenkaCloud introduction: solve and score in the participant portal, host an event from one PC, then play an AWS problem on the local Simulator" width="800">
+  <img src="./docs/assets/lp-60s/tenkacloud-60s-preview.gif" alt="61-second TenkaCloud introduction: solve and score in the participant portal, host an event from one PC, then solve the same problem on the local Simulator" width="800">
 </a>
 <br>
-<sub>64-second introduction (music, no narration; Japanese headlines with English subtitles). Every screen is a real capture from a local run; the Simulator scenes show Hello World, the one problem that integration is validated for. <a href="./docs/assets/lp-60s/README.md">How it was recorded</a>. Follow the current setup steps below. Earlier 30-second silent overview: <a href="./landing/videos/lp/tenkacloud-30s.mp4">16:9 MP4</a> · <a href="./landing/videos/lp/tenkacloud-30s-vertical.mp4">9:16 MP4</a></sub>
+<sub>61-second introduction (music, no narration; Japanese headlines). Every screen is a real capture from a local run; the Simulator scenes show Hello World, the one problem that integration is validated for. <a href="./docs/assets/lp-60s/README.md">How it was recorded</a>. Follow the current setup steps below. Earlier 30-second silent overview: <a href="./landing/videos/lp/tenkacloud-30s.mp4">16:9 MP4</a> · <a href="./landing/videos/lp/tenkacloud-30s-vertical.mp4">9:16 MP4</a></sub>
 
 [Landing page](https://tenkacloud.com) · [Manuals by role](https://tenkacloud.com/docs/manual/index.en.html) · [Demo portal](https://tenkacloud.com/portal-demo/?demo=1) · [Quickstart](#quickstart) · [Add your own problems](#add-your-own-problems)
 

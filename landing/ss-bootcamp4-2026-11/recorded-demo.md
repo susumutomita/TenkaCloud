@@ -34,14 +34,15 @@ The player loads YouTube only after a click, and removes its iframe on slide nav
 
 ## 60-second introduction
 
-- Published copy: [tenkacloud-60s.mp4](../videos/lp/tenkacloud-60s.mp4), shared with the LP. 64.0 seconds, H.264, 1920 × 1080, 30 fps, with music and no narration.
-- SHA-256: `7034983ea908d6965a29d948222ad8f692ff9842acf82afa2c91dcdeb14eacbd`.
-- Poster: [intro-60s-poster.jpg](intro-60s-poster.jpg), 1280 × 720, still from second 8.6 (the title card, not a product screen).
-- Source and capture conditions: [introduction video record](../../docs/assets/lp-60s/README.md). Recorded 2026-11-10 (UTC) from one local run of TenkaCloud `f5783ac` with a Simulator binary built from TenkaCloudSimulator `36e72c4`. No real AWS account and no Docker host.
-- Operations shown: participant solves Hello World and takes first place, organizer runs `make local` and starts an event, the participant reads the parameter in the Simulator console, the Simulator's AWS, Google Cloud, Azure and Sakura consoles, a live Cryptography Battle.
-- Edits: crops, zooms and gold outlines over the captured screens. The terminal panel is typeset from real `make local` output lines. Organizer key, team keys, Simulator token and the answer flag are masked on screen.
-- Scope: the Simulator is under development and unreleased; Hello World is the one problem played on it. The Google Cloud, Azure and Sakura scenes are Simulator console operations, not competition problems.
-- Inspection: ffmpeg decode of the published MP4; contact sheets of every scene and enlarged views of the masked fields reviewed. The audio was measured (−15.0 LUFS) but not auditioned by the recorder.
+- Published copy: [tenkacloud-60s.mp4](../videos/lp/tenkacloud-60s.mp4), shared with the LP. 61.1 seconds, H.264, 1920 × 1080, 30 fps, with music and no narration.
+- SHA-256: `d4b85cb31424ad06e9e358332f7d5f2dbe223795d816355a23ab7ca7c8ba411d`.
+- Poster: [intro-60s-poster.jpg](intro-60s-poster.jpg), 1280 × 720, still from second 12.0 (the title card, not a product screen).
+- Source and capture conditions: [introduction video record](../../docs/assets/lp-60s/README.md). Two local runs with TenkaCloudChallenge `a7a9cfe` and a Simulator binary built from TenkaCloudSimulator `36e72c4`: the participant portal on 2026-11-10 (UTC) from TenkaCloud `f5783ac`, the organizer and Simulator screens on 2026-11-11 (UTC) from TenkaCloud `17002de`. No real AWS account and no Docker host.
+- Operations shown: participant opens Hello World, submits the flag, gets Correct +100 pt and takes first place; organizer runs `make local`, creates an event and goes live; the Simulator connection target, the parameter value in the Simulator console and the local environment panel.
+- Edits: the participant portal is shown as whole pages in a browser frame with zooms and gold outlines; the organizer and Simulator screens are cropped and enlarged. The terminal panel is typeset from real `make local` output lines. Typing into the flag field is shown by uncovering the captured, already filled field step by step.
+- Keys and answers: organizer key, team keys and the Simulator token are not on screen. The flag field in the participant portal is masked. The value in the Simulator parameter panel is a local throwaway answer from this take and is shown unmasked.
+- Scope: the Simulator is under development and unreleased, and every Simulator scene carries the label 開発中・非公式. Hello World is the one problem played on it. No other cloud provider appears.
+- Inspection: ffmpeg decode of the published MP4; contact sheets of every scene reviewed; layout check for clipped text. Audio measured at −14.5 LUFS with a true peak of −1.7 dBFS; not auditioned by the recorder. The owner reviewed the finished film and approved it for publication.
 
 ## Deliberately unused material
 
