@@ -35,7 +35,7 @@ The player loads YouTube only after a click, and removes its iframe on slide nav
 ## 60-second introduction
 
 - Published copy: [tenkacloud-60s.mp4](../videos/lp/tenkacloud-60s.mp4), shared with the LP. 61.1 seconds, H.264, 1920 × 1080, 30 fps, with music and no narration.
-- SHA-256: `ba6076e302914c0884482595f012477e921878603215f16ff1025e1e522e184f`.
+- SHA-256: `5436e60b31113c6261131d16dcb91c8f9f0abd1efe9cdf2c3bf326bdef3c1f8b`.
 - Poster: [intro-60s-poster.jpg](intro-60s-poster.jpg), 1280 × 720, still from second 12.0 (the title card, not a product screen).
 - Source and capture conditions: [introduction video record](../../docs/assets/lp-60s/README.md). Two local runs with TenkaCloudChallenge `a7a9cfe` and a Simulator binary built from TenkaCloudSimulator `36e72c4`: the participant portal on 2026-11-10 (UTC) from TenkaCloud `f5783ac`, the organizer and Simulator screens on 2026-11-11 (UTC) from TenkaCloud `17002de`. No real AWS account and no Docker host.
 - Operations shown: participant opens Hello World, submits the flag, gets Correct +100 pt and takes first place; organizer runs `make local`, creates an event and goes live; the Simulator connection target, the parameter value in the Simulator console and the local environment panel.
