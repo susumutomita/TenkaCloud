@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
+import { currentMediaVersions } from "./stamp-asset-versions";
 
 const script = readFileSync("landing/tenkacloud-ug-1/talk.js", "utf8");
 const windows: JSDOM[] = [];
@@ -83,8 +84,9 @@ test("slide 15 hosts the 60-second introduction shared with the LP and pauses it
   const { document, paused } = openDeck(appendixPath, "#15");
   const video = document.querySelector("#slide-15 video");
   expect(document.querySelector("#slide-15")?.classList.contains("video-slide")).toBe(true);
+  const version = currentMediaVersions()["videos/lp/tenkacloud-60s.mp4"];
   expect(document.querySelector("#slide-15 video source")?.getAttribute("src")).toBe(
-    "../videos/lp/tenkacloud-60s.mp4",
+    `../videos/lp/tenkacloud-60s.mp4?v=${version}`,
   );
   expect(video?.getAttribute("poster")).toBe("intro-60s-poster.jpg");
   expect(document.querySelector("#slide-15 .fine")?.textContent).toContain("開発中・未リリース");

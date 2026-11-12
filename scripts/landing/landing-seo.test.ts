@@ -1,7 +1,15 @@
 import { describe, expect, it } from "bun:test";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { currentVersions, STAMPED_ASSETS, stampHtml } from "./stamp-asset-versions";
+import {
+  currentMediaVersions,
+  currentVersions,
+  MEDIA_PAGES,
+  STAMPED_ASSETS,
+  STAMPED_MEDIA,
+  stampHtml,
+  stampMedia,
+} from "./stamp-asset-versions";
 
 const root = join(import.meta.dir, "../..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
@@ -269,6 +277,39 @@ describe("landing asset cache busting (content-hash stamped)", () => {
     const html = read("landing/index.html");
     expect(stampHtml(html, versions)).toBe(html);
   });
+
+  // 動画は差し替えても URL が同じなので、 Cloudflare の地域キャッシュが旧版を返し続ける。
+  // 参照ごとに内容ハッシュを刻み、 差し替えてスタンプし忘れた PR を落とす。
+  it("should reference every stamped video with its current content hash", () => {
+    const media = currentMediaVersions();
+    for (const page of MEDIA_PAGES) {
+      const html = read(`landing/${page}`);
+      for (const asset of STAMPED_MEDIA) {
+        const references = [
+          ...html.matchAll(
+            new RegExp(`["'](?:\\.\\./)*/?${asset.replaceAll(".", "\\.")}[^"']*["']`, "g"),
+          ),
+        ].map((m) => m[0]);
+        expect(references.length, `${page} should reference ${asset}`).toBeGreaterThan(0);
+        for (const reference of references)
+          expect(reference).toContain(`${asset}?v=${media[asset]}`);
+      }
+      expect(stampMedia(html, media)).toBe(html);
+    }
+  });
+
+  it("should add or replace the video stamp without touching other paths", () => {
+    const versions = { "videos/lp/clip.mp4": "0123456789" };
+    expect(stampMedia('<a href="/videos/lp/clip.mp4">', versions)).toBe(
+      '<a href="/videos/lp/clip.mp4?v=0123456789">',
+    );
+    expect(stampMedia('<source src="../videos/lp/clip.mp4?v=aaaaaaaaaa" />', versions)).toBe(
+      '<source src="../videos/lp/clip.mp4?v=0123456789" />',
+    );
+    expect(stampMedia('<a href="/videos/lp/clip.mp4.bak">', versions)).toBe(
+      '<a href="/videos/lp/clip.mp4.bak">',
+    );
+  });
 });
 
 /**
@@ -446,7 +487,8 @@ describe("product video placement (#2696 P1)", () => {
     for (const page of ["landing/index.html", "landing/index.en.html"]) {
       const html = read(page);
       expect(html).toContain('data-cta="watch-60s"');
-      expect(html).toContain('href="/videos/lp/tenkacloud-60s.mp4"');
+      const version = currentMediaVersions()["videos/lp/tenkacloud-60s.mp4"];
+      expect(html).toContain(`href="/videos/lp/tenkacloud-60s.mp4?v=${version}"`);
       expect(html).not.toContain("tenkacloud-30s.mp4");
     }
   });
