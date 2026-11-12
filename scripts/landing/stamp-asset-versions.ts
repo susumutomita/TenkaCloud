@@ -37,6 +37,39 @@ export const STAMPED_ASSETS = ["styles/main.css", "app.js"] as const;
 
 export type AssetVersions = Record<string, string>;
 
+/**
+ * 差し替えても URL が変わらない動画。 本番ドメインの Cloudflare キャッシュは地域ごとに
+ * 古い版を返し続けることがある (2026-11 の 60 秒動画の差し替えで、 新しいブラウザでも
+ * 旧版が再生された)。 参照に内容ハッシュを `?v=` で刻み、 差し替えたら URL も変える。
+ * パスは landing/ からの相対。
+ */
+export const STAMPED_MEDIA = ["videos/lp/tenkacloud-60s.mp4"] as const;
+
+/** STAMPED_MEDIA を参照する HTML (landing/ からの相対)。 参照を足したらここにも足す。 */
+export const MEDIA_PAGES = [
+  "index.html",
+  "index.en.html",
+  "ss-bootcamp4-2026-11/index.html",
+] as const;
+
+/**
+ * `"/videos/…"`、 `"../videos/…"` のように引用符で囲まれた参照に、 現在の内容ハッシュを
+ * 刻む。 古い `?v=` は置き換え、 まだ無ければ足す。
+ */
+export function stampMedia(html: string, versions: AssetVersions): string {
+  return Object.entries(versions).reduce((stamped, [asset, version]) => {
+    const escaped = asset.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const reference = new RegExp(`(["'])((?:\\.\\./)*/?${escaped})(?:\\?v=[a-f0-9]{10})?\\1`, "g");
+    return stamped.replaceAll(reference, `$1$2?v=${version}$1`);
+  }, html);
+}
+
+export function currentMediaVersions(): AssetVersions {
+  return Object.fromEntries(
+    STAMPED_MEDIA.map((asset) => [asset, assetVersion(readFileSync(join(landing, asset)))]),
+  );
+}
+
 export function stampHtml(html: string, versions: AssetVersions): string {
   return Object.entries(versions).reduce((stamped, [asset, version]) => {
     const escaped = asset.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -106,6 +139,16 @@ function main() {
   stampCloudMaster(join(landing, "cloud-master"));
   stampCloudMaster(join(landing, "mail-detective"));
   stampCloudMaster(join(landing, "work-dm"));
+  const mediaVersions = currentMediaVersions();
+  for (const name of MEDIA_PAGES) {
+    const path = join(landing, name);
+    const before = readFileSync(path, "utf8");
+    const after = stampMedia(before, mediaVersions);
+    if (after !== before) {
+      writeFileSync(path, after);
+      console.log(`stamped ${name} (${JSON.stringify(mediaVersions)})`);
+    }
+  }
   const versions = currentVersions();
   const targets = readdirSync(landing).filter((name) => name.endsWith(".html"));
   for (const name of targets) {
