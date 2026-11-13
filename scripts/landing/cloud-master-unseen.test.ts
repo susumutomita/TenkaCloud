@@ -11,7 +11,9 @@ import {
 
 const catalog = await loadCatalog(),
   all = availableScenarios(catalog),
-  byId = new Map(all.map((s) => [s.id, s]));
+  byId = new Map(all.map((s) => [s.id, s])),
+  // Scenario rows are constants: serialize each structural key once, not 260 per draw.
+  types = new Map(all.map((s) => [s.id, scenarioType(s)]));
 function learned(seed = 37, level = 7) {
   const s = createGame(catalog, seed);
   Object.assign(s, {
@@ -38,7 +40,7 @@ function viableUnseen(s, q, priorTypes, lastId, lastOperation) {
       x.id !== lastId &&
       operation(x, q.danger) !== lastOperation &&
       !blocked.has(`${x.id}:${q.danger}`) &&
-      !priorTypes.has(scenarioType(x)),
+      !priorTypes.has(types.get(x.id)),
   );
 }
 function sample(seed) {
@@ -63,6 +65,8 @@ function sample(seed) {
   expect(s.seenScenarios.size).toBe(260);
   return allTypesAt;
 }
+// 7,200 draws through the real question selector, which takes most of the time.
+// Measured 1.8 s alone and 5.5 s in a full `test:scripts` run under heavy CPU load.
 test("unseen judgment structures are preferred among fresh varied candidates,then unseen cases,without a fixed order", () => {
   const firstOrders = new Set();
   for (let seed = 0; seed < 12; seed++) {
@@ -71,7 +75,7 @@ test("unseen judgment structures are preferred among fresh varied candidates,the
     firstOrders.add(Array.from({ length: 12 }, () => nextQuestion(s).scenarioId).join());
   }
   expect(firstOrders.size).toBeGreaterThan(8);
-});
+}, 15_000);
 test("exhausted seen sets and cooldowns recycle the introduced pool without stopping or losing balance", () => {
   const s = learned();
   s.seenScenarios = new Set(all.map((x) => x.id));
