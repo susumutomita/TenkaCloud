@@ -63,13 +63,11 @@ function pinnedBytes(fd: number, expected: string, limit: number): Buffer {
   return bytes;
 }
 /** Same-user trusted boundary: pins opened binary bytes and snapshots private configuration. */
-export function prepareOwnedSimulatorLaunch(
+export function prepareOwnedSimulatorFiles(
   binary: string,
   battle: OwnedSimulatorLaunchOptions,
   ownedStateDirectory: string,
 ) {
-  if (process.platform !== "linux" || process.arch !== "x64")
-    throw new Error("Owned Battle launch requires Linux amd64.");
   canonical(ownedStateDirectory);
   const state = lstatSync(ownedStateDirectory);
   if (!state.isDirectory() || state.uid !== process.getuid?.() || (state.mode & 0o077) !== 0)
@@ -112,8 +110,7 @@ export function prepareOwnedSimulatorLaunch(
       closeSync(output);
     }
     return {
-      command: "/proc/self/fd/4",
-      args: [`--battle-runtime-config=${path}`, "--battle-clock-proof-fd=3"],
+      configPath: path,
       fd,
       closeDescriptor,
       dispose,
@@ -122,4 +119,22 @@ export function prepareOwnedSimulatorLaunch(
     dispose();
     throw error;
   }
+}
+
+/** Platform admission remains separate from portable file validation; this is not a Mac launcher. */
+export function prepareOwnedSimulatorLaunch(
+  binary: string,
+  battle: OwnedSimulatorLaunchOptions,
+  ownedStateDirectory: string,
+) {
+  if (process.platform !== "linux" || process.arch !== "x64")
+    throw new Error("Owned Battle launch requires Linux amd64.");
+  const files = prepareOwnedSimulatorFiles(binary, battle, ownedStateDirectory);
+  return {
+    fd: files.fd,
+    closeDescriptor: files.closeDescriptor,
+    dispose: files.dispose,
+    command: "/proc/self/fd/4",
+    args: [`--battle-runtime-config=${files.configPath}`, "--battle-clock-proof-fd=3"],
+  };
 }

@@ -7,6 +7,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -23,7 +24,7 @@ afterEach(async () => {
     rmSync(directory, { recursive: true, force: true });
 });
 function fixture(body: string) {
-  const dataDirectory = mkdtempSync(join(tmpdir(), "managed-simulator-test-"));
+  const dataDirectory = realpathSync(mkdtempSync(join(tmpdir(), "managed-simulator-test-")));
   directories.push(dataDirectory);
   const binary = join(dataDirectory, "fixture.sh");
   writeFileSync(binary, `#!/bin/sh\nset -eu\ntrap 'exit 0' TERM INT\n${body}\n`, { mode: 0o700 });

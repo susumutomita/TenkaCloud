@@ -7,13 +7,14 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { prepareOwnedSimulatorLaunch } from "../simulator-owned-launch";
+import { prepareOwnedSimulatorFiles, prepareOwnedSimulatorLaunch } from "../simulator-owned-launch";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -21,7 +22,7 @@ afterEach(() => {
 });
 const hash = (s: string) => createHash("sha256").update(s).digest("hex");
 function fixture() {
-  const dir = mkdtempSync(join(tmpdir(), "owned-launch-"));
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "owned-launch-")));
   dirs.push(dir);
   const binary = join(dir, "simulator");
   const config = join(dir, "config.json");
@@ -36,11 +37,9 @@ function fixture() {
 }
 test("pins retained executable and private snapshot until dispose, no process spawn", () => {
   const f = fixture();
-  const launch = prepareOwnedSimulatorLaunch(f.binary, f.battle, f.dir);
-  const snapshot = launch.args[0]?.split("=")[1] ?? "";
-  expect(launch.command).toBe("/proc/self/fd/4");
+  const launch = prepareOwnedSimulatorFiles(f.binary, f.battle, f.dir);
+  const snapshot = launch.configPath;
   expect(fstatSync(launch.fd).isFile()).toBe(true);
-  expect(launch.args[1]).toBe("--battle-clock-proof-fd=3");
   writeFileSync(f.config, "changed");
   expect(readFileSync(snapshot, "utf8")).toBe('{"test":true}');
   launch.closeDescriptor();
@@ -53,14 +52,14 @@ test("pins retained executable and private snapshot until dispose, no process sp
 test("binary hash mismatch leaves no snapshot", () => {
   const f = fixture();
   expect(() =>
-    prepareOwnedSimulatorLaunch(f.binary, { ...f.battle, binarySha256: "0".repeat(64) }, f.dir),
+    prepareOwnedSimulatorFiles(f.binary, { ...f.battle, binarySha256: "0".repeat(64) }, f.dir),
   ).toThrow("pin mismatch");
   expect(readdirSync(f.dir).sort()).toEqual(["config.json", "simulator"]);
 });
 test("config hash mismatch leaves no snapshot", () => {
   const f = fixture();
   expect(() =>
-    prepareOwnedSimulatorLaunch(
+    prepareOwnedSimulatorFiles(
       f.binary,
       { ...f.battle, runtimeConfigSha256: "0".repeat(64) },
       f.dir,
@@ -72,20 +71,41 @@ for (const mode of [0o722, 0o600])
   test(`unsafe executable mode ${mode} fails`, () => {
     const f = fixture();
     chmodSync(f.binary, mode);
-    expect(() => prepareOwnedSimulatorLaunch(f.binary, f.battle, f.dir)).toThrow();
+    expect(() => prepareOwnedSimulatorFiles(f.binary, f.battle, f.dir)).toThrow();
   });
 test("symlink executable and public configuration rejected", () => {
   const f = fixture();
   const link = join(f.dir, "link");
   symlinkSync(f.binary, link);
-  expect(() => prepareOwnedSimulatorLaunch(link, f.battle, f.dir)).toThrow();
+  expect(() => prepareOwnedSimulatorFiles(link, f.battle, f.dir)).toThrow();
   chmodSync(f.config, 0o644);
-  expect(() => prepareOwnedSimulatorLaunch(f.binary, f.battle, f.dir)).toThrow();
+  expect(() => prepareOwnedSimulatorFiles(f.binary, f.battle, f.dir)).toThrow();
 });
 test("oversized private config and nonprivate directory rejected", () => {
   const f = fixture();
   writeFileSync(f.config, "x".repeat(65537));
-  expect(() => prepareOwnedSimulatorLaunch(f.binary, f.battle, f.dir)).toThrow("size");
+  expect(() => prepareOwnedSimulatorFiles(f.binary, f.battle, f.dir)).toThrow("size");
   chmodSync(f.dir, 0o755);
-  expect(() => prepareOwnedSimulatorLaunch(f.binary, f.battle, f.dir)).toThrow("private");
+  expect(() => prepareOwnedSimulatorFiles(f.binary, f.battle, f.dir)).toThrow("private");
+});
+
+test("launch keeps platform admission separate from portable file validation", () => {
+  const f = fixture();
+  if (process.platform !== "linux" || process.arch !== "x64") {
+    expect(() => prepareOwnedSimulatorLaunch(f.binary, f.battle, f.dir)).toThrow(
+      "Owned Battle launch requires Linux amd64.",
+    );
+    expect(readdirSync(f.dir).sort()).toEqual(["config.json", "simulator"]);
+    return;
+  }
+  const launch = prepareOwnedSimulatorLaunch(f.binary, f.battle, f.dir);
+  try {
+    expect(launch.command).toBe("/proc/self/fd/4");
+    expect(launch.args).toEqual([
+      expect.stringMatching(/^--battle-runtime-config=.+battle-runtime-.+\.json$/u),
+      "--battle-clock-proof-fd=3",
+    ]);
+  } finally {
+    launch.dispose();
+  }
 });

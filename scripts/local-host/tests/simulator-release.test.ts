@@ -7,6 +7,7 @@ import {
   mkdtemp,
   readdir,
   readFile,
+  realpath,
   rm,
   stat,
   symlink,
@@ -32,7 +33,7 @@ afterEach(async () => {
   for (const directory of roots.splice(0)) await rm(directory, { recursive: true, force: true });
 });
 async function setup() {
-  const root = await mkdtemp(join(tmpdir(), "simulator-release-test-"));
+  const root = await realpath(await mkdtemp(join(tmpdir(), "simulator-release-test-")));
   roots.push(root);
   const cacheDirectory = join(root, "cache");
   return { root, cacheDirectory, release };

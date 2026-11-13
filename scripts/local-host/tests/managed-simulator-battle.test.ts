@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import type { SpawnOptions, spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
@@ -34,7 +34,7 @@ class FakeChild extends EventEmitter {
   }
 }
 function fixture(disposeError = false, failure?: "close" | "spawn") {
-  const directory = mkdtempSync(join(tmpdir(), "battle-managed-fake-"));
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), "battle-managed-fake-")));
   directories.push(directory);
   const child = new FakeChild();
   const controller = new AbortController();

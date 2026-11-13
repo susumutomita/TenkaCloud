@@ -6,6 +6,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -25,7 +26,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 function root() {
-  const path = mkdtempSync(join(tmpdir(), "tenka-cleanup-synthetic-"));
+  const path = realpathSync(mkdtempSync(join(tmpdir(), "tenka-cleanup-synthetic-")));
   roots.push(path);
   return path;
 }
