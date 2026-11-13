@@ -1,6 +1,6 @@
 import { expect, mock, test } from "bun:test";
 import { HostError } from "../model";
-import { connectSimulatorConsole } from "../simulator-console";
+import { connectSimulatorCapabilities } from "../simulator-console";
 
 const endpoint = "http://127.0.0.1:4566";
 const code = "h".repeat(64);
@@ -32,12 +32,9 @@ function fixture(reply?: () => Response) {
 
 test("native handoff signs only the retained parameter with viewer credentials and returns a local fragment URL", async () => {
   const f = fixture();
-  const issue = await connectSimulatorConsole(
-    endpoint,
-    "synthetic-operator-token",
-    f.guard,
-    f.http,
-  );
+  const issue = (
+    await connectSimulatorCapabilities(endpoint, "synthetic-operator-token", f.guard, f.http)
+  ).console;
   expect(issue).toBeDefined();
   const current = mock(() => undefined);
   expect(await issue?.(input, current)).toBe(`${endpoint}/_simulator/login#handoff=${code}`);
@@ -61,7 +58,7 @@ test("native handoff signs only the retained parameter with viewer credentials a
 test("older Simulator keeps CLI available without advertising an unimplemented console", async () => {
   const http = mock(async () => Response.json({ protocolVersion: "2026-11-03" }));
   expect(
-    await connectSimulatorConsole(endpoint, "synthetic", () => undefined, http),
+    (await connectSimulatorCapabilities(endpoint, "synthetic", () => undefined, http)).console,
   ).toBeUndefined();
   expect(http).toHaveBeenCalledTimes(1);
 });
@@ -71,7 +68,8 @@ test("native RFC3339 expiry accepts local timezone offsets without changing the 
     .toISOString()
     .replace(/Z$/u, "+09:00");
   const f = fixture(() => Response.json({ Code: code, ExpiresAt: localExpiry }));
-  const issue = await connectSimulatorConsole(endpoint, "synthetic", f.guard, f.http);
+  const issue = (await connectSimulatorCapabilities(endpoint, "synthetic", f.guard, f.http))
+    .console;
   expect(await issue?.(input, () => undefined)).toBe(
     `${endpoint}/_simulator/login#handoff=${code}`,
   );
@@ -80,15 +78,15 @@ test("native RFC3339 expiry accepts local timezone offsets without changing the 
 test("capability lookup never follows redirects or accepts arbitrary destinations", async () => {
   const f = fixture();
   await expect(
-    connectSimulatorConsole("https://evil.example", "synthetic", f.guard, f.http),
+    connectSimulatorCapabilities("https://evil.example", "synthetic", f.guard, f.http),
   ).rejects.toThrow("numeric loopback");
   expect(f.http).not.toHaveBeenCalled();
   const redirect = mock(
     async () => new Response(null, { status: 302, headers: { location: "https://evil.example" } }),
   );
-  await expect(connectSimulatorConsole(endpoint, "synthetic", f.guard, redirect)).rejects.toThrow(
-    "Could not verify",
-  );
+  await expect(
+    connectSimulatorCapabilities(endpoint, "synthetic", f.guard, redirect),
+  ).rejects.toThrow("Could not verify");
   expect(redirect).toHaveBeenCalledTimes(1);
 });
 
@@ -106,7 +104,8 @@ for (const [name, reply] of Object.entries({
 })) {
   test(`invalid handoff is rejected without reflecting secret diagnostics: ${name}`, async () => {
     const f = fixture(reply);
-    const issue = await connectSimulatorConsole(endpoint, "synthetic", f.guard, f.http);
+    const issue = (await connectSimulatorCapabilities(endpoint, "synthetic", f.guard, f.http))
+      .console;
     await expect(issue?.(input, () => undefined)).rejects.toMatchObject({
       status: 502,
       kind: "simulator_console_failed",
@@ -116,7 +115,8 @@ for (const [name, reply] of Object.entries({
 
 test("event withdrawal and late proxy changes stop handoff without publishing the code", async () => {
   const f = fixture();
-  const issue = await connectSimulatorConsole(endpoint, "synthetic", f.guard, f.http);
+  const issue = (await connectSimulatorCapabilities(endpoint, "synthetic", f.guard, f.http))
+    .console;
   let checks = 0;
   await expect(
     issue?.(input, () => {
@@ -129,3 +129,27 @@ test("event withdrawal and late proxy changes stop handoff without publishing th
   await expect(issue?.(input, () => undefined)).rejects.toThrow("no request was sent");
   expect(f.calls).toHaveLength(2);
 });
+
+test.each([
+  {
+    advertised: { nativeSdk: { version: 1, services: ["sts", "ssm", "lambda"] } },
+    services: ["sts", "ssm", "lambda"],
+  },
+  { advertised: { protocolVersion: "2026-11-03" }, services: [] },
+  { advertised: { nativeSdk: { version: 2, services: ["lambda"] } }, services: [] },
+  { advertised: { nativeSdk: { version: 1, services: ["Lambda; rm"] } }, services: [] },
+])(
+  "native SDK services are read only from a well-formed advertisement (%#)",
+  async ({ advertised, services }) => {
+    const http = mock(async () => Response.json(advertised));
+    const capabilities = await connectSimulatorCapabilities(
+      endpoint,
+      "synthetic",
+      () => undefined,
+      http,
+    );
+    expect(capabilities.nativeSdkServices).toEqual(services);
+    expect(capabilities.console).toBeUndefined();
+    expect(http).toHaveBeenCalledTimes(1);
+  },
+);

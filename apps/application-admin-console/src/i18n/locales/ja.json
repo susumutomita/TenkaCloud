@@ -881,7 +881,7 @@
     "bulk_outcome_failed": "失敗",
     "simulator_header": "ローカル Simulator 接続",
     "simulator_body": "この接続先は同じマシン上の Simulator で、実 AWS ではありません。AWS bootstrap スタックの作成やホスト ExternalId の共有はしないでください。",
-    "simulator_verify": "make local に --simulator-bootstrap を指定してローカルロールを準備し、このアカウントを登録して検証してください。別端末の参加者や複数アカウントの分離には対応していません。この限定 bootstrap の検証対象は Hello World のみです。他の AWS 問題がカタログに表示されても、Simulator との互換性を保証するものではありません。",
+    "simulator_verify": "make local に --simulator-bootstrap を指定してローカルロールを準備し、このアカウントを登録して検証してください。別端末の参加者や複数アカウントの分離には対応していません。この限定 bootstrap の検証対象は、Simulator 向けに確認済みの Hello World と Lambda Settings Viewer だけです。他の AWS 問題がカタログに表示されても、Simulator との互換性を保証するものではありません。",
     "simulator_invalid": "Simulator の接続情報が不正です。AWS セットアップや認証情報共有のリンクは表示しません。",
     "secret_missing": "Bootstrap の接続情報がありません。AWS セットアップや認証情報共有のリンクは表示しません。"
   },

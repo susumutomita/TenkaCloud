@@ -7,7 +7,22 @@ import type { SimulatorConsoleIssuer } from "./participant-aws-contract";
 
 const capabilitySchema = z.object({
   consoleHandoff: z.object({ version: z.literal(1), services: z.array(z.string()) }).optional(),
+  // An unknown or malformed advertisement counts as none: problems that need it stay hidden.
+  nativeSdk: z
+    .object({
+      version: z.literal(1),
+      services: z.array(z.string().regex(/^[a-z0-9-]{1,32}$/u)).max(32),
+    })
+    .optional()
+    .catch(undefined),
 });
+
+export interface SimulatorCapabilities {
+  /** Present only when the Simulator issues participant Console handoffs. */
+  readonly console?: SimulatorConsoleIssuer;
+  /** Signing services its native SDK sessions accept; empty on Simulators that do not say. */
+  readonly nativeSdkServices: readonly string[];
+}
 const handoffSchema = z.object({
   Code: z.string().regex(/^[A-Za-z0-9_-]{32,256}$/u),
   ExpiresAt: z.iso.datetime({ offset: true }),
@@ -33,12 +48,12 @@ async function boundedJson(response: Response, limit: number): Promise<unknown> 
 }
 
 /** Only the native authority receives a participant's signed short-lived credentials. */
-export async function connectSimulatorConsole(
+export async function connectSimulatorCapabilities(
   endpoint: string,
   operatorToken: string,
   guard: () => void,
   httpFetch: (url: string, init: RequestInit) => Promise<Response> = fetch,
-): Promise<SimulatorConsoleIssuer | undefined> {
+): Promise<SimulatorCapabilities> {
   const origin = normalizeSimulatorEndpointUrl(endpoint);
   guard();
   let capabilities: z.infer<typeof capabilitySchema>;
@@ -55,8 +70,13 @@ export async function connectSimulatorConsole(
       "Could not verify Simulator Console capabilities. Check the local Simulator connection.",
     );
   }
-  if (!capabilities.consoleHandoff?.services.includes("ssm-parameter")) return undefined;
-  return async ({ credentials, parameterName, region }, assertCurrent) => {
+  const nativeSdkServices = capabilities.nativeSdk?.services ?? [];
+  if (!capabilities.consoleHandoff?.services.includes("ssm-parameter"))
+    return { nativeSdkServices };
+  const issue: SimulatorConsoleIssuer = async (
+    { credentials, parameterName, region },
+    assertCurrent,
+  ) => {
     assertCurrent();
     guard();
     if (
@@ -110,4 +130,5 @@ export async function connectSimulatorConsole(
       );
     }
   };
+  return { console: issue, nativeSdkServices };
 }
