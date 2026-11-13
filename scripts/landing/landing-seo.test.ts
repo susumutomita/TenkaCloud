@@ -1,7 +1,15 @@
 import { describe, expect, it } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { currentVersions, STAMPED_ASSETS, stampHtml } from "./stamp-asset-versions";
+import {
+  currentMediaVersions,
+  currentVersions,
+  MEDIA_PAGES,
+  STAMPED_ASSETS,
+  STAMPED_MEDIA,
+  stampHtml,
+  stampMedia,
+} from "./stamp-asset-versions";
 
 const root = join(import.meta.dir, "../..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
@@ -269,6 +277,39 @@ describe("landing asset cache busting (content-hash stamped)", () => {
     const html = read("landing/index.html");
     expect(stampHtml(html, versions)).toBe(html);
   });
+
+  // 動画は差し替えても URL が同じなので、 Cloudflare の地域キャッシュが旧版を返し続ける。
+  // 参照ごとに内容ハッシュを刻み、 差し替えてスタンプし忘れた PR を落とす。
+  it("should reference every stamped video with its current content hash", () => {
+    const media = currentMediaVersions();
+    for (const page of MEDIA_PAGES) {
+      const html = read(`landing/${page}`);
+      for (const asset of STAMPED_MEDIA) {
+        const references = [
+          ...html.matchAll(
+            new RegExp(`["'](?:\\.\\./)*/?${asset.replaceAll(".", "\\.")}[^"']*["']`, "g"),
+          ),
+        ].map((m) => m[0]);
+        expect(references.length, `${page} should reference ${asset}`).toBeGreaterThan(0);
+        for (const reference of references)
+          expect(reference).toContain(`${asset}?v=${media[asset]}`);
+      }
+      expect(stampMedia(html, media)).toBe(html);
+    }
+  });
+
+  it("should add or replace the video stamp without touching other paths", () => {
+    const versions = { "videos/lp/clip.mp4": "0123456789" };
+    expect(stampMedia('<a href="/videos/lp/clip.mp4">', versions)).toBe(
+      '<a href="/videos/lp/clip.mp4?v=0123456789">',
+    );
+    expect(stampMedia('<source src="../videos/lp/clip.mp4?v=aaaaaaaaaa" />', versions)).toBe(
+      '<source src="../videos/lp/clip.mp4?v=0123456789" />',
+    );
+    expect(stampMedia('<a href="/videos/lp/clip.mp4.bak">', versions)).toBe(
+      '<a href="/videos/lp/clip.mp4.bak">',
+    );
+  });
 });
 
 /**
@@ -418,12 +459,16 @@ describe("presentations stay off the landing page body", () => {
 });
 
 /**
- * #2696 P1: 30 秒 LP 動画。 hero の secondary 行と両 README の CTA 付近から
- * 参照され、 自ホスト mp4 (16:9 / 9:16) + README 用 preview GIF が実在する。
+ * LP 動画。 hero の secondary 行と両 README の CTA 付近から 1 分の紹介動画を参照する。
+ * 以前の 30 秒版 (#2696 P1、 16:9 / 9:16) は README から引き続き辿れる。
  */
-describe("30-second product video placement (#2696 P1)", () => {
-  it("should ship the self-hosted 30s assets", () => {
+describe("product video placement (#2696 P1)", () => {
+  it("should ship the self-hosted 60s and 30s assets", () => {
     for (const path of [
+      "landing/videos/lp/tenkacloud-60s.mp4",
+      "docs/assets/lp-60s/tenkacloud-60s-preview.gif",
+      "docs/assets/lp-60s/tenkacloud-60s-poster.jpg",
+      "docs/assets/lp-60s/README.md",
       "landing/videos/lp/tenkacloud-30s.mp4",
       "landing/videos/lp/tenkacloud-30s-vertical.mp4",
       "docs/assets/lp-30s/tenkacloud-30s-preview.gif",
@@ -433,18 +478,27 @@ describe("30-second product video placement (#2696 P1)", () => {
     }
   });
 
-  it("should link the 30s video from the hero secondary row on both pages", () => {
+  it("should keep the LP video within the Cloudflare Pages per-file limit", () => {
+    const bytes = statSync(join(root, "landing/videos/lp/tenkacloud-60s.mp4")).size;
+    expect(bytes).toBeLessThan(25 * 1024 * 1024);
+  });
+
+  it("should link the 60s video from the hero secondary row on both pages", () => {
     for (const page of ["landing/index.html", "landing/index.en.html"]) {
       const html = read(page);
-      expect(html).toContain('data-cta="watch-30s"');
-      expect(html).toContain('href="/videos/lp/tenkacloud-30s.mp4"');
+      expect(html).toContain('data-cta="watch-60s"');
+      const version = currentMediaVersions()["videos/lp/tenkacloud-60s.mp4"];
+      expect(html).toContain(`href="/videos/lp/tenkacloud-60s.mp4?v=${version}"`);
+      expect(html).not.toContain("tenkacloud-30s.mp4");
     }
   });
 
-  it("should embed the preview GIF near the top CTA of both READMEs", () => {
+  it("should embed the 60s preview GIF near the top CTA of both READMEs", () => {
     for (const page of ["README.md", "README.ja.md"]) {
       const md = read(page);
-      expect(md).toContain("docs/assets/lp-30s/tenkacloud-30s-preview.gif");
+      expect(md).toContain("docs/assets/lp-60s/tenkacloud-60s-preview.gif");
+      expect(md).toContain("landing/videos/lp/tenkacloud-60s.mp4");
+      expect(md).toContain("docs/assets/lp-60s/README.md");
       expect(md).toContain("landing/videos/lp/tenkacloud-30s.mp4");
       expect(md).toContain("landing/videos/lp/tenkacloud-30s-vertical.mp4");
     }

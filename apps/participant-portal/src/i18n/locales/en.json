@@ -305,7 +305,7 @@
   },
   "sso_credentials": {
     "open_simulator_console_button": "Open Simulator Console",
-    "simulator_console_update": "This Simulator does not support participant Console access yet. Ask the organizer to update the Simulator. You can still use the CLI.",
+    "simulator_console_update": "This problem cannot be opened in the Simulator console. Use the CLI credentials. If the problem is meant to open in the console, ask the organizer to update the Simulator.",
     "console_popup_blocked": "The Console could not open. Allow pop-ups for this site, then try again.",
     "aws_access_unavailable": "AWS access is not available for this deployment. Check its current state or ask the organizer.",
     "title": "SSO Credentials",

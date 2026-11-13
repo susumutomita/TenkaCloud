@@ -305,7 +305,7 @@
   },
   "sso_credentials": {
     "open_simulator_console_button": "Simulator Console を開く",
-    "simulator_console_update": "このSimulatorは参加者用Console接続に未対応です。主催者にSimulatorの更新を依頼してください。CLIは利用できます。",
+    "simulator_console_update": "この問題は Simulator のコンソールでは開けません。CLI 用の認証情報を使ってください。コンソールで開けるはずの問題であれば、主催者に Simulator の更新を依頼してください。",
     "console_popup_blocked": "Console を開けませんでした。このサイトのポップアップを許可してから、もう一度お試しください。",
     "aws_access_unavailable": "この問題環境の AWS アクセスはまだ利用できません。現在の状態を確認するか、開催者へ問い合わせてください。",
     "title": "SSO Credentials",

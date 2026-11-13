@@ -84,6 +84,8 @@ function isFlagStackDefinition(definition: StackDefinition): definition is FlagS
 export interface CloudFormationEngineOptions extends ParticipantAwsClients {
   readonly region: string;
   readonly simulatorEndpoint?: string;
+  /** Signing services the connected Simulator's native SDK sessions accept (its capability document). */
+  readonly simulatorServices?: readonly string[];
   readonly ssm?: AwsDisruptionClients["ssm"];
   /** The host's ExternalId. Every competitor role requires it (`competitor-bootstrap.yaml`). */
   readonly externalId: string;
@@ -104,21 +106,45 @@ export interface CloudFormationEngineOptions extends ParticipantAwsClients {
 const EXTERNAL_ID_PATTERN = /^[A-Za-z0-9_=,.@:/-]{16,128}$/u;
 
 /** Reviewed list: extending it requires reviewing the template's cost and blast radius. */
-const REVIEWED_STACK_PROBLEMS = [
+const REVIEWED_STACK_PROBLEMS: readonly {
+  readonly problemId: string;
+  readonly folder: "challenges" | "battles";
+  readonly scoring: "flag" | "uptime-flat";
+  readonly simulator: boolean;
+  /** Native SDK services participants call directly, beyond the CloudFormation/STS/SSM baseline. */
+  readonly simulatorServices?: readonly string[];
+}[] = [
   { problemId: "hello-world", folder: "challenges", scoring: "flag", simulator: true },
   { problemId: "hello-world-battle", folder: "battles", scoring: "uptime-flat", simulator: false },
-] as const;
+  // One Python Lambda, two IAM roles and three SSM Standard parameters; no network endpoint.
+  {
+    problemId: "lambda-settings-viewer",
+    folder: "challenges",
+    scoring: "flag",
+    simulator: true,
+    simulatorServices: ["lambda"],
+  },
+];
 
-/** Simulator support requires an unchanged-problem rehearsal, not just catalog discovery. */
-function simulatorProblemSupported(problemId: string): boolean {
-  return REVIEWED_STACK_PROBLEMS.some((entry) => entry.problemId === problemId && entry.simulator);
+/**
+ * Simulator support requires an unchanged-problem rehearsal, not just catalog discovery, and a
+ * connected Simulator whose native SDK sessions accept every service the participant must call.
+ */
+function simulatorProblemSupported(problemId: string, services: readonly string[]): boolean {
+  return REVIEWED_STACK_PROBLEMS.some(
+    (entry) =>
+      entry.problemId === problemId &&
+      entry.simulator &&
+      (entry.simulatorServices ?? []).every((service) => services.includes(service)),
+  );
 }
 
 function simulatorAccessCapabilities(
   problemId: string,
+  services: readonly string[],
   consoleReady: boolean,
 ): readonly TargetAccessCapability[] {
-  if (!simulatorProblemSupported(problemId)) return [];
+  if (!simulatorProblemSupported(problemId, services)) return [];
   if (consoleReady) return ["console", "cli-credentials"] as const;
   return ["cli-credentials"] as const;
 }
@@ -238,12 +264,13 @@ function stackProblem(
 
 export function cloudFormationCatalog(
   repositoryRoot: string,
-  options: { simulator?: boolean } = {},
+  options: { simulator?: boolean; simulatorServices?: readonly string[] } = {},
 ): Problem[] {
   return selectedCatalogSnapshots(repositoryRoot).flatMap(({ problemRoot: catalog, revision }) =>
     REVIEWED_STACK_PROBLEMS.filter(
-      ({ folder, problemId, simulator }) =>
-        (!options.simulator || simulator) &&
+      ({ folder, problemId }) =>
+        (!options.simulator ||
+          simulatorProblemSupported(problemId, options.simulatorServices ?? [])) &&
         existsSync(join(catalog, folder, problemId, "metadata.json")),
     ).map((entry) => stackProblem(catalog, entry, revision)),
   );
@@ -277,16 +304,20 @@ export class CloudFormationEngine implements RuntimeEngine {
       throw new Error("The host ExternalId must be 16–128 characters of [A-Za-z0-9_=,.@:/-].");
     this.problems = cloudFormationCatalog(repositoryRoot, {
       simulator: Boolean(options.simulatorEndpoint),
+      simulatorServices: options.simulatorServices ?? [],
     });
   }
 
   private assertSimulatorSupport(job: Job): void {
     if (!this.options.simulatorEndpoint) return;
     const definition = JSON.parse(job.definition) as StackDefinition;
-    if (job.problemId !== definition.problemId || !simulatorProblemSupported(definition.problemId))
+    if (
+      job.problemId !== definition.problemId ||
+      !simulatorProblemSupported(definition.problemId, this.options.simulatorServices ?? [])
+    )
       throw new HostError(
         409,
-        "This AWS problem is unavailable in simulator mode. Only Hello World is currently supported.",
+        "This AWS problem is unavailable in simulator mode. Only problems reviewed for the Simulator can be deployed there.",
         "simulator_problem_unsupported",
       );
   }
@@ -515,6 +546,7 @@ export class CloudFormationEngine implements RuntimeEngine {
             consoleKind: "simulator" as const,
             accessCapabilities: simulatorAccessCapabilities(
               definition.problemId,
+              this.options.simulatorServices ?? [],
               Boolean(this.options.simulatorConsole && unit?.outputs?.ParameterName),
             ),
           }

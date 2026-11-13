@@ -126,6 +126,8 @@ function simulate(config, reaction, seed) {
   verifyExposure(ledger.seen, config.guard5, config.structure5);
   return repeatRate(ledger.exposures);
 }
+// 72 distinct 300 s runs through the real question selector, which takes most of the time.
+// Measured 2.7 s alone and 5.0–5.6 s in a full `test:scripts` run on a cloud dev container.
 test("correct-only0–300s visible-play models reach varied GuardDuty topics and avoid short-cycle repetition without leaking rules", () => {
   const configs = [
     {
@@ -162,4 +164,4 @@ test("correct-only0–300s visible-play models reach varied GuardDuty topics and
       for (let seed = 0; seed < 8; seed++) repeats.push(simulate(config, reaction, seed));
     expect(repeats.reduce((a, b) => a + b, 0) / repeats.length).toBeLessThan(0.25);
   }
-});
+}, 15_000);

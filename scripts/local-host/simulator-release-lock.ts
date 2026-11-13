@@ -3,16 +3,12 @@ import { constants, type Stats } from "node:fs";
 import { link, lstat, mkdir, open, rename, rmdir, unlink } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { z } from "zod";
-import {
-  ensureSimulatorBinary,
-  prepareSimulatorCache,
-  simulatorReleaseResponse,
-} from "./simulator-release";
-import { consumeSimulatorStream } from "./simulator-release-stream";
+import { ensureSimulatorBinary, prepareSimulatorCache } from "./simulator-release";
+import { metadata, officialSimulatorAssetResponse, parseMetadata } from "./simulator-release-http";
 
 const REPOSITORY = "https://github.com/susumutomita/TenkaCloudSimulator";
-const RELEASES =
-  "https://api.github.com/repos/susumutomita/TenkaCloudSimulator/releases?per_page=100";
+const RELEASE_API = "https://api.github.com/repos/susumutomita/TenkaCloudSimulator/releases";
+const RELEASES = `${RELEASE_API}?per_page=100`;
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const version = z.string().regex(/^v(?:0|[1-9]\d{0,8})\.(?:0|[1-9]\d{0,8})\.(?:0|[1-9]\d{0,8})$/u);
 const lockSchema = z
@@ -223,8 +219,7 @@ async function resolveCandidate(
   fetcher: Fetcher,
   signal: AbortSignal,
 ): Promise<ReleaseLock | undefined> {
-  const base = `${REPOSITORY}/releases/download/${tag}`;
-  const sums = await metadata(`${base}/SHA256SUMS`, fetcher, signal, 65_536, true);
+  const sums = await releaseMetadata(tag, "SHA256SUMS", fetcher, signal, true);
   if (sums === "") return undefined;
   const checksums: Record<string, string> = {};
   for (const line of sums.trimEnd().split("\n")) {
@@ -235,7 +230,7 @@ async function resolveCandidate(
       throw new Error("Simulator release checksum manifest is invalid or duplicated.");
     checksums[name] = checksum;
   }
-  const build = await metadata(`${base}/BUILDINFO.json`, fetcher, signal, 65_536);
+  const build = await releaseMetadata(tag, "BUILDINFO.json", fetcher, signal);
   if (createHash("sha256").update(build).digest("hex") !== checksums["BUILDINFO.json"])
     throw new Error("Simulator BUILDINFO checksum mismatch; release rejected.");
   const info = z
@@ -261,38 +256,16 @@ async function resolveCandidate(
   return parsed.data;
 }
 
-async function metadata(
-  url: string,
+/** Only transient download gateway failures use the official API, once, within the same deadline. */
+async function releaseMetadata(
+  tag: string,
+  name: "SHA256SUMS" | "BUILDINFO.json",
   fetcher: Fetcher,
   signal: AbortSignal,
-  limit: number,
   missingAllowed = false,
 ): Promise<string> {
-  const response = await simulatorReleaseResponse(url, fetcher, signal);
-  if (missingAllowed && response.status === 404) {
-    await response.body?.cancel();
-    return "";
-  }
-  if (!response.ok || !response.body) {
-    await response.body?.cancel();
-    throw new Error(
-      "Simulator release metadata unavailable; check connectivity or GitHub rate limits. The existing lock was retained.",
-    );
-  }
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  await consumeSimulatorStream(response.body, signal, (value) => {
-    size += value.byteLength;
-    if (size > limit) throw new Error("Simulator release metadata exceeds the size limit.");
-    chunks.push(value);
+  const url = `${REPOSITORY}/releases/download/${tag}/${name}`;
+  return metadata(url, fetcher, signal, 65_536, missingAllowed, async () => {
+    return officialSimulatorAssetResponse(tag, name, fetcher, signal);
   });
-  return new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks));
-}
-
-function parseMetadata(text: string): unknown {
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new Error("Simulator release metadata is invalid JSON; no lock was changed.");
-  }
 }

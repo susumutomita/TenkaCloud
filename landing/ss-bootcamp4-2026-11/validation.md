@@ -17,7 +17,7 @@ Checked on 2026-11-04 against repository main `f99b3d9a00076a2a5e97f1d4d9b0b20a7
 | AWS operations / Cryptography Battle video | [Existing capture record](../jaws-yokohama-2026/assets/recorded-demo.md), 2026-09-15. Historical recording; current instructions link to the organizer guide. |
 | June kickoff | [PR #1739](https://github.com/susumutomita/TenkaCloud/pull/1739). |
 | August/September events and feedback | [PR #3485](https://github.com/susumutomita/TenkaCloud/pull/3485), [UG #1](https://tenkacloud.com/tenkacloud-ug-1/), [JAWS Yokohama](https://tenkacloud.com/jaws-yokohama-2026/). |
-| Simulator | [Development repository](https://github.com/susumutomita/TenkaCloudSimulator). Only the final slide describes it, explicitly unreleased / in development. |
+| Simulator | [Development repository](https://github.com/susumutomita/TenkaCloudSimulator). Final slide (`#14`) keeps 開発中 · 未リリース. Local demo video (`simulator-demo.mp4`) shows `make local` → register/verify → event create/deploy/start → Hello World via CLI / console / API Doc → submit/score. Only Hello World works in Simulator mode so far. Independent simulator, not official AWS. No purchase/adoption claim. Provenance: [recorded-demo.md](recorded-demo.md). |
 
 The latest published release returned by GitHub was v2.6.12 (2026-10-29). This change makes no v2.7.0 publication claim.
 
@@ -28,6 +28,7 @@ Headless Chromium 154 on Linux, static server rooted at `landing/`:
 - 1440 × 900 and 390 × 844: all 14 slides; no horizontal overflow or missing images.
 - Desktop: all slide boundaries fit the viewport. Screenshots of the Appendix and mobile video slide inspected.
 - Native MP4: actual playback advances at both sizes; no media error; moving to another slide pauses playback.
+- Slide 14 Simulator demo: native MP4 loads (`simulator-demo.mp4`); playback advances; leaving the slide pauses media. Layout checked at 1280 × 800.
 - YouTube: clicking creates the expected privacy-enhanced embed with start 0 / end 60; leaving the slide removes the iframe and restores the button. Actual remote playback is not verified here.
 - Print: all 14 slides display; both posters load and display; video players hide. Chromium PDF has 14 pages.
 - Main four slide sections compared with Git HEAD: identical after removing the permitted numbering and label metadata, plus the subsequently requested logo images/classes. Cover draft notice retained.
@@ -47,6 +48,18 @@ The user requested the logo after reviewing the Appendix. Reused the unmodified 
 The cover title has a prominent mark next to its existing text. Every slide footer has the same small mark. Empty image alternatives avoid repeating the adjacent TenkaCloud text for screen readers. The SVG keeps its aspect ratio and original colors.
 
 Verified all 14 slides at 1440 × 900 and 390 × 844: logo images loaded, no horizontal overflow. The first four sections match the previous commit after removing only the newly added logo images and classes. In print all 15 logo instances display, both video posters remain visible, and the PDF remains 14 pages.
+
+## Introduction video slide
+
+The owner asked for the 60-second introduction in this deck. It is added as the last Appendix slide (Appendix 11 / 11, slide 15) so the four main slides and the existing Appendix order are unchanged. The Appendix labels, the footer count and the deck test were updated from 10 to 11.
+
+The slide reuses the LP copy at `../videos/lp/tenkacloud-60s.mp4` rather than a second file. Its fine print repeats the scope stated on the Simulator slide: under development and unreleased, Hello World only, no Docker and no real AWS deployment. [Capture conditions](recorded-demo.md#60-second-introduction).
+
+On 2026-11-11 the introduction video was replaced with the 61-second cut, and the list and fine print on the slide were rewritten to match it. The checks below were rerun against the new file.
+
+Verified slide 15 at 1440 × 900 and 390 × 844: no horizontal overflow, the video metadata loads (1920 × 1080, 61 seconds), the counter reads Appendix 11 / 11 and Next is disabled. At 1440 × 900 the slide fits the viewport. In print the player is hidden, the poster is shown, all 16 logo instances and four posters load, and the PDF is 15 pages. The other 14 slides were not re-inspected beyond the automated deck test.
+
+The video has music. Its level was measured but it was not auditioned in this environment; listen to it on the presentation machine before the talk.
 
 ## Remaining external verification
 
