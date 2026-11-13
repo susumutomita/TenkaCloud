@@ -8,6 +8,11 @@ import { parseOptions, vpnListener } from "./options";
 import { openOrganizerKeyDisplay } from "./organizer-key-output";
 import { type RunningLocalHost, startLocalHost } from "./server";
 import {
+  ownedBattleSessionBundle,
+  withOwnedBattleSession,
+} from "./simulator-battle-session-bundle";
+import type { OwnedSimulatorClock } from "./simulator-clock-bootstrap";
+import {
   connectSimulatorHosting,
   preflightSimulatorHosting,
   type SimulatorSettings,
@@ -142,7 +147,7 @@ export async function runLocalHost(
   const options = parseOptions(args, root);
   if (options.help) {
     console.log(
-      `TenkaCloud local competition hosting\n\nmake local LOCAL_ARGS="[--data <directory>] [--no-build]"\n  --update-simulator  Resolve and verify a compatible official stable release, update the local lock, then start\n  --no-simulator  Start only Docker/browser exercises, without downloading or starting Simulator\n  --simulator-binary <executable>  Override the locked native release for same-machine startup\n  --simulator-token <token>  Alternative to --simulator-token-file; process arguments and shell history may expose it\n  --simulator-endpoint http://127.0.0.1:PORT --simulator-token-file <private-file> --simulator-region ap-northeast-1  Explicit local AWS simulator, never real AWS\n  --simulator-bootstrap  Explicitly create/reuse this installation's limited local Hello World deployment role\n  --submission-catalog <file>  Organizer-owned fixed-edition answer / self-report catalog\n  --admin-port 5174       Host console; loopback unless using public origins\n  --participant-port 5175 Participant portal\n  --gateway-ports ${DEFAULT_GATEWAY_PORTS}  Exercise gateways, leased only by active local environments\n  --max-active-per-team 3  Per-team local environment limit\n  --max-active-environments 12  Host-wide active environment limit\n  --container-memory-mib 4096  Sum of container memory caps, not a hardware benchmark\n  --docker-network-pool <CIDR>  Explicit private /16–/24 pool for compact project networks; must not overlap LAN/VPN routes\n  --competition-network  Fail-closed native Linux 28.4.x team isolation (requires pool, root firewall/nsenter access)\n  --console-origin https://play.example --web-origin-template https://{target}.labs.example  Native console-only appliance behind an operator-managed TLS proxy\n  --web-port 5176 --web-services web  Loopback Web broker and declared HTTP service IDs\n  --vpn-peers <root-owned-json>  Preconfigured dedicated Linux WireGuard ingress (requires boot seal service)\n  --lan <private-ip> --unsafe-lan  Explicit unencrypted hosting; Docker exercises require native isolation unless --unsafe-docker-lan is given\n  --unsafe-docker-lan     With --lan --unsafe-lan only: run Docker exercises with no team network isolation, for trusted participants (new events only)\n  --public-admin-origin https://… --public-participant-origin https://…  Behind a TLS-terminating proxy that passes the original Host header\n  --behind-proxy          Rate-limit by the proxy-appended X-Forwarded-For entry\n\nCodespaces automatically selects exact HTTPS forwarding origins for native public mode; keep organizer port 5174 Private. Port visibility is never changed.\nThe local host uses Bun, or the Node 24 development entry with built interfaces and SQLite. The local Challenge catalog requires Docker Compose. Same-machine loopback hosting starts a locally locked native Simulator automatically. AWS service problems require cloud hosting or local simulator configuration. LAN, public proxy and VPN hosting never start a local Simulator.\nmake local opens the unified competition console. make down stops local environments while retaining their data.`,
+      `TenkaCloud local competition hosting\n\nmake local LOCAL_ARGS="[--data <directory>] [--no-build]"\n  --update-simulator  Resolve and verify a compatible official stable release, update the local lock, then start\n  --no-simulator  Start only Docker/browser exercises, without downloading or starting Simulator\n  --simulator-binary <executable>  Override the locked native release for same-machine startup\n  --simulator-battle-config <absolute-file> --simulator-battle-config-sha256 <sha256> --simulator-binary-sha256 <sha256>  Explicit pinned Linux/amd64 Battle runtime with --simulator-binary; requires a separately prepared VM bundle, not proof of Battle readiness\n  --simulator-token <token>  Alternative to --simulator-token-file; process arguments and shell history may expose it\n  --simulator-endpoint http://127.0.0.1:PORT --simulator-token-file <private-file> --simulator-region ap-northeast-1  Explicit local AWS simulator, never real AWS\n  --simulator-bootstrap  Explicitly create/reuse this installation's limited local Hello World deployment role\n  --submission-catalog <file>  Organizer-owned fixed-edition answer / self-report catalog\n  --admin-port 5174       Host console; loopback unless using public origins\n  --participant-port 5175 Participant portal\n  --gateway-ports ${DEFAULT_GATEWAY_PORTS}  Exercise gateways, leased only by active local environments\n  --max-active-per-team 3  Per-team local environment limit\n  --max-active-environments 12  Host-wide active environment limit\n  --container-memory-mib 4096  Sum of container memory caps, not a hardware benchmark\n  --docker-network-pool <CIDR>  Explicit private /16–/24 pool for compact project networks; must not overlap LAN/VPN routes\n  --competition-network  Fail-closed native Linux 28.4.x team isolation (requires pool, root firewall/nsenter access)\n  --console-origin https://play.example --web-origin-template https://{target}.labs.example  Native console-only appliance behind an operator-managed TLS proxy\n  --web-port 5176 --web-services web  Loopback Web broker and declared HTTP service IDs\n  --vpn-peers <root-owned-json>  Preconfigured dedicated Linux WireGuard ingress (requires boot seal service)\n  --lan <private-ip> --unsafe-lan  Explicit unencrypted hosting; Docker exercises require native isolation unless --unsafe-docker-lan is given\n  --unsafe-docker-lan     With --lan --unsafe-lan only: run Docker exercises with no team network isolation, for trusted participants (new events only)\n  --public-admin-origin https://… --public-participant-origin https://…  Behind a TLS-terminating proxy that passes the original Host header\n  --behind-proxy          Rate-limit by the proxy-appended X-Forwarded-For entry\n\nCodespaces automatically selects exact HTTPS forwarding origins for native public mode; keep organizer port 5174 Private. Port visibility is never changed.\nThe local host uses Bun, or the Node 24 development entry with built interfaces and SQLite. The local Challenge catalog requires Docker Compose. Same-machine loopback hosting starts a locally locked native Simulator automatically. AWS service problems require cloud hosting or local simulator configuration. LAN, public proxy and VPN hosting never start a local Simulator.\nmake local opens the unified competition console. make down stops local environments while retaining their data.`,
     );
     return;
   }
@@ -155,9 +160,13 @@ export async function runLocalHost(
     preflightSimulatorHosting(options.simulator);
     if (options.build) await buildHosting(root, "summary");
     else assertHostCatalogBuild(root);
-    await withSimulatorSession(options, shutdown.signal, async (simulator, signal) => {
-      await runSimulatorHost(root, options, lifecycle, simulator, signal);
-    });
+    await withSimulatorSession(
+      options,
+      shutdown.signal,
+      async (simulator, signal, clock, lifetime) => {
+        await runSimulatorHost(root, options, lifecycle, simulator, signal, clock, lifetime);
+      },
+    );
   } finally {
     shutdown.close();
   }
@@ -187,6 +196,8 @@ async function runSimulatorHost(
   lifecycle: { onReady?: (host: RunningLocalHost) => void; stopLocalEnvironments?: boolean },
   simulator: SimulatorSettings | undefined,
   signal: AbortSignal,
+  clock?: OwnedSimulatorClock,
+  lifetime: AbortSignal = signal,
 ): Promise<void> {
   if (signal.aborted) return;
   console.log("Starting the host server...");
@@ -195,12 +206,15 @@ async function runSimulatorHost(
     : undefined;
   const connection = await connectSimulatorHosting(root, options.dataDirectory, simulator);
   if (signal.aborted) return;
-  const settings = {
-    ...options,
-    ...(simulator ? { simulator } : {}),
-    ...(connection ? { accountConnection: connection } : {}),
-    ...(vpn ? { ...vpnListener(options, vpn.plan), vpn } : {}),
-  };
+  const settings = withOwnedBattleSession(
+    {
+      ...options,
+      ...(simulator ? { simulator } : {}),
+      ...(connection ? { accountConnection: connection } : {}),
+      ...(vpn ? { ...vpnListener(options, vpn.plan), vpn } : {}),
+    },
+    ownedBattleSessionBundle(simulator, lifetime, clock),
+  );
   const docker = options.public ? { available: false } : dockerAvailability();
   if ("reason" in docker && docker.reason) console.warn(docker.reason);
   const host = await startLocalHost(root, settings, (directory, store) =>

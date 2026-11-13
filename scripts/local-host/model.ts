@@ -306,7 +306,9 @@ export interface RuntimeEngine {
   ): Promise<void>;
   readonly supportsOnDemand?: boolean;
   containerCost?(definition: string): import("./container-budget").ContainerCost;
-  disruptionAdapter?(): import("./disruption-model").DisruptionAdapter | undefined;
+  disruptionAdapter?(
+    assertOrigin?: (target: import("./disruption-model").DisruptionTarget) => void,
+  ): import("./disruption-model").DisruptionAdapter | undefined;
   readonly hasAws?: boolean;
   participantAwsAccess?(args: {
     kind: import("./participant-aws-contract").ParticipantAwsAccess["kind"];

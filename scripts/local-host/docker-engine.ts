@@ -516,6 +516,8 @@ export class DockerHostingEngine implements RuntimeEngine {
     private readonly guardNow: () => number = Date.now,
     private readonly catalogLoader: typeof loadDockerCatalog = loadDockerCatalog,
     private readonly composeUnitRunning: typeof isComposeUnitRunning = isComposeUnitRunning,
+    // Trusted constructor dependency only; production retains live Docker and host inventory.
+    private readonly occupiedSubnets: () => readonly string[] = occupiedDockerSubnets,
   ) {}
   catalog(): readonly Problem[] {
     this.problems ??= this.catalogLoader(this.repositoryRoot);
@@ -619,7 +621,7 @@ export class DockerHostingEngine implements RuntimeEngine {
         ),
         this.networkPool,
         [
-          ...occupiedDockerSubnets(),
+          ...this.occupiedSubnets(),
           ...(this.isolationRequired(job)
             ? this.networkGuard.occupiedRoutes().filter((cidr) => !cidr.includes(":"))
             : []),

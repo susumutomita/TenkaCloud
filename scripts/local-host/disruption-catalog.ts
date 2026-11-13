@@ -11,6 +11,7 @@ import {
 import { compareCodePoints } from "../lib/code-point-order";
 import type { DisruptionTarget } from "./disruption-model";
 import { HostError, type Job, type Problem, type Team } from "./model";
+import { assertStackOriginMode } from "./simulator-stack-origin";
 import { digest } from "./store";
 
 const definitionSchema = z.object({
@@ -91,6 +92,7 @@ export function pinDisruption(args: {
       "This declaration cannot inject a recoverable host disruption.",
       unavailable ?? "no_action",
     );
+  assertStackOriginMode(job, false);
   let raw: unknown;
   try {
     raw = JSON.parse(job.unit ?? "null");
@@ -150,4 +152,28 @@ export function pinDisruption(args: {
     revert,
     afterSeconds: declaration.action.revert.afterSeconds,
   };
+}
+
+/** Re-read by the trusted host before every AWS transport, including recovery polls.
+ * Legacy unmarked AWS jobs remain compatible; no retained data is rewritten.
+ */
+export function assertDisruptionAwsOrigin(target: DisruptionTarget, job: Job, team: Team): void {
+  assertStackOriginMode(job, false);
+  const unit = unitSchema.parse(JSON.parse(job.unit ?? "null"));
+  if (
+    job.jobId !== target.jobId ||
+    job.eventId !== target.eventId ||
+    job.teamId !== target.teamId ||
+    team.teamId !== target.teamId ||
+    team.eventId !== target.eventId ||
+    digest(job.unit ?? "") !== target.unitHash ||
+    job.deployedAt !== target.deployedAt ||
+    unit.stackId !== target.stackId ||
+    unit.accountId !== target.accountId ||
+    unit.region !== target.region ||
+    unit.roleArn !== target.roleArn ||
+    team.aws?.accountId !== target.accountId ||
+    `arn:aws:iam::${team.aws?.accountId}:role/${team.aws?.roleName}` !== target.roleArn
+  )
+    throw new Error("The original AWS disruption deployment is unavailable.");
 }

@@ -42,6 +42,7 @@ export type StackDefinition = FlagStackDefinition | UptimeStackDefinition;
 
 /** Recorded before CreateStack, so an interrupted create can still be cleaned up. */
 export interface StackUnit {
+  readonly origin?: import("./simulator-stack-origin").SimulatorStackOrigin;
   kind: "cloudformation";
   accountId: string;
   roleArn: string;

@@ -232,3 +232,141 @@ test("explicit release update is only available for automatic same-machine Simul
       "--update-simulator",
     );
 });
+
+const battle = {
+  binarySha256: "a".repeat(64),
+  runtimeConfigPath: "/private/runtime.json",
+  runtimeConfigSha256: "b".repeat(64),
+};
+const battleOptions = { ...options, managedSimulator: { ...options.managedSimulator, battle } };
+test("Battle passes exact opt-in and owned clock without installer", async () => {
+  noProxy();
+  const clock = {
+    domain: "synthetic-unit-test-only",
+    authenticateResponse() {
+      /* Fixture does not issue provider requests. */
+    },
+    authenticateSample() {
+      throw new Error("not invoked");
+    },
+  };
+  let stopped = 0;
+  await withSimulatorSession(
+    battleOptions,
+    new AbortController().signal,
+    async (actual, _signal, actualClock) => {
+      expect(actual).toBe(settings);
+      expect(actualClock).toBe(clock);
+    },
+    {
+      start: async (actual) => {
+        expect(actual.battle).toBe(battle);
+        expect(actual.binary).toBe(options.managedSimulator.binary);
+        return {
+          settings,
+          clock,
+          exited: new Promise(() => {
+            /* Injected child remains alive until explicit test cleanup. */
+          }),
+          stop: async () => {
+            stopped++;
+          },
+        };
+      },
+      install: async () => {
+        throw new Error("must not install");
+      },
+    },
+  );
+  expect(stopped).toBe(1);
+});
+test("Battle missing clock stops owned child without entering host callback", async () => {
+  noProxy();
+  let stopped = 0;
+  let ran = false;
+  await expect(
+    withSimulatorSession(
+      battleOptions,
+      new AbortController().signal,
+      async () => {
+        ran = true;
+      },
+      {
+        start: async () => ({
+          settings,
+          exited: new Promise(() => {
+            /* Injected child remains alive until explicit test cleanup. */
+          }),
+          stop: async () => {
+            stopped++;
+          },
+        }),
+      },
+    ),
+  ).rejects.toThrow("owned Simulator clock");
+  expect(stopped).toBe(1);
+  expect(ran).toBe(false);
+});
+for (const managedSimulator of [
+  { battle },
+  { binary: " ", battle },
+  { binary: "/private/native", battle, update: true },
+]) {
+  test(`Battle rejects unpinned selection/update before installer ${JSON.stringify(managedSimulator)}`, async () => {
+    noProxy();
+    let started = false;
+    let installed = false;
+    await expect(
+      withSimulatorSession(
+        { dataDirectory: options.dataDirectory, managedSimulator },
+        new AbortController().signal,
+        async () => {
+          throw new Error("must not run");
+        },
+        {
+          start: async () => {
+            started = true;
+            throw new Error("must not start");
+          },
+          install: async () => {
+            installed = true;
+            throw new Error("must not install");
+          },
+        },
+      ),
+    ).rejects.toThrow("explicit pinned binary");
+    expect(started).toBe(false);
+    expect(installed).toBe(false);
+  });
+}
+
+test("normal shutdown drains cleanup before owned lifetime abort and process stop", async () => {
+  noProxy();
+  const shutdown = new AbortController();
+  let lifetime: AbortSignal | undefined;
+  const order: string[] = [];
+  await withSimulatorSession(
+    options,
+    shutdown.signal,
+    async (_settings, signal, _clock, owned) => {
+      lifetime = owned;
+      shutdown.abort();
+      expect(signal.aborted).toBe(true);
+      expect(owned?.aborted).toBe(false);
+      order.push("cleanup confirmed");
+    },
+    {
+      start: async () => ({
+        settings,
+        exited: new Promise(() => {
+          /* Provider remains alive until explicitly stopped. */
+        }),
+        stop: async () => {
+          expect(lifetime?.aborted).toBe(true);
+          order.push("process stopped");
+        },
+      }),
+    },
+  );
+  expect(order).toEqual(["cleanup confirmed", "process stopped"]);
+});

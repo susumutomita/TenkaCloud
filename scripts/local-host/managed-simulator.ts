@@ -1,13 +1,25 @@
 import { spawn } from "node:child_process";
 import { accessSync, closeSync, constants, lstatSync, mkdirSync, openSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { Readable } from "node:stream";
+import { type OwnedSimulatorClock, receiveOwnedSimulatorClock } from "./simulator-clock-bootstrap";
 import type { SimulatorSettings } from "./simulator-hosting";
+import {
+  type OwnedSimulatorLaunchOptions,
+  prepareOwnedSimulatorLaunch,
+} from "./simulator-owned-launch";
 
 interface ManagedSimulatorOptions {
   readonly binary: string;
   readonly dataDirectory: string;
   readonly signal?: AbortSignal;
   readonly startupTimeoutMs?: number;
+  readonly battle?: OwnedSimulatorLaunchOptions;
+}
+
+export interface ManagedSimulatorDependencies {
+  readonly spawn?: typeof spawn;
+  readonly prepare?: typeof prepareOwnedSimulatorLaunch;
 }
 
 interface SimulatorExit {
@@ -86,15 +98,8 @@ function launchCommand(binary: string): string {
   return command;
 }
 
-/** Own only this child process group; never attach to or stop an existing listener. */
-export async function startManagedSimulator(options: ManagedSimulatorOptions): Promise<{
-  settings: SimulatorSettings & { readonly tokenFile: string };
-  stop(): Promise<void>;
-  exited: Promise<SimulatorExit>;
-}> {
-  if (options.signal?.aborted) throw new Error("Managed Simulator startup was cancelled.");
-  const launch = launchCommand(options.binary);
-  const directory = resolve(options.dataDirectory, "simulator");
+function prepareDataDirectory(dataDirectory: string) {
+  const directory = resolve(dataDirectory, "simulator");
   try {
     privateDirectory(directory);
   } catch (error) {
@@ -104,23 +109,64 @@ export async function startManagedSimulator(options: ManagedSimulatorOptions): P
       "Cannot prepare the private managed Simulator data directory. Check host data directory ownership and permissions.",
     );
   }
+  return directory;
+}
+
+/** Own only this child process group; never attach to or stop an existing listener. */
+export async function startManagedSimulator(
+  options: ManagedSimulatorOptions,
+  dependencies: ManagedSimulatorDependencies = {},
+): Promise<{
+  settings: SimulatorSettings & { readonly tokenFile: string };
+  stop(): Promise<void>;
+  exited: Promise<SimulatorExit>;
+  clock?: OwnedSimulatorClock;
+}> {
+  if (options.signal?.aborted) throw new Error("Managed Simulator startup was cancelled.");
+  const launch = launchCommand(options.binary);
+  const directory = prepareDataDirectory(options.dataDirectory);
   const state = join(directory, "practice.db");
   const tokenFile = join(directory, "simulator-token");
-  const child = spawn(
-    launch,
-    ["--listen=127.0.0.1:0", `--state=${state}`, `--token-file=${tokenFile}`],
-    {
-      detached: true,
-      stdio: ["ignore", "pipe", "ignore"],
-      env: {
-        ...process.env,
-        CI: "1",
-        START_LISTEN: "127.0.0.1:0",
-        START_STATE: state,
-        START_TOKEN_FILE: tokenFile,
-      },
-    },
-  );
+  const owned = options.battle
+    ? (dependencies.prepare ?? prepareOwnedSimulatorLaunch)(launch, options.battle, directory)
+    : undefined;
+  const child = (() => {
+    try {
+      return (dependencies.spawn ?? spawn)(
+        owned?.command ?? launch,
+        [
+          "--listen=127.0.0.1:0",
+          `--state=${state}`,
+          `--token-file=${tokenFile}`,
+          ...(owned?.args ?? []),
+        ],
+        {
+          detached: true,
+          stdio: owned
+            ? ["ignore", "pipe", "ignore", "pipe", owned.fd]
+            : ["ignore", "pipe", "ignore"],
+          env: {
+            ...process.env,
+            CI: "1",
+            START_LISTEN: "127.0.0.1:0",
+            START_STATE: state,
+            START_TOKEN_FILE: tokenFile,
+          },
+        },
+      );
+    } catch {
+      owned?.dispose();
+      throw new Error(startupFailure);
+    }
+  })();
+  let clockLive = true;
+  const clockPipe = child.stdio[3];
+  const clockReady =
+    owned && clockPipe instanceof Readable
+      ? receiveOwnedSimulatorClock(clockPipe, options.signal, options.startupTimeoutMs)
+      : Promise.resolve(undefined);
+  // Observe early failures while retaining the original promise for awaited startup.
+  void clockReady.catch(() => undefined);
   let resolveExit!: (value: SimulatorExit) => void;
   const exited = new Promise<SimulatorExit>((resolve) => {
     resolveExit = resolve;
@@ -131,11 +177,14 @@ export async function startManagedSimulator(options: ManagedSimulatorOptions): P
     resolveReady = resolve;
     rejectReady = reject;
   });
+  void ready.catch(() => undefined);
   child.once("exit", (code, signal) => {
+    clockLive = false;
     resolveExit({ code, signal });
     rejectReady(new Error(startupFailure));
   });
   child.once("error", () => {
+    clockLive = false;
     resolveExit({ code: null, signal: null });
     rejectReady(new Error(startupFailure));
   });
@@ -159,25 +208,29 @@ export async function startManagedSimulator(options: ManagedSimulatorOptions): P
   let stopping: Promise<void> | undefined;
   const stop = (): Promise<void> => {
     stopping ??= (async () => {
+      clockLive = false;
       options.signal?.removeEventListener("abort", abort);
       signalGroup("SIGTERM");
       for (let i = 0; i < 20 && groupExists(); i++)
         await new Promise((resolve) => setTimeout(resolve, 25));
       if (groupExists()) signalGroup("SIGKILL");
       // Descendants can retain stdout even after the direct child exits.
-      child.stdout.destroy();
+      child.stdout?.destroy();
+      if (clockPipe instanceof Readable) clockPipe.destroy();
       await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 500))]);
+      owned?.dispose();
     })();
     return stopping;
   };
   const abort = () => {
     rejectReady(new Error("Managed Simulator startup was cancelled."));
-    void stop();
+    // The original stopping promise remains rejected for awaited cleanup.
+    void stop().catch(() => undefined);
   };
   options.signal?.addEventListener("abort", abort, { once: true });
   if (options.signal?.aborted) abort();
-  child.stdout.on("data", readinessReader(resolveReady));
-  child.stdout.on("error", () => rejectReady(new Error(startupFailure)));
+  child.stdout?.on("data", readinessReader(resolveReady));
+  child.stdout?.on("error", () => rejectReady(new Error(startupFailure)));
   const timer = setTimeout(
     () =>
       rejectReady(
@@ -188,10 +241,30 @@ export async function startManagedSimulator(options: ManagedSimulatorOptions): P
     options.startupTimeoutMs ?? 120_000,
   );
   try {
-    const endpoint = await ready;
+    owned?.closeDescriptor();
+    const [endpoint, clock] = await Promise.all([ready, clockReady]);
+    if ((owned && !clock) || !clockLive || child.exitCode !== null || child.signalCode !== null)
+      throw new Error(startupFailure);
     if (options.signal?.aborted) throw new Error("Managed Simulator startup was cancelled.");
     return {
       settings: { endpoint, tokenFile, region: "ap-northeast-1", bootstrap: true },
+      ...(clock
+        ? {
+            clock: Object.freeze({
+              domain: clock.domain,
+              authenticateResponse(
+                response: Parameters<OwnedSimulatorClock["authenticateResponse"]>[0],
+              ) {
+                if (!clockLive) throw new Error("Managed Simulator clock is no longer live.");
+                clock.authenticateResponse(response);
+              },
+              authenticateSample(value: unknown, nonce: string) {
+                if (!clockLive) throw new Error("Managed Simulator clock is no longer live.");
+                return clock.authenticateSample(value, nonce);
+              },
+            }),
+          }
+        : {}),
       stop,
       exited,
     };

@@ -67,6 +67,7 @@ import {
   participantAwsAccess,
 } from "./participant-aws-access";
 import { projectedScore } from "./score";
+import { assertStackOriginMode, simulatorStackOrigin } from "./simulator-stack-origin";
 import { skillCatalog } from "./skill-catalog";
 
 /** Short-lived credentials for the team's competitor role; the SDK refreshes them near expiry. */
@@ -257,7 +258,12 @@ export class CloudFormationEngine implements RuntimeEngine {
     job: Job;
     assertCurrent: () => void;
   }): Promise<ParticipantAwsAccess> {
-    this.assertSimulatorSupport(args.job);
+    try {
+      this.assertSimulatorSupport(args.job);
+    } catch (error) {
+      if (error instanceof HostError) throw error;
+      throw new HostError(409, "This environment has no valid AWS access target.", "not_ready");
+    }
     return participantAwsAccess({
       ...args,
       team: this.options.team(args.job),
@@ -281,6 +287,7 @@ export class CloudFormationEngine implements RuntimeEngine {
   }
 
   private assertSimulatorSupport(job: Job): void {
+    assertStackOriginMode(job, Boolean(this.options.simulatorEndpoint));
     if (!this.options.simulatorEndpoint) return;
     const definition = JSON.parse(job.definition) as StackDefinition;
     if (job.problemId !== definition.problemId || !simulatorProblemSupported(definition.problemId))
@@ -291,7 +298,19 @@ export class CloudFormationEngine implements RuntimeEngine {
       );
   }
 
-  disruptionAdapter(): AwsDisruptionAdapter {
+  private compatibleStackOrigin(job: Job | undefined): boolean {
+    if (!job) return true;
+    try {
+      assertStackOriginMode(job, Boolean(this.options.simulatorEndpoint));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  disruptionAdapter(
+    assertOrigin?: (target: import("./disruption-model").DisruptionTarget) => void,
+  ): AwsDisruptionAdapter {
     if (this.options.simulatorEndpoint && !this.options.ssm)
       throw new HostError(409, "Simulator SSM transport is unavailable.", "not_ready");
     return new AwsDisruptionAdapter(
@@ -301,6 +320,10 @@ export class CloudFormationEngine implements RuntimeEngine {
       this.options.simulatorEndpoint
         ? "AWS disruptions are unavailable in simulator mode. Retained operations require recovery in their original supported hosting mode."
         : undefined,
+      assertOrigin ??
+        (() => {
+          throw new Error("Disruption origin verifier is unavailable.");
+        }),
     );
   }
 
@@ -324,6 +347,7 @@ export class CloudFormationEngine implements RuntimeEngine {
     // A job gets its own names even when another event uses the same team account and slug.
     const namePrefix = `tc-${definition.problemId}-${team.internalSlug}-${job.jobId.slice(-12).toLowerCase()}`;
     const unit: StackUnit = {
+      ...(this.options.simulatorEndpoint ? { origin: simulatorStackOrigin(job) } : {}),
       kind: "cloudformation",
       accountId: aws.accountId,
       roleArn: `arn:aws:iam::${aws.accountId}:role/${aws.roleName}`,
@@ -401,6 +425,7 @@ export class CloudFormationEngine implements RuntimeEngine {
 
   /** The stack's console page, in the team's own account. */
   surface(job: Job): string {
+    assertStackOriginMode(job, Boolean(this.options.simulatorEndpoint));
     if (this.options.simulatorEndpoint)
       throw new HostError(
         409,
@@ -513,10 +538,12 @@ export class CloudFormationEngine implements RuntimeEngine {
       ...(this.options.simulatorEndpoint
         ? {
             consoleKind: "simulator" as const,
-            accessCapabilities: simulatorAccessCapabilities(
-              definition.problemId,
-              Boolean(this.options.simulatorConsole && unit?.outputs?.ParameterName),
-            ),
+            accessCapabilities: this.compatibleStackOrigin(job)
+              ? simulatorAccessCapabilities(
+                  definition.problemId,
+                  Boolean(this.options.simulatorConsole && unit?.outputs?.ParameterName),
+                )
+              : [],
           }
         : {}),
       stackOutputs: Object.fromEntries(

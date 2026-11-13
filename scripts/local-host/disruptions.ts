@@ -13,6 +13,7 @@ import type {
   ProblemPhaseEntry,
 } from "../../packages/problem-sdk/src/metadata-parser.js";
 import {
+  assertDisruptionAwsOrigin,
   declaredDisruptions,
   disruptionParameters,
   pinDisruption,
@@ -46,7 +47,7 @@ export class LocalDisruptions {
     this.store = new DisruptionStore(host.store);
     this.runner = new DisruptionRunner(
       this.store,
-      () => host.engine.disruptionAdapter?.(),
+      () => host.engine.disruptionAdapter?.((target) => this.assertAwsOrigin(target)),
       host.now,
       (target, requestId, injecting) => this.assertTarget(target, requestId, injecting),
     );
@@ -251,7 +252,7 @@ export class LocalDisruptions {
       return existing;
     }
     assertPlaying(event, this.host.now());
-    if (!this.host.engine.disruptionAdapter?.())
+    if (!this.host.engine.disruptionAdapter?.((target) => this.assertAwsOrigin(target)))
       throw new HostError(503, "AWS disruptions are not configured.", "aws_not_configured");
     const problem = event.problems.find((each) => each.problemId === input.problemId);
     const declaration =
@@ -309,6 +310,13 @@ export class LocalDisruptions {
         });
     return row;
   }
+  private assertAwsOrigin(target: DisruptionTarget): void {
+    assertDisruptionAwsOrigin(
+      target,
+      this.host.store.job(target.jobId),
+      this.host.store.team(target.teamId),
+    );
+  }
   private assertTarget(target: DisruptionTarget, requestId: string, injecting: boolean): void {
     const job = this.host.store.job(target.jobId);
     const team = this.host.store.team(target.teamId);
@@ -340,7 +348,7 @@ export class LocalDisruptions {
     } catch {
       return;
     }
-    if (!this.host.engine.disruptionAdapter?.()) return;
+    if (!this.host.engine.disruptionAdapter?.((target) => this.assertAwsOrigin(target))) return;
     for (const job of this.host.store.jobs(event.eventId)) {
       if (job.status !== "COMPLETE" || job.operation || !job.deployedAt) continue;
       const problem = event.problems.find((each) => each.problemId === job.problemId);

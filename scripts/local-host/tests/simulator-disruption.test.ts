@@ -112,3 +112,102 @@ test("simulator disruption capability refuses submit, observe and discovery befo
   });
   expect(calls).toEqual({ sts: 0, ssm: 0, factory: 0 });
 });
+
+test.each(["submit", "observe", "discover"] as const)(
+  "%s checks trusted origin before any credentials",
+  async (operation) => {
+    const { calls, options } = fixture();
+    let reads = 0;
+    const adapter = new CloudFormationEngine(process.cwd(), {
+      ...options,
+      simulatorEndpoint: undefined,
+    }).disruptionAdapter(() => {
+      reads++;
+      throw new Error("current origin rejected");
+    });
+    const actions = {
+      submit: () => adapter.submit(submission),
+      observe: () => adapter.observe({ target, operationId: "retained" }),
+      discover: () => adapter.discover({ ...submission, sentAt: 0 }),
+    };
+    const result = await actions[operation]();
+    expect(result.kind).toBe(operation === "submit" ? "rejected" : "unknown");
+    expect(reads).toBe(1);
+    expect(calls).toEqual({ sts: 0, ssm: 0, factory: 0 });
+  },
+);
+
+test("origin is rechecked after asynchronous STS before creating an SSM client", async () => {
+  const { calls, options } = fixture();
+  let reads = 0;
+  const adapter = new CloudFormationEngine(process.cwd(), {
+    ...options,
+    simulatorEndpoint: undefined,
+  }).disruptionAdapter(() => {
+    if (++reads === 2) throw new Error("generation changed during STS");
+  });
+  expect((await adapter.observe({ target, operationId: "retained" })).kind).toBe("unknown");
+  expect(reads).toBe(2);
+  expect(calls).toEqual({ sts: 1, ssm: 0, factory: 0 });
+});
+
+test.each([
+  { operation: "observe", more: true },
+  { operation: "observe", more: false },
+  { operation: "discover", more: true },
+  { operation: "discover", more: false },
+  { operation: "submit", more: false },
+] as const)(
+  "$operation rejects origin changes during SSM response (more=$more)",
+  async ({ operation, more }) => {
+    const { calls, options } = fixture();
+    let current = true;
+    let sends = 0;
+    let destroyed = 0;
+    const ssmFixture = {
+      send: async () => {
+        sends++;
+        current = false;
+        return {
+          Status: "Success",
+          Command: { CommandId: "accepted-before-origin-change" },
+          Commands: [
+            {
+              CommandId: "matching-retained-command",
+              Comment: submission.operationKey,
+              DocumentName: "AWS-RunShellScript",
+              InstanceIds: ["i-fixture"],
+              Parameters: { commands: ["echo fixture"] },
+              RequestedDateTime: new Date(0),
+            },
+          ],
+          ...(more ? { NextToken: "next-page" } : {}),
+        };
+      },
+      destroy: () => {
+        destroyed++;
+      },
+    };
+    const adapter = new CloudFormationEngine(process.cwd(), {
+      ...options,
+      simulatorEndpoint: undefined,
+      ssm: () =>
+        ssmFixture as unknown as ReturnType<NonNullable<CloudFormationEngineOptions["ssm"]>>,
+    }).disruptionAdapter(() => {
+      if (!current) throw new Error("current deployment changed during SSM await");
+    });
+    const observationTarget = {
+      ...target,
+      inject: { ...target.inject, target: more ? "i-first,i-second" : "i-fixture" },
+    };
+    const actions = {
+      submit: () => adapter.submit(submission),
+      observe: () => adapter.observe({ target: observationTarget, operationId: "retained" }),
+      discover: () => adapter.discover({ ...submission, sentAt: 0 }),
+    };
+    expect((await actions[operation]()).kind).toBe("unknown");
+    expect(sends).toBe(1);
+    expect(destroyed).toBe(1);
+    expect(calls.sts).toBe(1);
+  },
+);

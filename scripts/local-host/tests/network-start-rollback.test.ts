@@ -25,6 +25,7 @@ async function withStart(
     retained: (string | null)[];
     retain: (unit: string | null) => void;
   }) => Promise<void>,
+  occupiedSubnets: () => readonly string[] = () => [],
 ) {
   const data = mkdtempSync(join(tmpdir(), "tenka-start-rollback-synthetic-"));
   const bin = join(data, "bin");
@@ -69,6 +70,10 @@ async function withStart(
       async (_unit, action) => {
         calls.push(`compose-${action}`);
       },
+      undefined,
+      undefined,
+      undefined,
+      occupiedSubnets,
     );
     const job: Job = {
       jobId,
@@ -346,3 +351,35 @@ for (const family of ["IPv4", "IPv6"])
   });
 
 /* eslint-enable sonarjs/no-hardcoded-ip */
+
+test("inventory failure is not replaced by empty inventory and refuses admission", async () => {
+  await withStart(
+    "inventory-refusal",
+    () => ({}),
+    async ({ engine, job, calls, retained, retain }) => {
+      await expect(engine.start(job, retain)).rejects.toThrow("Synthetic inventory unavailable");
+      expect(calls).not.toContain("compose-up");
+      expect(calls).not.toContain("install");
+      expect(retained).toEqual([]);
+      expect(job.unit).toBeNull();
+    },
+    () => {
+      throw new Error("Synthetic inventory unavailable");
+    },
+  );
+});
+
+test("occupied inventory still blocks an overlapping allocation", async () => {
+  await withStart(
+    "inventory-overlap",
+    () => ({}),
+    async ({ engine, job, calls, retained, retain }) => {
+      await expect(engine.start(job, retain)).rejects.toThrow();
+      expect(calls).not.toContain("compose-up");
+      expect(calls).not.toContain("install");
+      expect(retained).toEqual([]);
+      expect(job.unit).toBeNull();
+    },
+    () => [[10, 247, 0, 0].join(".") + "/22"],
+  );
+});

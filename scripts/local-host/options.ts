@@ -5,7 +5,9 @@ import { consoleAppliance } from "./console-appliance";
 import { DEFAULT_CONTAINER_LIMITS } from "./container-budget";
 import { parseDockerNetworkPool } from "./docker-networks";
 import { DEFAULT_GATEWAY_PORTS, gatewayPortsOverlap, parseGatewayPorts } from "./gateway-ports";
+import { type BattleCLIValues, battleCLIOptions } from "./simulator-battle-options";
 import { simulatorSettings } from "./simulator-hosting";
+import type { OwnedSimulatorLaunchOptions } from "./simulator-owned-launch";
 
 function parseHostArgs(args: string[]) {
   try {
@@ -51,6 +53,9 @@ function parseHostArgs(args: string[]) {
         "simulator-token-file": { type: "string" },
         "simulator-token": { type: "string" },
         "simulator-binary": { type: "string" },
+        "simulator-binary-sha256": { type: "string" },
+        "simulator-battle-config": { type: "string" },
+        "simulator-battle-config-sha256": { type: "string" },
         "no-simulator": { type: "boolean", default: false },
         "update-simulator": { type: "boolean", default: false },
         "simulator-region": { type: "string" },
@@ -149,7 +154,7 @@ export function parseOptions(
 }
 
 function managedSimulatorOptions(
-  values: {
+  values: BattleCLIValues & {
     "simulator-binary"?: string;
     "no-simulator"?: boolean;
     "behind-proxy"?: boolean;
@@ -157,7 +162,8 @@ function managedSimulatorOptions(
   },
   explicitSimulator: boolean,
   loopback: boolean,
-): { binary?: string; update?: boolean } | undefined {
+): { binary?: string; update?: boolean; battle?: OwnedSimulatorLaunchOptions } | undefined {
+  const battle = battleCLIOptions(values, loopback, explicitSimulator);
   if (
     values["update-simulator"] &&
     (values["no-simulator"] ||
@@ -180,8 +186,12 @@ function managedSimulatorOptions(
   const binary = values["simulator-binary"];
   if (binary !== undefined && !binary.trim())
     throw new Error("--simulator-binary must name an existing executable.");
-  if (binary) return { binary: resolve(binary) };
+  if (binary) return pinnedManagedOptions(binary, battle);
   return values["update-simulator"] ? { update: true } : {};
+}
+
+function pinnedManagedOptions(binary: string, battle: OwnedSimulatorLaunchOptions | undefined) {
+  return { binary: resolve(binary), ...(battle ? { battle } : {}) };
 }
 
 function assertSimulatorOptions(

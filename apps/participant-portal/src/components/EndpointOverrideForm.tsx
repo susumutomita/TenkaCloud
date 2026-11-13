@@ -59,6 +59,8 @@ type TFn = (key: string, params?: Readonly<Record<string, string | number>>) => 
 function formatValidationError(err: unknown, t: TFn): string {
   if (err instanceof PortalValidationError) {
     switch (err.errorCode) {
+      case "battle_probe_pending":
+        return t("problem_detail.endpoint_battle_pending");
       case "invalid_url":
         return t("problem_detail.endpoint_error_invalid_url");
       case "slot_not_overridable":
@@ -97,9 +99,9 @@ export function EndpointOverrideForm({
     }));
   }
 
-  async function handleSave(slot: string): Promise<void> {
+  async function handleSave(slot: string, locator?: string): Promise<void> {
     const current = editState[slot] ?? EMPTY_SLOT_STATE;
-    const trimmed = current.value.trim();
+    const trimmed = (locator ?? current.value).trim();
     if (trimmed.length === 0) {
       patchEditState(slot, { error: t("problem_detail.endpoint_override_url_empty") });
       return;
@@ -151,76 +153,127 @@ export function EndpointOverrideForm({
       {!endpoints && listError === undefined && <Box>{t("problem_detail.endpoint_loading")}</Box>}
       {endpoints && endpoints.length > 0 && (
         <SpaceBetween size="m">
-          {endpoints.map((ep) => {
-            const state = editState[ep.slot] ?? EMPTY_SLOT_STATE;
-            return (
-              <Container
+          {endpoints
+            .filter((ep) => ep.ownedBattleRegistration)
+            .map((ep) => (
+              <OwnedBattleRegistration
                 key={ep.slot}
-                header={
-                  <Header variant="h3" description={ep.description ?? undefined}>
-                    {ep.label ?? ep.slot}
-                  </Header>
-                }
-              >
-                <SpaceBetween size="s">
-                  <Box variant="awsui-key-label">
-                    {t("problem_detail.endpoint_effective_label")}
-                  </Box>
-                  {ep.effectiveUrl ? (
-                    <Box variant="code">{ep.effectiveUrl}</Box>
-                  ) : (
-                    <Box variant="small" color="text-status-info">
-                      {t("problem_detail.endpoint_not_yet_pre")} <code>{ep.defaultKey}</code>{" "}
-                      {t("problem_detail.endpoint_not_yet_post")}
+                endpoint={ep}
+                state={editState[ep.slot] ?? EMPTY_SLOT_STATE}
+                save={handleSave}
+                remove={handleDelete}
+                t={t}
+              />
+            ))}
+          {endpoints
+            .filter((ep) => !ep.ownedBattleRegistration)
+            .map((ep) => {
+              const state = editState[ep.slot] ?? EMPTY_SLOT_STATE;
+              return (
+                <Container
+                  key={ep.slot}
+                  header={
+                    <Header variant="h3" description={ep.description ?? undefined}>
+                      {ep.label ?? ep.slot}
+                    </Header>
+                  }
+                >
+                  <SpaceBetween size="s">
+                    <Box variant="awsui-key-label">
+                      {t("problem_detail.endpoint_effective_label")}
                     </Box>
-                  )}
-                  {ep.overrideUrl && (
-                    <Box variant="small" color="text-status-info">
-                      {t("problem_detail.endpoint_override_active_label")}{" "}
-                      <code>{ep.defaultUrl ?? "—"}</code>)
-                    </Box>
-                  )}
-                  {ep.overridable ? (
-                    <FormField
-                      label={t("problem_detail.endpoint_override_input_label")}
-                      {...(state.error ? { errorText: state.error } : {})}
-                    >
-                      <SpaceBetween direction="horizontal" size="xs">
-                        <Input
-                          value={state.value}
-                          onChange={(e) => patchEditState(ep.slot, { value: e.detail.value })}
-                          placeholder="https://example.com/api"
-                          disabled={state.busy}
-                        />
-                        <Button
-                          variant="primary"
-                          onClick={() => handleSave(ep.slot)}
-                          loading={state.busy}
-                        >
-                          {t("problem_detail.endpoint_override_submit")}
-                        </Button>
-                        {ep.overrideUrl && (
-                          <Button
-                            variant="normal"
-                            onClick={() => handleDelete(ep.slot)}
+                    {ep.effectiveUrl ? (
+                      <Box variant="code">{ep.effectiveUrl}</Box>
+                    ) : (
+                      <Box variant="small" color="text-status-info">
+                        {t("problem_detail.endpoint_not_yet_pre")} <code>{ep.defaultKey}</code>{" "}
+                        {t("problem_detail.endpoint_not_yet_post")}
+                      </Box>
+                    )}
+                    {ep.overrideUrl && (
+                      <Box variant="small" color="text-status-info">
+                        {t("problem_detail.endpoint_override_active_label")}{" "}
+                        <code>{ep.defaultUrl ?? "—"}</code>)
+                      </Box>
+                    )}
+                    {ep.overridable ? (
+                      <FormField
+                        label={t("problem_detail.endpoint_override_input_label")}
+                        {...(state.error ? { errorText: state.error } : {})}
+                      >
+                        <SpaceBetween direction="horizontal" size="xs">
+                          <Input
+                            value={state.value}
+                            onChange={(e) => patchEditState(ep.slot, { value: e.detail.value })}
+                            placeholder="https://example.com/api"
                             disabled={state.busy}
+                          />
+                          <Button
+                            variant="primary"
+                            onClick={() => handleSave(ep.slot)}
+                            loading={state.busy}
                           >
-                            {t("problem_detail.endpoint_override_clear")}
+                            {t("problem_detail.endpoint_override_submit")}
                           </Button>
-                        )}
-                      </SpaceBetween>
-                    </FormField>
-                  ) : (
-                    <Box variant="small" color="text-status-inactive">
-                      {t("problem_detail.endpoint_not_overridable")}
-                    </Box>
-                  )}
-                </SpaceBetween>
-              </Container>
-            );
-          })}
+                          {ep.overrideUrl && (
+                            <Button
+                              variant="normal"
+                              onClick={() => handleDelete(ep.slot)}
+                              disabled={state.busy}
+                            >
+                              {t("problem_detail.endpoint_override_clear")}
+                            </Button>
+                          )}
+                        </SpaceBetween>
+                      </FormField>
+                    ) : (
+                      <Box variant="small" color="text-status-inactive">
+                        {t("problem_detail.endpoint_not_overridable")}
+                      </Box>
+                    )}
+                  </SpaceBetween>
+                </Container>
+              );
+            })}
         </SpaceBetween>
       )}
+    </Container>
+  );
+}
+
+function OwnedBattleRegistration({
+  endpoint,
+  state,
+  save,
+  remove,
+  t,
+}: {
+  endpoint: ParticipantEndpointView;
+  state: SlotEditState;
+  save: (slot: string, locator?: string) => Promise<void>;
+  remove: (slot: string) => Promise<void>;
+  t: TFn;
+}) {
+  const registration = endpoint.ownedBattleRegistration;
+  if (!registration) return null;
+  return (
+    <Container header={<Header variant="h3">{endpoint.label ?? endpoint.slot}</Header>}>
+      <SpaceBetween size="xs">
+        <Box>{t("problem_detail.endpoint_battle_description")}</Box>
+        {state.error && <Alert type="error">{state.error}</Alert>}
+        <Button loading={state.busy} onClick={() => save(endpoint.slot, registration.locator)}>
+          {t(
+            registration.registered
+              ? "problem_detail.endpoint_battle_registered"
+              : "problem_detail.endpoint_battle_register",
+          )}
+        </Button>
+        {registration.registered && (
+          <Button disabled={state.busy} onClick={() => remove(endpoint.slot)}>
+            {t("problem_detail.endpoint_battle_clear")}
+          </Button>
+        )}
+      </SpaceBetween>
     </Container>
   );
 }

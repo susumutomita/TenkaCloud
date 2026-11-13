@@ -75,8 +75,10 @@ export class CompetitionEngine extends DockerHostingEngine {
     if (new Set(ids).size !== ids.length) throw new Error("Duplicate problem catalog identity.");
     this.loader = new LocalPluginLoader(dataDirectory);
   }
-  disruptionAdapter() {
-    return this.cloud?.disruptionAdapter();
+  disruptionAdapter(
+    assertOrigin?: (target: import("./disruption-model").DisruptionTarget) => void,
+  ) {
+    return this.cloud?.disruptionAdapter(assertOrigin);
   }
   override catalog(): readonly Problem[] {
     return this.catalogEntries();

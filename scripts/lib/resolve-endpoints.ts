@@ -20,6 +20,7 @@ export interface EndpointOverride {
  * - `overridable`: metadata 側の宣言 (= 競技者画面で edit UI を出すか)
  */
 export interface ResolvedEndpoint {
+  readonly ownedBattleRegistration?: { readonly locator: string; readonly registered: boolean };
   readonly slot: string;
   readonly label?: string;
   readonly description?: string;

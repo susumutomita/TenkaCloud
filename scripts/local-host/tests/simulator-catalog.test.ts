@@ -8,11 +8,15 @@ import { id } from "../auth";
 import { apiRequest, HOST_KEY } from "../bench/state-setup";
 import { CloudFormationEngine, cloudFormationCatalog } from "../cloudformation-engine";
 import { CompetitionEngine } from "../competition-engine";
-import { declaredDisruptions, pinDisruption } from "../disruption-catalog";
+import {
+  assertDisruptionAwsOrigin,
+  declaredDisruptions,
+  pinDisruption,
+} from "../disruption-catalog";
 import { type DisruptionExecution, disruptionExecutionSchema } from "../disruption-model";
 import type { Context, Job } from "../model";
 import { HostingService } from "../service";
-import { HostStore } from "../store";
+import { digest, HostStore } from "../store";
 import { DisruptionAws } from "./disruption-fixture";
 import { FakeAws, OPERATOR_ACCOUNT } from "./fake-aws";
 import { bootstrapOrganizer } from "./organizer-fixture";
@@ -464,5 +468,219 @@ test.each(
       expect(after?.status).toBe("revert_command_completed");
     }
     await fixture.service.drain();
+  },
+);
+
+test("new Simulator stack retains origin before any provider request", async () => {
+  const fixture = host();
+  const { job } = savedJob(fixture, "hello-world");
+  job.unit = null;
+  let retained: string | null = null;
+  await expect(
+    fixture.engine.start(job, (unit) => {
+      retained = unit;
+      throw new Error("stop after initial retain");
+    }),
+  ).rejects.toThrow("stop after initial retain");
+  expect(JSON.parse(retained ?? "null").origin).toEqual({
+    kind: "simulator",
+    version: 1,
+    eventId: job.eventId,
+    teamId: job.teamId,
+    jobId: job.jobId,
+  });
+  expectNoAws(fixture);
+});
+
+test.each(["simulator", "malformed", "foreign-team"])(
+  "AWS refuses %s origin before provider access",
+  async (variant) => {
+    const fixture = host(false);
+    const { job } = savedJob(fixture, "hello-world");
+    const origin = {
+      kind: "simulator",
+      version: variant === "malformed" ? 2 : 1,
+      eventId: job.eventId,
+      teamId: variant === "foreign-team" ? "other-team" : job.teamId,
+      jobId: job.jobId,
+    };
+    job.unit = JSON.stringify({ ...JSON.parse(job.unit ?? "null"), origin });
+    const before = JSON.stringify(job);
+    expect(() => fixture.engine.surface(job)).toThrow();
+    await expect(fixture.engine.recover(job)).rejects.toThrow();
+    await expect(fixture.engine.stop(job)).rejects.toThrow();
+    expect(() =>
+      fixture.engine.participantAwsAccess({
+        kind: "cli",
+        job,
+        assertCurrent: mock(),
+      }),
+    ).toThrow();
+    expect(JSON.stringify(job)).toBe(before);
+    expectNoAws(fixture);
+  },
+);
+
+test("legacy unmarked AWS recovery preserves the exact retained job", async () => {
+  const fixture = host(false);
+  const { job } = savedJob(fixture, "hello-world");
+  const unit = JSON.parse(job.unit ?? "null");
+  fixture.aws.stacks.push({
+    stackId: unit.stackId,
+    name: unit.stackName,
+    status: "CREATE_COMPLETE",
+    tags: [{ Key: "tenkacloud:job", Value: job.jobId }],
+  });
+  const before = JSON.stringify(job);
+  await fixture.engine.recover(job);
+  expect(JSON.stringify(job)).toBe(before);
+  expect(fixture.store.job(job.jobId)).toEqual(job);
+  expect(fixture.aws.assumed).toHaveLength(1);
+  expect(fixture.aws.created).toEqual([]);
+  expect(fixture.aws.deleted).toEqual([]);
+});
+
+test("Simulator rejects malformed explicit marker without changing legacy Hello World", async () => {
+  const fixture = host();
+  const { job } = savedJob(fixture, "hello-world");
+  job.unit = JSON.stringify({ ...JSON.parse(job.unit ?? "null"), origin: null });
+  await expect(fixture.engine.recover(job)).rejects.toThrow();
+  await expect(fixture.engine.start(job, mock())).rejects.toThrow();
+  expectNoAws(fixture);
+});
+
+test("malformed Simulator origin exposes no participant access capability", async () => {
+  const fixture = host(true, true);
+  const context = savedJob(fixture, "hello-world", "/own/flag");
+  context.job.unit = JSON.stringify({ ...JSON.parse(context.job.unit ?? "null"), origin: null });
+  const view = await fixture.engine.view(context);
+  expect(view.problems).toMatchObject([{ accessCapabilities: [] }]);
+  expectNoAws(fixture);
+});
+
+test.each(["marked", "malformed"])(
+  "new %s Simulator target cannot pin an AWS disruption",
+  (variant) => {
+    const fixture = host(false);
+    const context = savedJob(fixture);
+    context.job.unit = JSON.stringify({
+      ...JSON.parse(context.job.unit ?? "null"),
+      origin:
+        variant === "malformed"
+          ? null
+          : {
+              kind: "simulator",
+              version: 1,
+              eventId: context.job.eventId,
+              teamId: context.job.teamId,
+              jobId: context.job.jobId,
+            },
+    });
+    expect(() => retainDisruption(fixture, context, "inject_pending")).toThrow();
+    expect(fixture.service.disruptions.store.executions(context.event.eventId)).toEqual([]);
+    expectNoAws(fixture);
+  },
+);
+
+test.each(retainedStatuses)(
+  "retained %s with Simulator origin never reaches AWS recovery transport",
+  async (status) => {
+    const fixture = host(false);
+    const context = savedJob(fixture);
+    const before = retainDisruption(fixture, context, status);
+    context.job.unit = JSON.stringify({
+      ...JSON.parse(context.job.unit ?? "null"),
+      origin: {
+        kind: "simulator",
+        version: 1,
+        eventId: context.job.eventId,
+        teamId: context.job.teamId,
+        jobId: context.job.jobId,
+      },
+    });
+    fixture.store.putJob(context.job);
+    const commands = fixture.disruptionAws.commands.length;
+    fixture.service.disruptions.recover();
+    await fixture.service.disruptions.tick();
+    await fixture.service.disruptions.drain();
+    const after = fixture.service.disruptions.store.executions(context.event.eventId)[0];
+    expect(after?.target).toEqual(before.target);
+    expect(after?.status).toBe("recovery_required");
+    expect(fixture.disruptionAws.commands).toHaveLength(commands);
+    expectNoAws(fixture);
+  },
+);
+
+test("retained recovery cannot send one team's target through another team's current job", async () => {
+  const fixture = host(false);
+  const first = savedJob(fixture);
+  const second = {
+    team: { ...first.team, teamId: id(), loginKey: "second-team-login", internalSlug: "second" },
+    job: { ...first.job, jobId: id(), teamId: "pending" },
+  };
+  second.job.teamId = second.team.teamId;
+  fixture.store.putTeam(second.team);
+  fixture.store.putJob(second.job);
+  const before = retainDisruption(fixture, first, "inject_pending");
+  // Keep both team/job records; corrupt only the current first job's claimed owner.
+  fixture.store.putJob({ ...first.job, teamId: second.team.teamId });
+  fixture.service.disruptions.recover();
+  await fixture.service.disruptions.tick();
+  await fixture.service.disruptions.drain();
+  const after = fixture.service.disruptions.store.executions(first.event.eventId)[0];
+  expect(after?.target).toEqual(before.target);
+  expect(after?.status).toBe("recovery_required");
+  expect(fixture.store.job(second.job.jobId)).toEqual(second.job);
+  expectNoAws(fixture);
+});
+
+test.each(["marked", "malformed", "foreign-team", "changed-generation"])(
+  "all AWS transport paths reject current %s deployment before STS",
+  async (variant) => {
+    const fixture = host(false);
+    const context = savedJob(fixture);
+    const { target } = retainDisruption(fixture, context, "inject_pending");
+    if (variant === "marked" || variant === "malformed") {
+      context.job.unit = JSON.stringify({
+        ...JSON.parse(context.job.unit ?? "null"),
+        origin:
+          variant === "malformed"
+            ? null
+            : {
+                kind: "simulator",
+                version: 1,
+                eventId: context.job.eventId,
+                teamId: context.job.teamId,
+                jobId: context.job.jobId,
+              },
+      });
+      // Even an exactly matching persisted hash cannot confer AWS origin.
+      target.unitHash = digest(context.job.unit);
+    } else if (variant === "foreign-team") context.job.teamId = "another-team";
+    else context.job.deployedAt = (context.job.deployedAt ?? 0) + 1;
+    fixture.store.putJob(context.job);
+    const adapter = fixture.cloud.disruptionAdapter((current) =>
+      assertDisruptionAwsOrigin(
+        current,
+        fixture.store.job(current.jobId),
+        fixture.store.team(current.teamId),
+      ),
+    );
+    expect(
+      (
+        await adapter.submit({
+          target,
+          dispatch: target.inject,
+          operationKey: "op",
+          assertCurrent: mock(),
+        })
+      ).kind,
+    ).toBe("rejected");
+    expect((await adapter.observe({ target, operationId: "retained" })).kind).toBe("unknown");
+    expect(
+      (await adapter.discover({ target, dispatch: target.inject, operationKey: "op", sentAt: 0 }))
+        .kind,
+    ).toBe("unknown");
+    expectNoAws(fixture);
   },
 );

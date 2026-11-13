@@ -73,6 +73,7 @@ import { HostProgression, lockedProblem } from "./progression";
 import { allocateRuntimePorts, validateRuntimePorts } from "./runtime-ports";
 import { SamlSignIn } from "./saml-sign-in";
 import { projectedScore, projectedTimeline } from "./score";
+import type { OwnedBattleSessionBundle } from "./simulator-battle-session-bundle";
 import {
   digest,
   type HostStore,
@@ -270,6 +271,13 @@ function showUptimeStatus(
 
 /** The local adapter retains the existing admin/participant HTTP contracts. */
 export class HostingDomain {
+  readonly #ownedBattleSession?: OwnedBattleSessionBundle;
+  /** Internal optional capability only; no LocalUptime or catalog enablement. */
+  get ownedBattleSession(): OwnedBattleSessionBundle | undefined {
+    this.#ownedBattleSession?.assertActive();
+    return this.#ownedBattleSession;
+  }
+
   readonly terminals: HostTerminals;
   readonly saml: SamlSignIn;
   private readonly eventQueries: EventQueryPort<
@@ -295,6 +303,16 @@ export class HostingDomain {
   /** jobId → eventId of single-environment operations still running. */
   private readonly busyJobs = new Map<string, string>();
   readonly uptime: LocalUptime;
+  /** Native private capability. undefined delegates to the ordinary public URL registry. */
+  ownedBattleEndpoints?: (
+    team: Team,
+    problemId: string,
+    method: string,
+    slot: string | undefined,
+    value: unknown,
+    authenticate: () => Team,
+  ) => Promise<ReturnType<LocalUptime["view"]> | undefined>;
+
   publicWebServices?: readonly string[];
   publicWebRevoke?: (teamId: string) => void;
   publicWebHandoff?: (
@@ -319,7 +337,10 @@ export class HostingDomain {
     private readonly log: (message: string) => void,
     uptimeProbe: ProbeFn | undefined,
     private readonly passwords: OrganizerPasswords,
+    ownedBattleSession?: OwnedBattleSessionBundle,
   ) {
+    ownedBattleSession?.assertActive();
+    this.#ownedBattleSession = ownedBattleSession;
     this.internetAccess = new LocalInternetAccess(this);
     this.engine.bindNetworkState?.({
       internetGrant: (eventId, problemId) => this.internetAccess.store.get(eventId, problemId),
@@ -2359,12 +2380,21 @@ export class HostingDomain {
       throw new HostError(502, "The runtime returned an invalid verdict.");
     return ok({ correct });
   }
-  private participantEndpoint(request: ApiRequest): ApiResponse {
+  private async participantEndpoint(request: ApiRequest): Promise<ApiResponse> {
     const team = this.store.authenticateTeam(request.token);
     const parts = request.path.split("/").filter(Boolean);
     const problemId = decodeURIComponent(parts[3] ?? "");
     const slot = parts[5] ? decodeURIComponent(parts[5]) : undefined;
     this.progression.assertAccess(team, problemId);
+    const owned = await this.ownedBattleEndpoints?.(
+      team,
+      problemId,
+      request.method,
+      slot,
+      request.method === "POST" ? object(request.body).url : undefined,
+      () => this.store.authenticateTeam(request.token),
+    );
+    if (owned) return ok(owned);
     if (request.method === "GET" && !slot) return ok(this.uptime.view(team, problemId));
     if (slot && (request.method === "POST" || request.method === "DELETE"))
       return ok(

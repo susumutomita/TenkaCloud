@@ -171,3 +171,61 @@ describe("EndpointOverrideForm (Issue #607 / #2661)", () => {
     expect(mockPut).not.toHaveBeenCalled();
   });
 });
+
+it("registers owned Battle locator without a freeform URL or delete control", async () => {
+  const ep = endpoint({
+    slot: "frontend",
+    overridable: false,
+    ownedBattleRegistration: { locator: "simulator://owned/frontend", registered: false },
+  });
+  mockPut.mockResolvedValue({ teamId: "team", endpoints: [ep] });
+  render(withI18n(<EndpointOverrideForm {...baseProps} endpoints={[ep]} />));
+  expect(screen.queryByPlaceholderText("https://example.com/api")).toBeNull();
+  await userEvent.click(screen.getByRole("button", { name: "この配置を登録" }));
+  await waitFor(() =>
+    expect(mockPut).toHaveBeenCalledWith(
+      "https://api.x",
+      "k",
+      "p1",
+      "frontend",
+      "simulator://owned/frontend",
+    ),
+  );
+  expect(mockDelete).not.toHaveBeenCalled();
+});
+
+it("shows pending-probe 409 guidance without optimistic registration", async () => {
+  const ep = endpoint({
+    slot: "frontend",
+    overridable: false,
+    ownedBattleRegistration: { locator: "simulator://owned/frontend", registered: true },
+  });
+  mockPut.mockRejectedValue(new PortalValidationError("battle_probe_pending"));
+  render(withI18n(<EndpointOverrideForm {...baseProps} endpoints={[ep]} />));
+  await userEvent.click(screen.getByRole("button", { name: "再登録" }));
+  await waitFor(() =>
+    expect(
+      screen.getByText("Battleの計測を確認中です。完了してから登録を変更してください。"),
+    ).toBeInTheDocument(),
+  );
+  expect(onEndpointsChange).not.toHaveBeenCalled();
+});
+
+it("clears owned Battle registration only after server response", async () => {
+  const ep = endpoint({
+    slot: "frontend",
+    overridable: false,
+    ownedBattleRegistration: { locator: "simulator://owned/frontend", registered: true },
+  });
+  const next = [
+    {
+      ...ep,
+      ownedBattleRegistration: { locator: "simulator://owned/frontend", registered: false },
+    },
+  ];
+  mockDelete.mockResolvedValue({ teamId: "team", endpoints: next });
+  render(withI18n(<EndpointOverrideForm {...baseProps} endpoints={[ep]} />));
+  await userEvent.click(screen.getByRole("button", { name: "登録解除" }));
+  await waitFor(() => expect(onEndpointsChange).toHaveBeenCalledWith(next));
+  expect(mockDelete).toHaveBeenCalledWith("https://api.x", "k", "p1", "frontend");
+});

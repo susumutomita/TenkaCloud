@@ -73,10 +73,12 @@ export class AwsDisruptionAdapter implements DisruptionAdapter {
     private readonly clients: AwsDisruptionClients,
     private readonly externalId: string,
     private readonly unavailableReason?: string,
+    private readonly assertOrigin?: (target: DisruptionTarget) => void,
   ) {}
   private async client(target: DisruptionTarget): Promise<Ssm> {
     // Retained recovery work also needs this capability; a failed job is not sufficient.
     if (this.unavailableReason) throw new Error(this.unavailableReason);
+    this.assertOrigin?.(target);
     const assumed = await this.clients.sts.send(
       new AssumeRoleCommand({
         RoleArn: target.roleArn,
@@ -86,6 +88,7 @@ export class AwsDisruptionAdapter implements DisruptionAdapter {
       }),
       { abortSignal: AbortSignal.timeout(4000) },
     );
+    this.assertOrigin?.(target);
     const parsed = credentialsSchema.parse(assumed.Credentials);
     const credentials = {
       accessKeyId: parsed.AccessKeyId,
@@ -100,6 +103,7 @@ export class AwsDisruptionAdapter implements DisruptionAdapter {
     try {
       client = await this.client(args.target);
       args.assertCurrent();
+      this.assertOrigin?.(args.target);
     } catch {
       client?.destroy();
       return {
@@ -120,6 +124,7 @@ export class AwsDisruptionAdapter implements DisruptionAdapter {
         }),
         { abortSignal: AbortSignal.timeout(4000) },
       );
+      this.assertOrigin?.(args.target);
       return result.Command?.CommandId
         ? { kind: "accepted", operationId: result.Command.CommandId }
         : { kind: "unknown", reason: "SSM returned no command ID. The command may still execute." };
@@ -138,10 +143,12 @@ export class AwsDisruptionAdapter implements DisruptionAdapter {
       client = await this.client(args.target);
       const statuses: string[] = [];
       for (const instanceId of instances(args.target)) {
+        this.assertOrigin?.(args.target);
         const response = await client.send(
           new GetCommandInvocationCommand({ CommandId: args.operationId, InstanceId: instanceId }),
           { abortSignal: AbortSignal.timeout(4000) },
         );
+        this.assertOrigin?.(args.target);
         statuses.push(response.Status ?? "Unknown");
       }
       if (statuses.every((status) => status === "Success")) return { kind: "completed" };
@@ -173,6 +180,7 @@ export class AwsDisruptionAdapter implements DisruptionAdapter {
       const found = new Set<string>();
       let nextToken: string | undefined;
       for (let page = 0; page < 10; page += 1) {
+        this.assertOrigin?.(args.target);
         const response = await client.send(
           new ListCommandsCommand({
             Filters: [{ key: "InvokedAfter", value: new Date(args.sentAt - 60_000).toISOString() }],
@@ -181,6 +189,7 @@ export class AwsDisruptionAdapter implements DisruptionAdapter {
           }),
           { abortSignal: AbortSignal.timeout(4000) },
         );
+        this.assertOrigin?.(args.target);
         const matches = (response.Commands ?? []).filter((command) =>
           matchesCommand(command, args),
         );

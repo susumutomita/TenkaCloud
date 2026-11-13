@@ -192,6 +192,7 @@ export interface RevealHintResponse {
  * を render するために使う。
  */
 export interface ParticipantEndpointView {
+  readonly ownedBattleRegistration?: { readonly locator: string; readonly registered: boolean };
   readonly slot: string;
   readonly overridable: boolean;
   readonly label?: string;

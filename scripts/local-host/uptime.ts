@@ -80,6 +80,13 @@ function hostEndpoints(
 
 /** Participant endpoint registry and one-current-minute, durable Battle scoring. */
 export class LocalUptime {
+  private ownedBattleTick?: (job: Job, minute: number) => Promise<boolean>;
+  /** Native composition only; true means handled, including fail-closed no-op. */
+  connectOwnedBattleTick(tick: (job: Job, minute: number) => Promise<boolean>): void {
+    if (this.ownedBattleTick) throw new Error("Owned Battle tick is already connected.");
+    this.ownedBattleTick = tick;
+  }
+
   constructor(
     private readonly store: HostStore,
     private readonly now: () => number,
@@ -168,8 +175,7 @@ export class LocalUptime {
           const job = candidates[index++];
           if (!job) break;
           try {
-            const snapshot = this.snapshot(job, minute);
-            if (snapshot) await this.probeAndCommit(snapshot);
+            await this.tickJob(job, minute);
           } catch (error) {
             // The next scheduler pass may retry this minute; leave a visible diagnostic.
             this.log(
@@ -179,6 +185,12 @@ export class LocalUptime {
         }
       }),
     );
+  }
+
+  private async tickJob(job: Job, minute: number): Promise<void> {
+    if (await this.ownedBattleTick?.(job, minute)) return;
+    const snapshot = this.snapshot(job, minute);
+    if (snapshot) await this.probeAndCommit(snapshot);
   }
 
   private snapshot(job: Job, minute: number): Snapshot | undefined {

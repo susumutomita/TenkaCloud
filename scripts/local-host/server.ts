@@ -12,10 +12,14 @@ import type { AccountConnection, RuntimeEngine, SqlDatabase } from "./model";
 import type { PublicExposure } from "./options";
 import type { OrganizerPasswords } from "./organizer-passwords";
 import { PublishedWebBroker } from "./published-web-broker";
-import { HostingService } from "./service";
+import { cleanupOwnedBattle, HostingService } from "./service";
+import { throwShutdownFailures } from "./shutdown-failures";
+import type { OwnedBattleSessionBundle } from "./simulator-battle-session-bundle";
 import { digest, HostStore } from "./store";
 
 export interface LocalHostSettings {
+  /** Private, non-enumerable dependency; never project into participant settings. */
+  readonly ownedBattleSession?: OwnedBattleSessionBundle;
   readonly dataDirectory: string;
   readonly hostname: string;
   readonly adminPort: number;
@@ -135,6 +139,7 @@ export async function startLocalHost(
   }
   async function stop(options: { stopLocalEnvironments?: boolean } = {}): Promise<void> {
     const vpnStopFailures: unknown[] = [];
+    const battleStopFailures: unknown[] = [];
     await collectVpnCleanupFailure(vpnStopFailures, () => settings.vpn?.seal());
     const unstoppedLocal: string[] = [];
     if (networkTimer) clearInterval(networkTimer);
@@ -152,6 +157,9 @@ export async function startLocalHost(
     participant = undefined;
     await uptimeTick;
     await service?.drain();
+    await collectVpnCleanupFailure(battleStopFailures, () =>
+      service ? cleanupOwnedBattle(service) : undefined,
+    );
     if (options.stopLocalEnvironments) await stopOwnedEnvironments(unstoppedLocal);
     await gateways?.close();
     await webBroker?.close();
@@ -160,15 +168,7 @@ export async function startLocalHost(
     await service?.drain();
     service?.flush();
     store.close();
-    if (unstoppedLocal.length > 0)
-      throw new Error(
-        `${String(unstoppedLocal.length)} owned Docker jobs are not confirmed stopped (including earlier failed deployments, not a container count); ownership and data are retained.\n${unstoppedLocal.join("\n")}`,
-      );
-    if (vpnStopFailures.length)
-      throw new AggregateError(
-        vpnStopFailures,
-        "VPN closure failed; remaining cleanup was attempted.",
-      );
+    throwShutdownFailures(battleStopFailures, unstoppedLocal, vpnStopFailures);
   }
   try {
     const { key: organizerKey } = store.ensureLocalOrganizerKey();
@@ -188,6 +188,7 @@ export async function startLocalHost(
       undefined,
       undefined,
       providers.passwords,
+      settings.ownedBattleSession,
     );
     service.accountConnection = settings.accountConnection;
     service.gatewayPorts = settings.gatewayPorts;
