@@ -126,3 +126,18 @@ test("the cover leads into the introduction, then the original second slide", ()
   expect(document.querySelector("#position")?.textContent).toBe("本編 3 / 5");
   expect(paused).toContain(video);
 });
+
+test("video sizing, responsive and print rules also match the main introduction", () => {
+  const { document } = openDeck(appendixPath, "#2");
+  const css = readFileSync("landing/ss-bootcamp4-2026-11/appendix.css", "utf8");
+  expect(css).not.toContain(".appendix ");
+  expect(document.querySelector(".video-slide .demo-player video")).toBe(
+    document.querySelector("#slide-2 video"),
+  );
+  expect(css).toContain(
+    ".video-slide .demo-player video { width:100%; height:100%; object-fit:contain;",
+  );
+  expect(css).toContain(".video-slide .demo-player { height:auto; aspect-ratio:16/10; }");
+  expect(css).toContain(".video-slide .demo-player { display:none; }");
+  expect(css).toContain(".video-slide .demo-print { display:block; }");
+});
