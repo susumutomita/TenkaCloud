@@ -35,24 +35,24 @@ test("the shared controller keeps the existing UG deck counter and keyboard cont
 });
 
 test("the closing slide leads to a distinctly numbered Appendix and supports deep links", () => {
-  const { document } = openDeck(appendixPath, "#4");
-  expect(document.querySelector("#position")?.textContent).toBe("本編 4 / 4");
+  const { document } = openDeck(appendixPath, "#5");
+  expect(document.querySelector("#position")?.textContent).toBe("本編 5 / 5");
   document.querySelector<HTMLButtonElement>("#next")?.click();
-  expect(document.querySelector("#position")?.textContent).toBe("Appendix 1 / 11");
+  expect(document.querySelector("#position")?.textContent).toBe("Appendix 1 / 10");
   expect(document.querySelector(".slide:not([hidden]) h2")?.textContent).toBe("ここから Appendix");
   const last = openDeck(appendixPath, "#15");
-  expect(last.document.querySelector("#position")?.textContent).toBe("Appendix 11 / 11");
+  expect(last.document.querySelector("#position")?.textContent).toBe("Appendix 10 / 10");
   expect(last.document.querySelector<HTMLButtonElement>("#next")?.disabled).toBe(true);
   expect(last.document.querySelectorAll("#deck > .slide")).toHaveLength(15);
 });
 
 test("leaving a video slide stops media and restores the YouTube play button", () => {
-  const { document, paused } = openDeck(appendixPath, "#9");
-  const video = document.querySelector("video");
+  const { document, paused } = openDeck(appendixPath, "#10");
+  const video = document.querySelector("#slide-10 video");
   expect(paused).not.toContain(video);
   document.querySelector<HTMLButtonElement>("#next")?.click();
   expect(paused).toContain(video);
-  const youtube = openDeck(appendixPath, "#12");
+  const youtube = openDeck(appendixPath, "#13");
   const play = youtube.document.querySelector<HTMLButtonElement>(".demo-play");
   expect(youtube.document.querySelector("iframe")).toBeNull();
   play?.click();
@@ -66,13 +66,13 @@ test("leaving a video slide stops media and restores the YouTube play button", (
   expect(play?.hidden).toBe(false);
 });
 
-test("slide 14 hosts the Simulator demo video and pauses it when leaving", () => {
-  const { document, paused } = openDeck(appendixPath, "#14");
-  const video = document.querySelector("#slide-14 video");
-  const source = document.querySelector("#slide-14 video source");
-  expect(document.querySelector("#slide-14")?.classList.contains("video-slide")).toBe(true);
+test("slide 15 hosts the Simulator demo video and pauses it when leaving", () => {
+  const { document, paused } = openDeck(appendixPath, "#15");
+  const video = document.querySelector("#slide-15 video");
+  const source = document.querySelector("#slide-15 video source");
+  expect(document.querySelector("#slide-15")?.classList.contains("video-slide")).toBe(true);
   expect(source?.getAttribute("src")).toBe("simulator-demo.mp4");
-  expect(document.querySelector("#slide-14 video")?.getAttribute("poster")).toBe(
+  expect(document.querySelector("#slide-15 video")?.getAttribute("poster")).toBe(
     "simulator-demo-poster.jpg",
   );
   expect(paused).not.toContain(video);
@@ -80,20 +80,20 @@ test("slide 14 hosts the Simulator demo video and pauses it when leaving", () =>
   expect(paused).toContain(video);
 });
 
-test("slide 15 hosts the 60-second introduction shared with the LP and pauses it when leaving", () => {
-  const { document, paused } = openDeck(appendixPath, "#15");
-  const video = document.querySelector("#slide-15 video");
-  expect(document.querySelector("#slide-15")?.classList.contains("video-slide")).toBe(true);
+test("slide 2 hosts the 60-second introduction shared with the LP and pauses it when leaving", () => {
+  const { document, paused } = openDeck(appendixPath, "#2");
+  const video = document.querySelector("#slide-2 video");
+  expect(document.querySelector("#slide-2")?.classList.contains("video-slide")).toBe(true);
   const version = currentMediaVersions()["videos/lp/tenkacloud-60s.mp4"];
-  expect(document.querySelector("#slide-15 video source")?.getAttribute("src")).toBe(
+  expect(document.querySelector("#slide-2 video source")?.getAttribute("src")).toBe(
     `../videos/lp/tenkacloud-60s.mp4?v=${version}`,
   );
   expect(video?.getAttribute("poster")).toBe("intro-60s-poster.jpg");
-  expect(document.querySelector("#slide-15 .fine")?.textContent).toContain("公開済み・開発中");
+  expect(document.querySelector("#slide-2 .fine")?.textContent).toContain("公開済み・開発中");
   expect(paused).not.toContain(video);
   document.querySelector<HTMLButtonElement>("#previous")?.click();
   expect(paused).toContain(video);
-  expect(document.querySelector("#position")?.textContent).toBe("Appendix 10 / 11");
+  expect(document.querySelector("#position")?.textContent).toBe("本編 1 / 5");
 });
 
 test("the cover is final and the released Simulator retains its limited scope", () => {
@@ -102,12 +102,27 @@ test("the cover is final and the released Simulator retains its limited scope", 
     "Singularity Society BootCamp #4 発表会 · 2026年11月15日",
   );
   expect(document.body.textContent).not.toContain("未リリース");
-  expect(document.querySelector("#slide-14")?.textContent).toContain("開発中 · 公開済み");
-  for (const slide of ["#slide-14", "#slide-15"]) {
+  expect(document.querySelector("#slide-15")?.textContent).toContain("開発中 · 公開済み");
+  for (const slide of ["#slide-15", "#slide-2"]) {
     expect(document.querySelector(slide)?.textContent).toContain("Hello World の 1 問");
     expect(document.querySelector(slide)?.textContent).toContain("公式ではありません");
   }
-  expect(document.querySelector("#slide-15 .fine")?.textContent).toContain(
+  expect(document.querySelector("#slide-2 .fine")?.textContent).toContain(
     "Docker 問題と実 AWS への配置は含みません",
   );
+});
+
+test("the cover leads into the introduction, then the original second slide", () => {
+  const html = readFileSync(appendixPath, "utf8");
+  expect(html).not.toMatch(/本編4枚|本編 1 \/ 4|ここまでの4枚/);
+  const { document, paused } = openDeck(appendixPath);
+  document.querySelector<HTMLButtonElement>("#next")?.click();
+  expect(document.querySelector(".slide:not([hidden]) h2")?.textContent).toBe(
+    "1分でわかる TenkaCloud",
+  );
+  expect(document.querySelector("#position")?.textContent).toBe("本編 2 / 5");
+  const video = document.querySelector("#slide-2 video");
+  document.querySelector<HTMLButtonElement>("#next")?.click();
+  expect(document.querySelector("#position")?.textContent).toBe("本編 3 / 5");
+  expect(paused).toContain(video);
 });

@@ -76,3 +76,9 @@ Issues #3545 and #3546: removed the cover draft notice and corrected the two Sim
 - `make before-commit`: passed with Bun 1.4.4 (974 tests passed, zero failures; lint and dead-code passed).
 - New 1440 × 900 and 390 × 844 screenshots could not be taken: Chromium startup failed with `socket() failed: Operation not permitted`. Prior layout checks above are historical, not checks of this revision.
 - Production verification awaits owner review and merge; no deployment was performed.
+
+## Introduction moved after the cover (2026-11-14)
+
+At the owner's request, the existing 61-second introduction was moved from the final Appendix position to the second slide. The deck still has 15 slides: five main slides and ten Appendix slides. Slide IDs, accessible heading references, counters and footer labels follow the new order. The other slides retain their relative order; media, release wording and scope disclosures are unchanged. Previous numbered references above describe the historical arrangement.
+
+Navigation and media-pause regression tests cover the new order. Viewport screenshots remain unverified due to the previously recorded Chromium permission limitation; the owner authorized release with that limitation.
