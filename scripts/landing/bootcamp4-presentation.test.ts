@@ -89,9 +89,25 @@ test("slide 15 hosts the 60-second introduction shared with the LP and pauses it
     `../videos/lp/tenkacloud-60s.mp4?v=${version}`,
   );
   expect(video?.getAttribute("poster")).toBe("intro-60s-poster.jpg");
-  expect(document.querySelector("#slide-15 .fine")?.textContent).toContain("開発中・未リリース");
+  expect(document.querySelector("#slide-15 .fine")?.textContent).toContain("公開済み・開発中");
   expect(paused).not.toContain(video);
   document.querySelector<HTMLButtonElement>("#previous")?.click();
   expect(paused).toContain(video);
   expect(document.querySelector("#position")?.textContent).toBe("Appendix 10 / 11");
+});
+
+test("the cover is final and the released Simulator retains its limited scope", () => {
+  const { document } = openDeck(appendixPath);
+  expect(document.querySelector("#slide-1 .kicker")?.textContent).toBe(
+    "Singularity Society BootCamp #4 発表会 · 2026年11月15日",
+  );
+  expect(document.body.textContent).not.toContain("未リリース");
+  expect(document.querySelector("#slide-14")?.textContent).toContain("開発中 · 公開済み");
+  for (const slide of ["#slide-14", "#slide-15"]) {
+    expect(document.querySelector(slide)?.textContent).toContain("Hello World の 1 問");
+    expect(document.querySelector(slide)?.textContent).toContain("公式ではありません");
+  }
+  expect(document.querySelector("#slide-15 .fine")?.textContent).toContain(
+    "Docker 問題と実 AWS への配置は含みません",
+  );
 });

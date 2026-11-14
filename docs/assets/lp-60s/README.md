@@ -41,7 +41,7 @@ SHA-256: `5436e60b31113c6261131d16dcb91c8f9f0abd1efe9cdf2c3bf326bdef3c1f8b`
 - Docker 問題は含まない。収録環境に Docker がなかったため。
 - 実 AWS への配置は含まない。Simulator で動かしたのは Hello World の 1 問で、Simulator 連携の検証対象もこの 1 問。
 - Simulator の場面は、AWS の Parameter Store の値を読む操作。ほかのクラウドの場面は含まない。
-- Simulator は開発中で未リリース。独立したシミュレーターで、各クラウドの公式のものではない。
+- Simulator は公開済みで、引き続き開発中。[v0.1.0](https://github.com/susumutomita/TenkaCloudSimulator/releases/tag/v0.1.0) は収録前の 11/8 に公開された（2026/11/14 に記録を訂正、動画は変更なし）。独立したシミュレーターで、各クラウドの公式のものではない。
 
 ## 検証
 

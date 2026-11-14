@@ -41,8 +41,10 @@ The player loads YouTube only after a click, and removes its iframe on slide nav
 - Operations shown: participant opens Hello World, submits the flag, gets Correct +100 pt and takes first place; organizer runs `make local`, creates an event and goes live; the Simulator connection target, the parameter value in the Simulator console and the local environment panel.
 - Edits: the participant portal is shown as whole pages in a browser frame with zooms and gold outlines; the organizer and Simulator screens are cropped and enlarged. The terminal panel is typeset from real `make local` output lines. Typing into the flag field is shown by uncovering the captured, already filled field step by step.
 - Keys and answers: organizer key, team keys and the Simulator token are not on screen. The flag field in the participant portal is masked. The value in the Simulator parameter panel is a local throwaway answer from this take and is shown unmasked.
-- Scope: the Simulator is under development and unreleased, and every Simulator scene carries the label 開発中・非公式. Hello World is the one problem played on it. No other cloud provider appears.
+- Scope: the Simulator is published and still under development, and every Simulator scene carries the label 開発中・非公式. Hello World is the one problem played on it. No other cloud provider appears.
 - Inspection: ffmpeg decode of the published MP4; contact sheets of every scene reviewed; layout check for clipped text. Audio measured at −14.5 LUFS with a true peak of −1.7 dBFS; not auditioned by the recorder. The owner reviewed the finished film and approved it for publication.
+
+The release wording was corrected on 2026-11-14: [v0.1.0](https://github.com/susumutomita/TenkaCloudSimulator/releases/tag/v0.1.0) was published on November 8, before these recordings. The videos were not re-recorded or edited.
 
 ## Deliberately unused material
 

@@ -17,7 +17,7 @@ Checked on 2026-11-04 against repository main `f99b3d9a00076a2a5e97f1d4d9b0b20a7
 | AWS operations / Cryptography Battle video | [Existing capture record](../jaws-yokohama-2026/assets/recorded-demo.md), 2026-09-15. Historical recording; current instructions link to the organizer guide. |
 | June kickoff | [PR #1739](https://github.com/susumutomita/TenkaCloud/pull/1739). |
 | August/September events and feedback | [PR #3485](https://github.com/susumutomita/TenkaCloud/pull/3485), [UG #1](https://tenkacloud.com/tenkacloud-ug-1/), [JAWS Yokohama](https://tenkacloud.com/jaws-yokohama-2026/). |
-| Simulator | [Development repository](https://github.com/susumutomita/TenkaCloudSimulator). Final slide (`#14`) keeps 開発中 · 未リリース. Local demo video (`simulator-demo.mp4`) shows `make local` → register/verify → event create/deploy/start → Hello World via CLI / console / API Doc → submit/score. Only Hello World works in Simulator mode so far. Independent simulator, not official AWS. No purchase/adoption claim. Provenance: [recorded-demo.md](recorded-demo.md). |
+| Simulator | [Development repository](https://github.com/susumutomita/TenkaCloudSimulator). Slide `#14` now says 開発中 · 公開済み; the November 14 correction follows the [published Simulator releases](https://github.com/susumutomita/TenkaCloudSimulator/releases). Local demo video (`simulator-demo.mp4`) shows `make local` → register/verify → event create/deploy/start → Hello World via CLI / console / API Doc → submit/score. Only Hello World works in Simulator mode so far. Independent simulator, not official AWS. No purchase/adoption claim. Provenance: [recorded-demo.md](recorded-demo.md). |
 
 The latest published release returned by GitHub was v2.6.12 (2026-10-29). This change makes no v2.7.0 publication claim.
 
@@ -31,7 +31,7 @@ Headless Chromium 154 on Linux, static server rooted at `landing/`:
 - Slide 14 Simulator demo: native MP4 loads (`simulator-demo.mp4`); playback advances; leaving the slide pauses media. Layout checked at 1280 × 800.
 - YouTube: clicking creates the expected privacy-enhanced embed with start 0 / end 60; leaving the slide removes the iframe and restores the button. Actual remote playback is not verified here.
 - Print: all 14 slides display; both posters load and display; video players hide. Chromium PDF has 14 pages.
-- Main four slide sections compared with Git HEAD: identical after removing the permitted numbering and label metadata, plus the subsequently requested logo images/classes. Cover draft notice retained.
+- Main four slide sections compared with Git HEAD: identical after removing the permitted numbering and label metadata, plus the subsequently requested logo images/classes. Cover draft notice was retained in that check and removed on 2026-11-14 for #3545.
 - Existing UG #1: original `1 / 14` counter and keyboard navigation preserved. Automated regressions cover counters, deep links and media stopping.
 - Video copy: SHA-256 matches source; 45 one-second OCR frames have no detected URL, 12-digit account ID or AWS access-key pattern. Contact sheet and enlarged poster inspected; existing key/access-URL masks retained.
 
@@ -53,7 +53,7 @@ Verified all 14 slides at 1440 × 900 and 390 × 844: logo images loaded, no hor
 
 The owner asked for the 60-second introduction in this deck. It is added as the last Appendix slide (Appendix 11 / 11, slide 15) so the four main slides and the existing Appendix order are unchanged. The Appendix labels, the footer count and the deck test were updated from 10 to 11.
 
-The slide reuses the LP copy at `../videos/lp/tenkacloud-60s.mp4` rather than a second file. Its fine print repeats the scope stated on the Simulator slide: under development and unreleased, Hello World only, no Docker and no real AWS deployment. [Capture conditions](recorded-demo.md#60-second-introduction).
+The slide reuses the LP copy at `../videos/lp/tenkacloud-60s.mp4` rather than a second file. Its fine print repeats the scope stated on the Simulator slide: published and still under development, Hello World only, no Docker and no real AWS deployment. [Capture conditions](recorded-demo.md#60-second-introduction).
 
 On 2026-11-11 the introduction video was replaced with the 61-second cut, and the list and fine print on the slide were rewritten to match it. The checks below were rerun against the new file.
 
@@ -66,3 +66,13 @@ The video has music. Its level was measured but it was not auditioned in this en
 This execution environment refuses production and YouTube network connections (`ERR_TUNNEL_CONNECTION_FAILED` / HTTP 403). It cannot freshly confirm public email-game availability or real YouTube playback. Before marking the Draft ready, verify the public game links and play YouTube at both requested sizes in an unrestricted browser. The repository media playback and print checks above do not substitute for that check.
 
 No merge, release, AWS operation or production deployment was performed.
+
+## Publication wording correction (2026-11-14)
+
+Issues #3545 and #3546: removed the cover draft notice and corrected the two Simulator release labels. The [official latest release](https://github.com/susumutomita/TenkaCloudSimulator/releases/tag/v0.1.2) is published, not a pre-release (2026-11-09). Development status, Hello World-only scope, Docker/AWS exclusions, and unofficial status remain unchanged. No media file was changed. Exact HTML comparison confirms only these three text substitutions.
+
+- Focused presentation suite: 6 passed, 36 assertions with the repository-pinned Bun 1.4.4 and frozen-lockfile dependencies.
+- `git diff --check`: passed.
+- `make before-commit`: passed with Bun 1.4.4 (974 tests passed, zero failures; lint and dead-code passed).
+- New 1440 × 900 and 390 × 844 screenshots could not be taken: Chromium startup failed with `socket() failed: Operation not permitted`. Prior layout checks above are historical, not checks of this revision.
+- Production verification awaits owner review and merge; no deployment was performed.
