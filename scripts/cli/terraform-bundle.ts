@@ -19,7 +19,11 @@ function keys(value: Record<string, unknown>, allowed: string[]): void {
 function literals(value: unknown): void {
   if (typeof value === "string" && /\$\{|%\{/.test(value))
     throw new TerraformInputError("Expressions are not supported");
-  if (value && typeof value === "object") for (const child of Object.values(value)) literals(child);
+  if (value && typeof value === "object")
+    for (const [key, child] of Object.entries(value)) {
+      literals(key);
+      literals(child);
+    }
 }
 function validateProviders(
   root: Record<string, unknown>,

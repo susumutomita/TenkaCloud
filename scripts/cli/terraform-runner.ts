@@ -121,8 +121,8 @@ function prepareOperation(context: Context): void {
   const { opts, scope, directory, journalPath, log } = context;
   const save = (journal: Journal): void => saveJournal(journalPath, journal);
 
-  if (existsSync(journalPath) || existsSync(join(directory, "bundle")))
-    throw new TerraformInputError("Scope already prepared; never overwrite state");
+  if (readdirSync(directory).some((name) => name !== "operation.lock"))
+    throw new TerraformInputError("Scope is not empty; never adopt or overwrite existing state");
   if (
     !opts.bundle ||
     !opts.binary ||

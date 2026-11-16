@@ -226,6 +226,31 @@ describe("restricted Terraform organizer runner", () => {
     ])
       expect(() => validateConfig(config)).toThrow();
   });
+  test("prepare refuses existing unowned working state without changing it", () => {
+    const f = setup();
+    expect(f.run("status")).toBe(1);
+    const work = join(f.directory(), "work");
+    mkdirSync(work, { mode: 0o700 });
+    const state = join(work, "terraform.tfstate");
+    writeFileSync(state, "existing unowned state", { mode: 0o600 });
+    expect(f.prepare()).toBe(1);
+    expect(readFileSync(state, "utf8")).toBe("existing unowned state");
+    expect(f.calls).toHaveLength(0);
+    expect(readdirSync(f.directory())).toEqual(["work"]);
+  });
+  test("rejects expressions in nested object keys before running Terraform", () => {
+    const f = setup();
+    for (const key of [`\${1+1}`, `\${file("local-file")}`, "%{if true}key%{endif}"]) {
+      const config = {
+        ...f.config,
+        resource: { terraform_data: { x: { input: { nested: [{ [key]: "value" }] } } } },
+      };
+      expect(() => validateConfig(config)).toThrow("Expressions are not supported");
+      writeFileSync(join(f.bundle, "main.tf.json"), JSON.stringify(config));
+      expect(() => readBundle(f.bundle)).toThrow("Expressions are not supported");
+    }
+    expect(f.calls).toHaveLength(0);
+  });
   test("interrupted apply, CLI configuration and mirror/state symlinks fail closed", () => {
     const f = setup();
     expect(f.prepare()).toBe(0);
