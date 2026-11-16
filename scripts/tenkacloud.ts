@@ -2,6 +2,7 @@
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { systemProcessRunner } from "./cli/process";
+import { runTerraformCommand } from "./cli/terraform-runner";
 import { installTursoCli } from "./cli/turso-cli-installer";
 import { runTursoLiveCommand, terminalConfirm, terminalPrompt } from "./cli/turso-live-command";
 import { runCloudCli } from "./cloud-hosting/cli";
@@ -19,6 +20,8 @@ if (command === "mcp") {
     );
     process.exitCode = 1;
   }
+} else if (command === "terraform") {
+  process.exitCode = runTerraformCommand(args, console.log);
 } else if (command === "pack") {
   process.exitCode = runPackCli(args, (line) => console.log(line));
 } else if (command === "turso-live" && args[0] === "reset") {
@@ -52,7 +55,7 @@ if (command === "mcp") {
   }
 } else {
   console.log(
-    'Usage: tenkacloud pack <command>\nParticipant MCP (stdio): tenkacloud mcp (see docs/mcp.md)\nHost a competition with: make local [LOCAL_ARGS=...]\nStop it with: make down [LOCAL_ARGS=...]\nCloud hosting: make deploy / make destroy [CLOUD_ARGS=...]\nCloud setup: make env-init / make turso-live\nTurso credentials: make turso-token-rotate [ROTATE_ARGS=...]\nTurso competition data only: make turso-clear [CLOUD_ARGS="--plan|--yes"] (nonblank process-only TURSO_AUTH_TOKEN, otherwise configured SSM; --credentials <direct|ssm> overrides)\nAll control data, including account/IdP settings: make turso-reset [CLOUD_ARGS=...] or tenkacloud turso-live reset [--plan|--yes]',
+    'Usage: tenkacloud pack <command>\nExperimental Terraform organizer CLI: tenkacloud terraform help\nParticipant MCP (stdio): tenkacloud mcp (see docs/mcp.md)\nHost a competition with: make local [LOCAL_ARGS=...]\nStop it with: make down [LOCAL_ARGS=...]\nCloud hosting: make deploy / make destroy [CLOUD_ARGS=...]\nCloud setup: make env-init / make turso-live\nTurso credentials: make turso-token-rotate [ROTATE_ARGS=...]\nTurso competition data only: make turso-clear [CLOUD_ARGS="--plan|--yes"] (nonblank process-only TURSO_AUTH_TOKEN, otherwise configured SSM; --credentials <direct|ssm> overrides)\nAll control data, including account/IdP settings: make turso-reset [CLOUD_ARGS=...] or tenkacloud turso-live reset [--plan|--yes]',
   );
   process.exitCode = command === undefined || command === "--help" || command === "help" ? 0 : 1;
 }
