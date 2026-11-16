@@ -219,6 +219,7 @@ Cloud reads activated AWS/CloudFormation packs on the next deployment. Local rea
 | --- | --- |
 | Run an event | [Planning and operations](./apps/developer-portal/src/app/developers/docs/operate/run-an-event/page.mdx) |
 | Deploy or remove AWS hosting | [Deployment guide](./DEPLOYMENT_GUIDE.md) |
+| Try the experimental organizer Terraform CLI | [Terraform exercises (Japanese; not connected to hosting or scoring)](./docs/terraform-exercises.md) |
 | Prepare competitor accounts | [Account onboarding](./infrastructure/templates/README.md) |
 | Ask an LLM to help | [LLM entry point](./landing/llms.txt) · [Task guide and code map](./landing/llms-full.txt) |
 | Understand the architecture | [Architecture guide](./docs/architecture/README.md) · [Editable AWS system diagram](./docs/architecture/diagrams/system-architecture.drawio) |

@@ -195,6 +195,7 @@ Cloud は有効化済みの AWS/CloudFormation Pack を次の配置で読み込�
 | --- | --- |
 | 大会を開く | [計画と運用](./apps/developer-portal/src/app/developers/docs/operate/run-an-event/page.ja.mdx) |
 | AWS 基盤の配置・撤収 | [配置ガイド](./DEPLOYMENT_GUIDE.md) |
+| 主催者用 Terraform CLI を試す | [Terraform 演習の実行基盤（実験段階、host・採点は未接続）](./docs/terraform-exercises.md) |
 | 競技者アカウントの準備 | [アカウント導入手順](./infrastructure/templates/README.md) |
 | LLM に作業を依頼する | [LLM の入口](./landing/llms.txt) · [タスク別ガイドとコードマップ](./landing/llms-full.txt) |
 | 設計を理解する | [アーキテクチャ](./docs/architecture/README.md) · [編集可能な AWS 構成図](./docs/architecture/diagrams/system-architecture.drawio) |

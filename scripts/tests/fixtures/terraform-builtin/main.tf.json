@@ -1,0 +1,4 @@
+{
+  "terraform": { "required_version": "= 1.14.8" },
+  "resource": { "terraform_data": { "exercise": { "input": "offline exercise fixture" } } }
+}
