@@ -72,6 +72,23 @@ describe("clickable exercise scenes and clear first impressions", () => {
   }
 });
 
+it("keeps every primary English heading translated after copy changes", () => {
+  const doc = new JSDOM(read("index.en.html")).window.document;
+  for (const selector of [
+    ".hero h1",
+    "#film-title",
+    "#workflow-title",
+    "#why h2",
+    "#try-title",
+    "#hosting > .wrap > h2",
+    ".platform-final h2",
+  ]) {
+    const heading = doc.querySelector(selector)?.textContent;
+    expect(heading).toBeTruthy();
+    expect(heading).not.toMatch(/[\u3040-\u30ff\u4e00-\u9fff]/);
+  }
+});
+
 describe("pricing redesign preserves service commitments", () => {
   for (const suffix of ["", ".en"]) {
     it(`pricing${suffix} retains all plans, terms, accessible links and current assets`, () => {

@@ -205,7 +205,7 @@
         "情報漏えいも、クラウドの構築・運用も。さまざまな課題を、手を動かして学べます。",
       "platform.whyEyebrow": "なぜ、実践なのか",
       "platform.whyTitle":
-        '<span class="platform-phrase">知識を、</span><span class="platform-phrase">実践で使える力へ。</span>',
+        '<span class="copy-phrase">クラウドの設定変更を、</span><span class="copy-phrase">本番の前に練習する。</span>',
       "platform.whyLead":
         "セキュリティは必要。でも何から始めればいい？ 経験者は少なく、頼るには費用もかかる。教科書で学んだことを、安全な演習の中で試し、結果から学び直せる場所が必要です。",
       "platform.chooseStep": "問題に挑む",
@@ -699,7 +699,7 @@
         "From data leaks to cloud infrastructure and operations: learn by working through real tasks.",
       "platform.whyEyebrow": "Why hands-on practice",
       "platform.whyTitle":
-        '<span class="copy-phrase">クラウドの設定変更を、</span><span class="copy-phrase">本番の前に練習する。</span>',
+        '<span class="copy-phrase">Practice configuration changes</span><span class="copy-phrase">before production.</span>',
       "platform.whyLead":
         "Security matters. But where do you start? Experienced people are scarce and costly. Put textbook knowledge to work in a safe exercise, see what happens, and learn from the result.",
       "platform.chooseStep": "Choose a problem",
