@@ -78,6 +78,11 @@ export class CompetitionEngine extends DockerHostingEngine {
   disruptionAdapter() {
     return this.cloud?.disruptionAdapter();
   }
+  uptimeProbe(job: Job) {
+    return definitionKind(job.definition) === "cloudformation"
+      ? this.cloud?.uptimeProbe(job)
+      : undefined;
+  }
   override catalog(): readonly Problem[] {
     return this.catalogEntries();
   }

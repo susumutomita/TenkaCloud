@@ -1,0 +1,237 @@
+import { Database } from "bun:sqlite";
+import { afterEach, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import type { AssumeRoleCommand } from "@aws-sdk/client-sts";
+import { id } from "../auth";
+import { AwsDisruptionAdapter } from "../aws-disruption-adapter";
+import { apiRequest, HOST_KEY } from "../bench/state-setup";
+import { CloudFormationEngine } from "../cloudformation-engine";
+import { CompetitionEngine } from "../competition-engine";
+import type { DisruptionTarget } from "../disruption-model";
+import type { Job } from "../model";
+import { HostingService } from "../service";
+import type { SimulatorBattle } from "../simulator-battle";
+import { HostStore } from "../store";
+import { uptimeGeneration } from "../uptime";
+import { DisruptionAws } from "./disruption-fixture";
+import { FakeAws } from "./fake-aws";
+
+const root = fileURLToPath(new URL("../../../", import.meta.url));
+const cleanup: (() => void)[] = [];
+afterEach(() => {
+  for (const close of cleanup.splice(0)) close();
+});
+
+function fakeBattle() {
+  const calls: string[] = [];
+  const battle: SimulatorBattle = {
+    clockDomain: "tc-clock",
+    probe(job) {
+      calls.push(`probe:${job.jobId}`);
+      return async () => ({ ok: true, status: 200, responseTimeMs: 1 });
+    },
+    async seal(job) {
+      calls.push(`seal:${job.jobId}`);
+    },
+    async terminal(input) {
+      calls.push(`terminal:${input.instanceId}:${input.credentials.accessKeyId}`);
+      return {
+        code: "c".repeat(64),
+        terminalUrl: "http://127.0.0.1:4566/_simulator/terminal",
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      };
+    },
+  };
+  return { battle, calls };
+}
+
+function host(battle?: SimulatorBattle) {
+  const directory = mkdtempSync(join(tmpdir(), "tenka-simulator-battle-"));
+  const store = new HostStore(new Database(":memory:"));
+  cleanup.push(() => {
+    store.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
+  const aws = new FakeAws();
+  const disruptionAws = new DisruptionAws();
+  const cloud = new CloudFormationEngine(root, {
+    simulatorEndpoint: "http://127.0.0.1:4566",
+    simulatorServices: ["sts", "iam", "cloudformation", "ssm", "lambda"],
+    ...(battle ? { simulatorBattle: battle } : {}),
+    region: "ap-northeast-1",
+    externalId: "fixture-external-id-0123456789",
+    operatorAccountId: async () => "999999999999",
+    sts: aws.sts as never,
+    cloudFormation: aws.cloudFormation as never,
+    ssm: disruptionAws.ssm as never,
+    team: (job) => store.team(job.teamId),
+    sleep: async () => undefined,
+    pollIntervalMs: 0,
+    timeoutMs: 1000,
+  });
+  const engine = new CompetitionEngine(root, directory, false, cloud);
+  const service = new HostingService(store, engine, HOST_KEY);
+  return { aws, cloud, engine, service, store };
+}
+
+test("Hello World Battle is offered in simulator mode only with a configured Battle runtime", () => {
+  expect(
+    host()
+      .cloud.catalog()
+      .map((problem) => problem.problemId),
+  ).not.toContain("hello-world-battle");
+  expect(
+    host(fakeBattle().battle)
+      .cloud.catalog()
+      .map((problem) => problem.problemId),
+  ).toContain("hello-world-battle");
+});
+
+test("the Battle runtime probes, seals and offers a gated guest terminal", async () => {
+  const { battle, calls } = fakeBattle();
+  const fixture = host(battle);
+  const problem = fixture.cloud.catalog().find((entry) => entry.problemId === "hello-world-battle");
+  if (!problem) throw new Error("Battle missing from the simulator catalog");
+  const now = Date.now();
+  const eventId = id();
+  const teamId = id();
+  fixture.store.putEvent({
+    eventId,
+    name: "Battle",
+    status: "READY",
+    createdAt: new Date(now).toISOString(),
+    updatedAt: new Date(now).toISOString(),
+    startsAt: new Date(now - 1000).toISOString(),
+    expiresAt: Math.floor(now / 1000) + 3600,
+    scoringLocked: false,
+    scoreboardFreezeMinutes: 0,
+    problems: [problem],
+  });
+  fixture.store.putTeam({
+    teamId,
+    eventId,
+    internalSlug: "alpha",
+    displayName: "Alpha",
+    loginKey: "battle-team-key",
+    snapshot: null,
+    score: 0,
+    completedProblems: 0,
+    scoreEvents: [],
+    aws: { accountId: "000000000000", roleName: "TenkaCloud-SimulatorDeploy-Role" },
+  });
+  const jobId = id();
+  const job: Job = {
+    jobId,
+    eventId,
+    teamId,
+    problemId: problem.problemId,
+    definition: problem.definition,
+    offset: 0,
+    status: "COMPLETE",
+    deployedAt: now - 1000,
+    unit: JSON.stringify({
+      kind: "cloudformation",
+      accountId: "000000000000",
+      roleArn: "arn:aws:iam::000000000000:role/TenkaCloud-SimulatorDeploy-Role",
+      region: "ap-northeast-1",
+      stackName: "tc-hello-world-battle-alpha",
+      stackId: fixture.aws.seedStack("tc-hello-world-battle-alpha", [
+        { Key: "tenkacloud:job", Value: jobId },
+      ]).stackId,
+      outputs: {
+        ParticipantViewerRoleArn: "arn:aws:iam::000000000000:role/tc-hello-world-battle-viewer",
+        Ec2HostHint: "ec2-10-0-1-5.ap-northeast-1.compute.simulator.invalid",
+        InstanceId: "i-0123456789abcdef0",
+      },
+    }),
+  };
+  fixture.store.putJob(job);
+  const view = await fixture.service.participant(
+    apiRequest({ method: "GET", path: "/portal/me", token: "battle-team-key" }),
+  );
+  const listed = (view.body as { problems: { problemId: string; accessCapabilities?: string[] }[] })
+    .problems[0];
+  expect(listed?.accessCapabilities).toEqual(["guest-terminal", "cli-credentials"]);
+
+  // The job's own probe replaces the public HTTP probe.
+  expect(fixture.engine.uptimeProbe(job)).toBeDefined();
+  expect(calls).toContain(`probe:${job.jobId}`);
+
+  const terminal = () =>
+    fixture.service.participant(
+      apiRequest({
+        method: "GET",
+        path: "/portal/me/guest-terminal",
+        token: "battle-team-key",
+        query: new URLSearchParams({ jobId: job.jobId }),
+      }),
+    );
+  // Before the guest has answered once, no code is issued (a failed start keeps it busy).
+  await expect(terminal()).rejects.toMatchObject({ status: 409, kind: "guest_not_ready" });
+  expect(calls.some((call) => call.startsWith("terminal:"))).toBe(false);
+  const state = fixture.store.uptimeState(eventId, teamId, job.problemId);
+  fixture.store.putUptimeState(eventId, teamId, job.problemId, {
+    ...state,
+    generation: uptimeGeneration(job),
+    readyAt: now,
+  });
+  const issued = await terminal();
+  expect(issued.body).toMatchObject({
+    code: "c".repeat(64),
+    terminalUrl: "http://127.0.0.1:4566/_simulator/terminal",
+  });
+  expect(calls.at(-1)).toMatch(/^terminal:i-0123456789abcdef0:/u);
+
+  await fixture.cloud.stop(job);
+  expect(calls.at(-1)).toBe(`seal:${job.jobId}`);
+  expect(fixture.aws.deleted).toHaveLength(1);
+});
+
+test("Battle disruptions assume the separate command role, never the deploy role", async () => {
+  const roles: string[] = [];
+  const disruption = new DisruptionAws();
+  const sts = {
+    send: async (command: AssumeRoleCommand) => {
+      roles.push(command.input.RoleArn ?? "");
+      return disruption.sts.send(command);
+    },
+  };
+  const adapter = new AwsDisruptionAdapter(
+    { sts: sts as never, ssm: disruption.ssm as never },
+    "fixture-required-external-id",
+    undefined,
+    "arn:aws:iam::000000000000:role/TenkaCloud-SimulatorCommand-Role",
+  );
+  const dispatch: DisruptionTarget["inject"] = {
+    kind: "ssm-run-command",
+    target: "i-0123456789abcdef0",
+    documentName: "AWS-RunShellScript",
+    params: { commands: ["systemctl stop nginx || true"] },
+  };
+  const target: DisruptionTarget = {
+    jobId: "job-1",
+    eventId: "event-1",
+    teamId: "team-1",
+    stackId: "arn:aws:cloudformation:ap-northeast-1:000000000000:stack/tc-hello-world-battle/1",
+    unitHash: "a".repeat(64),
+    deployedAt: 1,
+    accountId: "000000000000",
+    region: "ap-northeast-1",
+    roleArn: "arn:aws:iam::000000000000:role/TenkaCloud-SimulatorDeploy-Role",
+    resources: [],
+    inject: dispatch,
+    revert: dispatch,
+    afterSeconds: 600,
+  };
+  const submitted = await adapter.submit({
+    target,
+    dispatch,
+    operationKey: "op-1",
+    assertCurrent: () => undefined,
+  });
+  expect(submitted.kind).not.toBe("rejected");
+  expect(roles).toEqual(["arn:aws:iam::000000000000:role/TenkaCloud-SimulatorCommand-Role"]);
+});

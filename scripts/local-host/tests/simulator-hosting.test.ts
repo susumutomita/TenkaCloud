@@ -196,7 +196,11 @@ test("simulator SDK rechecks proxy configuration after startup before signing an
     port: 0,
     fetch: (request) => {
       requests++;
-      if (new URL(request.url).pathname === "/_simulator/v1/capabilities") return Response.json({});
+      const path = new URL(request.url).pathname;
+      if (path === "/_simulator/v1/capabilities") return Response.json({});
+      // A Simulator build without the Battle runtime.
+      if (path === "/_simulator/v1/battle-capabilities/availability")
+        return new Response("not found", { status: 404 });
       return new Response(
         "<GetCallerIdentityResponse><GetCallerIdentityResult><Account>999999999999</Account><Arn>arn:aws:iam::999999999999:root</Arn><UserId>synthetic</UserId></GetCallerIdentityResult></GetCallerIdentityResponse>",
         { headers: { "Content-Type": "text/xml" } },
@@ -213,7 +217,8 @@ test("simulator SDK rechecks proxy configuration after startup before signing an
       tokenFile,
     });
     if (!connection) throw new Error("Simulator connection missing");
-    expect(requests).toBe(2);
+    // Capabilities, Battle availability and the operator identity, all before any proxy is set.
+    expect(requests).toBe(3);
     for (const key of [
       "HTTP_PROXY",
       "http_proxy",
@@ -226,7 +231,7 @@ test("simulator SDK rechecks proxy configuration after startup before signing an
       await expect(connection.verify("000000000000", "SyntheticRole")).rejects.toThrow(
         "No request was sent",
       );
-      expect(requests).toBe(2);
+      expect(requests).toBe(3);
       Reflect.deleteProperty(process.env, key);
     }
   } finally {

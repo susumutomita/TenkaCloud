@@ -73,13 +73,15 @@ export class AwsDisruptionAdapter implements DisruptionAdapter {
     private readonly clients: AwsDisruptionClients,
     private readonly externalId: string,
     private readonly unavailableReason?: string,
+    /** A dedicated command role to assume instead of the target's deploy role (Simulator Battle). */
+    private readonly commandRoleArn?: string,
   ) {}
   private async client(target: DisruptionTarget): Promise<Ssm> {
     // Retained recovery work also needs this capability; a failed job is not sufficient.
     if (this.unavailableReason) throw new Error(this.unavailableReason);
     const assumed = await this.clients.sts.send(
       new AssumeRoleCommand({
-        RoleArn: target.roleArn,
+        RoleArn: this.commandRoleArn ?? target.roleArn,
         RoleSessionName: `tc-disruption-${target.jobId}`,
         ExternalId: this.externalId,
         DurationSeconds: 900,

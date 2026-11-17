@@ -8,9 +8,19 @@ import {
 import {
   bootstrapSimulatorRole,
   legacyHelloWorldBootstrapTemplate,
+  reviewedProblemBootstrapTemplateV2,
+  SIMULATOR_COMMAND_ROLE,
   SIMULATOR_DEPLOY_ROLE,
   simulatorBootstrapTemplate,
 } from "../simulator-bootstrap";
+
+const ownedOutputs = [
+  { OutputKey: "RoleArn", OutputValue: `arn:aws:iam::000000000000:role/${SIMULATOR_DEPLOY_ROLE}` },
+  {
+    OutputKey: "CommandRoleArn",
+    OutputValue: `arn:aws:iam::000000000000:role/${SIMULATOR_COMMAND_ROLE}`,
+  },
+];
 
 const settings = {
   operatorAccountId: "999999999999",
@@ -32,24 +42,36 @@ test("simulator bootstrap uses exact installation trust and limited reviewed-pro
   expect(JSON.stringify(role)).not.toContain("AdministratorAccess");
   const reviewed =
     /^arn:aws:[a-z]+:(ap-northeast-1)?:000000000000:(stack|role|parameter|function)[/:](tc-hello-world-|tc-lambda-settings-viewer-)\*(\/\*)?$/u;
+  // Battle guests: only this account's EC2 resources in the region, and the Battle's own profile.
+  const battle =
+    /^arn:aws:ec2:ap-northeast-1:(000000000000:(vpc|subnet|internet-gateway|route-table|security-group|instance|network-interface|volume)|:image)\/\*$|^arn:aws:iam::000000000000:(instance-profile\/tc-hello-world-battle-\*-instance-profile|role\/tc-hello-world-battle-\*)$|^arn:aws:ssm:ap-northeast-1:000000000000:parameter\/aws\/service\/ami-amazon-linux-latest\/al2023-ami-kernel-6\.1-x86_64$/u;
   for (const statement of role.Policies[0].PolicyDocument.Statement) {
     const resources: string[] = [statement.Resource].flat();
     expect(resources.length).toBeGreaterThan(0);
-    for (const resource of resources) expect(resource).toMatch(reviewed);
+    const guest = statement.Action.some(
+      (action: string) =>
+        action.startsWith("ec2:") ||
+        action.endsWith("InstanceProfile") ||
+        action === "ssm:GetParameters",
+    );
+    for (const resource of resources) {
+      if (guest || resource.includes("tc-hello-world-battle-")) expect(resource).toMatch(battle);
+      else expect(resource).toMatch(reviewed);
+    }
     expect(statement.Action.every((action: string) => !action.endsWith(":*"))).toBe(true);
-    // Lambda functions, and handing them a role, are limited to the Lambda problem's own names.
-    if (
-      statement.Action.some(
-        (action: string) => action.startsWith("lambda:") || action === "iam:PassRole",
-      )
-    )
+    // Handing out a role is limited to the Lambda and Battle problems' own roles.
+    if (statement.Action.some((action: string) => action === "iam:PassRole"))
       expect(
         resources.every(
           (resource) =>
-            resource.includes(":tc-lambda-settings-viewer-*") ||
-            resource.includes("/tc-lambda-settings-viewer-*"),
+            resource.endsWith("/tc-lambda-settings-viewer-*") ||
+            resource.endsWith("/tc-hello-world-battle-*"),
         ),
       ).toBe(true);
+    if (statement.Action.some((action: string) => action.startsWith("lambda:")))
+      expect(resources.every((resource) => resource.includes(":tc-lambda-settings-viewer-*"))).toBe(
+        true,
+      );
   }
   const actions = role.Policies[0].PolicyDocument.Statement.flatMap(
     (statement: { Action: string[] }) => statement.Action,
@@ -58,6 +80,59 @@ test("simulator bootstrap uses exact installation trust and limited reviewed-pro
   expect(actions).toContain("iam:PassRole");
   expect(actions).not.toContain("lambda:InvokeFunction");
   expect(actions).not.toContain("lambda:UpdateFunctionCode");
+  expect(actions).toContain("ec2:RunInstances");
+  // The deploy role never runs commands on a guest.
+  expect(
+    actions.some((action: string) => action.startsWith("ssm:") && action.includes("Command")),
+  ).toBe(false);
+});
+
+test("the Battle command role runs only the catalog document on tagged Battle guests and cannot deploy", () => {
+  const template = JSON.parse(
+    simulatorBootstrapTemplate(settings.operatorAccountId, settings.externalId, settings.region),
+  );
+  const role = template.Resources.SimulatorCommandRole.Properties;
+  expect(role.RoleName).toBe(SIMULATOR_COMMAND_ROLE);
+  expect(role.AssumeRolePolicyDocument).toEqual(
+    template.Resources.CompetitorDeployRole.Properties.AssumeRolePolicyDocument,
+  );
+  expect(template.Outputs.CommandRoleArn).toEqual({
+    Value: { "Fn::GetAtt": ["SimulatorCommandRole", "Arn"] },
+  });
+  const statements = role.Policies[0].PolicyDocument.Statement;
+  const actions = new Set(
+    statements.flatMap((statement: { Action: string[] }) => statement.Action),
+  );
+  expect([...actions].sort()).toEqual([
+    "ssm:GetCommandInvocation",
+    "ssm:ListCommands",
+    "ssm:SendCommand",
+  ]);
+  const onInstances = statements.find((statement: { Resource: string[] }) =>
+    statement.Resource.some((resource) => resource.includes(":instance/")),
+  );
+  expect(onInstances.Condition).toEqual({
+    StringEquals: { "ssm:resourceTag/TenkaCloud:Problem": "hello-world-battle" },
+    StringLike: { "ssm:resourceTag/TenkaCloud:NamePrefix": "tc-hello-world-battle-*" },
+  });
+  const documents = statements.find((statement: { Resource: string[] }) =>
+    statement.Resource.some((resource) => resource.includes(":document/")),
+  );
+  expect(documents.Resource).toEqual(["arn:aws:ssm:ap-northeast-1::document/AWS-RunShellScript"]);
+});
+
+test("the second released bootstrap template stays byte-identical so retained installs are recognised", () => {
+  const released = reviewedProblemBootstrapTemplateV2(
+    settings.operatorAccountId,
+    settings.externalId,
+    settings.region,
+  );
+  expect(createHash("sha256").update(released).digest("hex")).toBe(
+    "f5cce7f924b33f4e0f7eabf7a5c5c8179b27ec2351ebec066a7eae381915eef2",
+  );
+  expect(released).not.toBe(
+    simulatorBootstrapTemplate(settings.operatorAccountId, settings.externalId, settings.region),
+  );
 });
 
 test("the released Hello World bootstrap template stays byte-identical so retained installs are recognised", () => {
@@ -91,12 +166,7 @@ function retainedStateClient(initial: Record<string, unknown> | undefined) {
           StackName: command.input.StackName,
           StackStatus: "CREATE_COMPLETE",
           Tags: command.input.Tags,
-          Outputs: [
-            {
-              OutputKey: "RoleArn",
-              OutputValue: `arn:aws:iam::000000000000:role/${SIMULATOR_DEPLOY_ROLE}`,
-            },
-          ],
+          Outputs: ownedOutputs,
         };
         return {};
       }
@@ -113,27 +183,33 @@ const ownershipOf = (template: string) => [
   },
 ];
 
-test("bootstrap replaces only the exact completed Hello World stack this installation created", async () => {
-  const legacy = legacyHelloWorldBootstrapTemplate(
-    settings.operatorAccountId,
-    settings.externalId,
-    settings.region,
-  );
-  const { state, client } = retainedStateClient({
-    StackName: "tc-simulator-bootstrap",
-    StackStatus: "CREATE_COMPLETE",
-    Tags: ownershipOf(legacy),
-  });
-  await bootstrapSimulatorRole(client as never, settings);
-  expect(state).toMatchObject({ deletes: 1, creates: 1 });
-  expect(state.stack?.Tags).toEqual(
-    ownershipOf(
-      simulatorBootstrapTemplate(settings.operatorAccountId, settings.externalId, settings.region),
-    ),
-  );
-  await bootstrapSimulatorRole(client as never, settings);
-  expect(state).toMatchObject({ deletes: 1, creates: 1 });
-});
+test.each([
+  ["Hello World", legacyHelloWorldBootstrapTemplate],
+  ["reviewed-problem", reviewedProblemBootstrapTemplateV2],
+])(
+  "bootstrap replaces only the exact completed %s stack this installation created",
+  async (_, released) => {
+    const legacy = released(settings.operatorAccountId, settings.externalId, settings.region);
+    const { state, client } = retainedStateClient({
+      StackName: "tc-simulator-bootstrap",
+      StackStatus: "CREATE_COMPLETE",
+      Tags: ownershipOf(legacy),
+    });
+    await bootstrapSimulatorRole(client as never, settings);
+    expect(state).toMatchObject({ deletes: 1, creates: 1 });
+    expect(state.stack?.Tags).toEqual(
+      ownershipOf(
+        simulatorBootstrapTemplate(
+          settings.operatorAccountId,
+          settings.externalId,
+          settings.region,
+        ),
+      ),
+    );
+    await bootstrapSimulatorRole(client as never, settings);
+    expect(state).toMatchObject({ deletes: 1, creates: 1 });
+  },
+);
 
 test("bootstrap never deletes a legacy-looking stack from another installation or an unfinished one", async () => {
   const otherInstallation = legacyHelloWorldBootstrapTemplate(
@@ -173,12 +249,7 @@ test("bootstrap creates once and only reuses an exact owned stack; conflicting r
           StackName: command.input.StackName,
           StackStatus: "CREATE_COMPLETE",
           Tags: command.input.Tags,
-          Outputs: [
-            {
-              OutputKey: "RoleArn",
-              OutputValue: `arn:aws:iam::000000000000:role/${SIMULATOR_DEPLOY_ROLE}`,
-            },
-          ],
+          Outputs: ownedOutputs,
         };
         return {};
       }
@@ -218,4 +289,19 @@ test("bootstrap refuses unexpected identity and hides native diagnostics on coll
   expect(failure).toBeInstanceOf(Error);
   expect(String(failure)).toContain("Simulator bootstrap failed");
   expect(String(failure)).not.toContain(settings.externalId);
+});
+
+test("bootstrap rejects an owned stack without the Battle command role output", async () => {
+  const template = simulatorBootstrapTemplate(
+    settings.operatorAccountId,
+    settings.externalId,
+    settings.region,
+  );
+  const { client } = retainedStateClient({
+    StackName: "tc-simulator-bootstrap",
+    StackStatus: "CREATE_COMPLETE",
+    Tags: ownershipOf(template),
+    Outputs: ownedOutputs.slice(0, 1),
+  });
+  await expect(bootstrapSimulatorRole(client as never, settings)).rejects.toThrow("conflicts");
 });

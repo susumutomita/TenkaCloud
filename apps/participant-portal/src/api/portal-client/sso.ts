@@ -1,3 +1,4 @@
+import { normalizeSimulatorEndpointUrl } from "@tenkacloud/portal-contracts";
 import { portalFetch } from "./fetch";
 import type { CliCredentialsView } from "./types";
 
@@ -48,4 +49,38 @@ export async function getCliCredentials(
     { query: { jobId }, throwOn400: true, throwOnAssumeRoleFailed: true, signal },
   )) as { credentials: CliCredentialsView };
   return data.credentials;
+}
+
+/** A one-use code for the Simulator's participant guest terminal (Simulator Battle only). */
+export interface GuestTerminalHandoff {
+  readonly code: string;
+  readonly terminalUrl: string;
+  readonly expiresAt: string;
+}
+
+/**
+ * The host signs the Simulator terminal handoff with the participant's viewer role, never with
+ * deploy credentials. The code is pasted manually into the Simulator page; it is not a login link.
+ */
+export async function getGuestTerminal(
+  apiBaseUrl: string,
+  teamLoginKey: string,
+  jobId: string,
+  signal?: AbortSignal,
+): Promise<GuestTerminalHandoff> {
+  const data = (await portalFetch<GuestTerminalHandoff>(
+    apiBaseUrl,
+    "portal/me/guest-terminal",
+    teamLoginKey,
+    { query: { jobId }, throwOn400: true, throwOnAssumeRoleFailed: true, signal },
+  )) as GuestTerminalHandoff;
+  const url = new URL(data.terminalUrl);
+  // Only the local Simulator's own terminal page, never another origin.
+  if (
+    `${normalizeSimulatorEndpointUrl(url.origin)}/_simulator/terminal` !== data.terminalUrl ||
+    !/^[A-Za-z0-9_-]{64}$/u.test(data.code) ||
+    Number.isNaN(Date.parse(data.expiresAt))
+  )
+    throw new Error("The host returned an invalid guest terminal handoff.");
+  return data;
 }

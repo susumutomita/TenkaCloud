@@ -6,7 +6,11 @@ import { ensureOfficialSimulatorBinary } from "./simulator-release-lock";
 interface Options {
   readonly dataDirectory: string;
   readonly simulator?: SimulatorSettings;
-  readonly managedSimulator?: { readonly binary?: string; readonly update?: boolean };
+  readonly managedSimulator?: {
+    readonly binary?: string;
+    readonly update?: boolean;
+    readonly battleBundle?: string;
+  };
 }
 interface Dependencies {
   readonly start?: typeof startManagedSimulator;
@@ -40,6 +44,9 @@ export async function withSimulatorSession(
       binary,
       dataDirectory: options.dataDirectory,
       signal: startup.signal,
+      ...(options.managedSimulator.battleBundle
+        ? { battleBundle: options.managedSimulator.battleBundle }
+        : {}),
     });
   } finally {
     signal.removeEventListener("abort", cancelStartup);
