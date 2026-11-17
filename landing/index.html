@@ -125,7 +125,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" />
 <link rel="stylesheet" href="./styles/main.css?v=6f930e2dab" />
 <link rel="stylesheet" href="./styles/incident.css?v=2c9a2150f4" />
-<link rel="stylesheet" href="./styles/platform.css?v=7a82adcb6b" />
+<link rel="stylesheet" href="./styles/platform.css?v=9df55b2aa3" />
 </head>
 <body class="platform-landing">
 <a class="landing-skip" href="#main-start" data-i18n="incident.skip">本文へ移動</a>
@@ -179,7 +179,9 @@
 <div class="platform-preview">
 <p  data-i18n="platform.preview">参加者画面のサンプル · 問題は主催者が選びます
 </p>
-<div class="portal-preview">
+<div class="platform-scene" data-scene="0">
+<div class="platform-scene-panels">
+<div class="platform-scene-panel" data-scene-panel="0"><div class="portal-preview">
             <div class="portal-page-title" data-i18n="preview.quests.title">問題一覧 (Quests)</div>
             <div class="portal-page-desc" data-i18n="preview.quests.desc">自チームに deploy された問題のカタログ。各カードからアクセス先 URL に直接遷移できます。</div>
             <div class="portal-tabs" aria-label="カテゴリで絞り込み">
@@ -211,11 +213,65 @@
               </div>
             </div>
             <div class="portal-collapsed" data-i18n="preview.quests.cleared">⌄ 解決済み (0)</div>
-          </div></div><p class="hero-secondary"><a href="/videos/lp/tenkacloud-60s.mp4?v=54d2534496" target="_blank" rel="noopener noreferrer" data-cta="watch-60s"><span data-i18n="hero.cta_video">▶ 現行の紹介動画（1分）</span></a></p><p class="hero-trust" data-i18n="hero.trust">合同会社 BULL 運営 · Apache 2.0</p></div></div></section>
+          </div></div>
+<div class="platform-scene-panel" data-scene-panel="1"><div class="portal-preview score-events-preview">
+            <div class="portal-page-title" data-i18n="preview.score_events.title">Score events</div>
+            <div class="portal-page-desc" data-i18n="preview.score_events.desc">自チームのスコア変動履歴 (30 秒ごと自動更新、新しい順 100 件まで)</div>
+            <div class="portal-container">
+              <div class="portal-container-title" data-i18n="preview.score_events.chart">累計 score 推移</div>
+              <svg class="portal-chart" viewBox="0 0 560 210" role="img" aria-label="score events chart">
+                <rect width="560" height="210" fill="#fff"/>
+                <g stroke="#e5e9f0" stroke-width="1">
+                  <path d="M45 20H535M45 58H535M45 96H535M45 134H535M45 172H535"/>
+                  <path d="M45 20V172M125 20V172M205 20V172M285 20V172M365 20V172M445 20V172M535 20V172"/>
+                </g>
+                <polyline fill="none" stroke="#0972d3" stroke-width="3" points="45,165 86,158 126,148 166,140 206,128 246,120 286,108 326,99 366,87 406,79 446,66 535,42"/>
+                <g font-family="JetBrains Mono, monospace" font-size="10" fill="#5d6877">
+                  <text x="8" y="24">2000</text><text x="8" y="62">1500</text><text x="8" y="100">1000</text><text x="14" y="138">500</text><text x="18" y="176">0</text>
+                  <text x="40" y="197">21:37:00</text><text x="198" y="197">21:43:00</text><text x="356" y="197">21:49:00</text>
+                </g>
+              </svg>
+            </div>
+            <div class="portal-container">
+              <div class="portal-container-title" data-i18n="preview.score_events.history">履歴 (100)</div>
+              <table class="portal-table">
+                <thead>
+                  <tr>
+                    <th data-i18n="preview.score_events.col_time">発生時刻</th>
+                    <th data-i18n="preview.score_events.col_problem">問題</th>
+                    <th data-i18n="preview.score_events.col_type">種類</th>
+                    <th data-i18n="preview.score_events.col_points">変動</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td data-i18n="preview.score_events.time_now">数秒前</td>
+                    <td><code class="portal-code">microservice-migration-battle</code></td>
+                    <td><span class="portal-badge green">Battle (uptime)</span></td>
+                    <td><span class="portal-points negative">-100 pt</span></td>
+                  </tr>
+                  <tr>
+                    <td data-i18n="preview.score_events.time_minute">1 分前</td>
+                    <td><code class="portal-code">hello-world</code></td>
+                    <td><span class="portal-badge blue">Challenge (flag)</span></td>
+                    <td><span class="portal-points positive">+800 pt</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div></div>
+<canvas class="platform-scene-canvas" content="drawable" aria-hidden="true"></canvas>
+</div>
+<div class="platform-scene-controls" hidden>
+<button type="button" data-scene-select="0" aria-pressed="true"><span>01</span> <span data-i18n="platform.sceneQuests">問題に挑む</span></button>
+<button type="button" data-scene-select="1" aria-pressed="false"><span>02</span> <span data-i18n="platform.sceneScores">結果をみる</span></button>
+</div>
+</div></div><p class="hero-secondary"><a href="/videos/lp/tenkacloud-60s.mp4?v=54d2534496" target="_blank" rel="noopener noreferrer" data-cta="watch-60s"><span data-i18n="hero.cta_video">▶ 現行の紹介動画（1分）</span></a></p><p class="hero-trust" data-i18n="hero.trust">合同会社 BULL 運営 · Apache 2.0</p></div></div></section>
 
 
 <section class="platform-section" id="practice-question" aria-labelledby="practice-question-title">
 <div class="wrap">
+<span class="platform-chapter-index" aria-hidden="true">01</span>
 <p class="eyebrow" data-i18n="platform.questionEyebrow">たとえば、こんな疑問から</p>
 <h2 id="practice-question-title"><span data-i18n="hero.h1a">ニュースで聞く情報漏えい、</span><br><span data-i18n="hero.h1b">どうやって起こるの？</span></h2>
 <p class="platform-lead" data-i18n="platform.questionLead">情報漏えいは、学べるテーマの一例です。クラウドの構築・運用も含む多様な問題で、知識を試し、結果から学びます。認可バグの演習は開発中・未公開です。</p>
@@ -224,6 +280,7 @@
 
 <section class="platform-section platform-soft" id="why">
 <div class="wrap">
+<span class="platform-chapter-index" aria-hidden="true">02</span>
 <p class="eyebrow" data-i18n="platform.whyEyebrow">なぜ、実践なのか
 </p>
 <h2  data-i18n="platform.whyTitle"><span class="platform-phrase">知識を、</span><span class="platform-phrase">実践で使える力へ。</span>
@@ -256,6 +313,7 @@
 
 <section class="platform-section" id="try">
 <div class="wrap">
+<span class="platform-chapter-index" aria-hidden="true">03</span>
 <p class="eyebrow" data-i18n="platform.tryEyebrow">最初の一歩
 </p>
 <h2  data-i18n="platform.tryTitle">今、試せること。
@@ -296,6 +354,7 @@
 
 <section class="platform-section platform-soft" id="examples">
 <div class="wrap">
+<span class="platform-chapter-index" aria-hidden="true">04</span>
 <p class="eyebrow" data-i18n="platform.exampleEyebrow">学び方を、一例で
 </p>
 <h2  data-i18n="platform.exampleTitle"><span class="platform-phrase">起きることを見て、</span><span class="platform-phrase">操作して、</span><span class="platform-phrase">結果を比べる。</span>
@@ -388,6 +447,7 @@
 
 <section class="platform-section" id="hosting">
 <div class="wrap">
+<span class="platform-chapter-index" aria-hidden="true">05</span>
 <p class="eyebrow" data-i18n="platform.hostEyebrow">個人の学びから、チームの演習へ
 </p>
 <h2  data-i18n="platform.hostTitle"><span class="platform-phrase">挑む人にも、</span><span class="platform-phrase">開催する人にも。</span>
@@ -620,6 +680,7 @@
 
 <section class="platform-section platform-soft" id="support">
 <div class="wrap">
+<span class="platform-chapter-index" aria-hidden="true">06</span>
 <p class="eyebrow" data-i18n="platform.supportEyebrow">始め方と費用
 </p>
 <h2  data-i18n="platform.supportTitle"><span class="platform-phrase">自分で始める。</span><span class="platform-phrase">運営を任せる。</span>
@@ -787,9 +848,9 @@
   </div>
 </footer>
 
-<script src="./platform-page.js?v=ea43f0525b" defer></script>
+<script src="./platform-page.js?v=eb2282a019" defer></script>
 <script src="./incident-story.js?v=ba1b4811ea" defer></script>
-<script src="./app.js?v=101cb23eb0" defer></script>
+<script src="./app.js?v=ef1d4ba67b" defer></script>
 
 </body>
 </html>

@@ -126,7 +126,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" />
 <link rel="stylesheet" href="./styles/main.css?v=6f930e2dab" />
 <link rel="stylesheet" href="./styles/incident.css?v=2c9a2150f4" />
-<link rel="stylesheet" href="./styles/platform.css?v=7a82adcb6b" />
+<link rel="stylesheet" href="./styles/platform.css?v=9df55b2aa3" />
 </head>
 <body class="platform-landing">
 <a class="landing-skip" href="#main-start" data-i18n="incident.skip">Skip to content</a>
@@ -176,7 +176,9 @@
 </div>
 <div class="platform-preview">
 <p  data-i18n="platform.preview">Sample participant screen · Organizers select the problems</p>
-<div class="portal-preview">
+<div class="platform-scene" data-scene="0">
+<div class="platform-scene-panels">
+<div class="platform-scene-panel" data-scene-panel="0"><div class="portal-preview">
             <div class="portal-page-title" data-i18n="preview.quests.title">Problem list (Quests)</div>
             <div class="portal-page-desc" data-i18n="preview.quests.desc">A catalog of problems deployed to your team. Jump directly to each access URL from its card.</div>
             <div class="portal-tabs" aria-label="カテゴリで絞り込み">
@@ -208,11 +210,65 @@
               </div>
             </div>
             <div class="portal-collapsed" data-i18n="preview.quests.cleared">⌄ Cleared (0)</div>
-          </div></div><p class="hero-secondary"><a href="/videos/lp/tenkacloud-60s.mp4?v=54d2534496" target="_blank" rel="noopener noreferrer" data-cta="watch-60s"><span data-i18n="hero.cta_video">▶ Current introduction (1 minute)</span></a></p><p class="hero-trust" data-i18n="hero.trust">Operated by BULL LLC · Apache 2.0</p></div></div></section>
+          </div></div>
+<div class="platform-scene-panel" data-scene-panel="1"><div class="portal-preview score-events-preview">
+            <div class="portal-page-title" data-i18n="preview.score_events.title">Score events</div>
+            <div class="portal-page-desc" data-i18n="preview.score_events.desc">Your team's score-change history, auto-refreshed every 30 seconds. Up to 100 newest events.</div>
+            <div class="portal-container">
+              <div class="portal-container-title" data-i18n="preview.score_events.chart">Cumulative score trend</div>
+              <svg class="portal-chart" viewBox="0 0 560 210" role="img" aria-label="score events chart">
+                <rect width="560" height="210" fill="#fff"/>
+                <g stroke="#e5e9f0" stroke-width="1">
+                  <path d="M45 20H535M45 58H535M45 96H535M45 134H535M45 172H535"/>
+                  <path d="M45 20V172M125 20V172M205 20V172M285 20V172M365 20V172M445 20V172M535 20V172"/>
+                </g>
+                <polyline fill="none" stroke="#0972d3" stroke-width="3" points="45,165 86,158 126,148 166,140 206,128 246,120 286,108 326,99 366,87 406,79 446,66 535,42"/>
+                <g font-family="JetBrains Mono, monospace" font-size="10" fill="#5d6877">
+                  <text x="8" y="24">2000</text><text x="8" y="62">1500</text><text x="8" y="100">1000</text><text x="14" y="138">500</text><text x="18" y="176">0</text>
+                  <text x="40" y="197">21:37:00</text><text x="198" y="197">21:43:00</text><text x="356" y="197">21:49:00</text>
+                </g>
+              </svg>
+            </div>
+            <div class="portal-container">
+              <div class="portal-container-title" data-i18n="preview.score_events.history">History (100)</div>
+              <table class="portal-table">
+                <thead>
+                  <tr>
+                    <th data-i18n="preview.score_events.col_time">Occurred</th>
+                    <th data-i18n="preview.score_events.col_problem">Problem</th>
+                    <th data-i18n="preview.score_events.col_type">Type</th>
+                    <th data-i18n="preview.score_events.col_points">Delta</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td data-i18n="preview.score_events.time_now">Seconds ago</td>
+                    <td><code class="portal-code">microservice-migration-battle</code></td>
+                    <td><span class="portal-badge green">Battle (uptime)</span></td>
+                    <td><span class="portal-points negative">-100 pt</span></td>
+                  </tr>
+                  <tr>
+                    <td data-i18n="preview.score_events.time_minute">1 min ago</td>
+                    <td><code class="portal-code">hello-world</code></td>
+                    <td><span class="portal-badge blue">Challenge (flag)</span></td>
+                    <td><span class="portal-points positive">+800 pt</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div></div>
+<canvas class="platform-scene-canvas" content="drawable" aria-hidden="true"></canvas>
+</div>
+<div class="platform-scene-controls" hidden>
+<button type="button" data-scene-select="0" aria-pressed="true"><span>01</span> <span data-i18n="platform.sceneQuests">Explore problems</span></button>
+<button type="button" data-scene-select="1" aria-pressed="false"><span>02</span> <span data-i18n="platform.sceneScores">See results</span></button>
+</div>
+</div></div><p class="hero-secondary"><a href="/videos/lp/tenkacloud-60s.mp4?v=54d2534496" target="_blank" rel="noopener noreferrer" data-cta="watch-60s"><span data-i18n="hero.cta_video">▶ Current introduction (1 minute)</span></a></p><p class="hero-trust" data-i18n="hero.trust">Operated by BULL LLC · Apache 2.0</p></div></div></section>
 
 
 <section class="platform-section" id="practice-question" aria-labelledby="practice-question-title">
 <div class="wrap">
+<span class="platform-chapter-index" aria-hidden="true">01</span>
 <p class="eyebrow" data-i18n="platform.questionEyebrow">Start with a question like this</p>
 <h2 id="practice-question-title"><span data-i18n="hero.h1a">Data breaches make the news. </span><br><span data-i18n="hero.h1b">How do they happen?</span></h2>
 <p class="platform-lead" data-i18n="platform.questionLead">Data leaks are one example of what you can study. Try your knowledge and learn from results across varied problems, including cloud infrastructure and operations. The authorization-bug exercise is in development and not published yet.</p>
@@ -221,6 +277,7 @@
 
 <section class="platform-section platform-soft" id="why">
 <div class="wrap">
+<span class="platform-chapter-index" aria-hidden="true">02</span>
 <p class="eyebrow" data-i18n="platform.whyEyebrow">Why hands-on practice</p>
 <h2  data-i18n="platform.whyTitle">Bridge knowing and doing.</h2>
 <p class="platform-lead" data-i18n="platform.whyLead">Security matters. But where do you start? Experienced people are scarce and costly. Put textbook knowledge to work in a safe exercise, see what happens, and learn from the result.</p>
@@ -244,6 +301,7 @@
 
 <section class="platform-section" id="try">
 <div class="wrap">
+<span class="platform-chapter-index" aria-hidden="true">03</span>
 <p class="eyebrow" data-i18n="platform.tryEyebrow">Start here</p>
 <h2  data-i18n="platform.tryTitle">What you can try now.</h2>
 <p class="platform-lead" data-i18n="platform.tryLead">Explore the workflow in your browser, try a basic game, or host your own exercises. Choose the path that fits your goal.</p>
@@ -271,6 +329,7 @@
 
 <section class="platform-section platform-soft" id="examples">
 <div class="wrap">
+<span class="platform-chapter-index" aria-hidden="true">04</span>
 <p class="eyebrow" data-i18n="platform.exampleEyebrow">One example of the learning approach</p>
 <h2  data-i18n="platform.exampleTitle">See what happens. Act. Compare the result.</h2>
 <p class="platform-lead" data-i18n="platform.exampleLead">Problems vary with the organizer and learning goal. This in-development authorization bug illustrates one approach: understand the impact, act, and verify the fix.</p>
@@ -356,6 +415,7 @@
 
 <section class="platform-section" id="hosting">
 <div class="wrap">
+<span class="platform-chapter-index" aria-hidden="true">05</span>
 <p class="eyebrow" data-i18n="platform.hostEyebrow">From individual learning to team practice</p>
 <h2  data-i18n="platform.hostTitle">For learners and organizers.</h2>
 <p class="platform-lead" data-i18n="platform.hostLead">Participants focus on the problems. Organizers manage events, teams, problems, scores and progress in one platform, using public problems or adding their own materials. Check each problem’s guide for local and AWS support and verification status.</p>
@@ -585,6 +645,7 @@
 
 <section class="platform-section platform-soft" id="support">
 <div class="wrap">
+<span class="platform-chapter-index" aria-hidden="true">06</span>
 <p class="eyebrow" data-i18n="platform.supportEyebrow">Getting started and costs</p>
 <h2  data-i18n="platform.supportTitle">Host it yourself, or get operational help.</h2>
 <p class="platform-lead" data-i18n="platform.supportLead">TenkaCloud is Apache-2.0 open source. The license, cloud resource costs and operated-event service fees are separate. Use the guides to host it yourself, or review the scope and pricing if you want help with design and event operations.</p>
@@ -749,9 +810,9 @@
   </div>
 </footer>
 
-<script src="./platform-page.js?v=ea43f0525b" defer></script>
+<script src="./platform-page.js?v=eb2282a019" defer></script>
 <script src="./incident-story.js?v=ba1b4811ea" defer></script>
-<script src="./app.js?v=101cb23eb0" defer></script>
+<script src="./app.js?v=ef1d4ba67b" defer></script>
 
 </body>
 </html>

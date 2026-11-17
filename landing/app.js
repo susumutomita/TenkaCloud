@@ -145,6 +145,8 @@
       "platform.primary": "操作デモをブラウザーで見る →",
       "platform.primaryNote": "公開中 · 登録不要 · 演習の操作を確認するデモです",
       "platform.choose": "今試せることを比べる ↓",
+      "platform.sceneQuests": "問題に挑む",
+      "platform.sceneScores": "結果をみる",
       "platform.preview": "参加者画面のサンプル · 問題は主催者が選びます",
       "platform.questionEyebrow": "たとえば、こんな疑問から",
       "platform.questionLead":
@@ -550,6 +552,8 @@
       "platform.primary": "Open the browser walkthrough →",
       "platform.primaryNote": "Available now · No signup · A walkthrough of the exercise workflow",
       "platform.choose": "Compare ways to try it ↓",
+      "platform.sceneQuests": "Explore problems",
+      "platform.sceneScores": "See results",
       "platform.preview": "Sample participant screen · Organizers select the problems",
       "platform.questionEyebrow": "Start with a question like this",
       "platform.questionLead":

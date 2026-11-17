@@ -67,6 +67,10 @@ describe("platform message and retained detail", () => {
     if (!initiallyOpen) throw new Error("Expected operational detail");
     initiallyOpen.open = true;
     const initial = items.map((item) => item.open);
+    window.requestAnimationFrame = () => 1;
+    window.cancelAnimationFrame = () => {
+      /* Print test does not schedule scene frames. */
+    };
     window.eval(read("platform-page.js"));
     for (let cycle = 0; cycle < 2; cycle++) {
       window.dispatchEvent(new window.Event("beforeprint"));
@@ -76,5 +80,172 @@ describe("platform message and retained detail", () => {
       expect(items.map((item) => item.open)).toEqual(initial);
     }
     window.close();
+  });
+});
+
+describe("full-size product scene", () => {
+  function setup(mode: "dom" | "canvas" | "failure", reduced = false) {
+    const dom = new JSDOM(read("index.html"), {
+      runScripts: "outside-only",
+      pretendToBeVisual: true,
+    });
+    const { window } = dom;
+    let frame: FrameRequestCallback | undefined;
+    let draws = 0;
+    let disconnected = 0;
+    let resized: (() => void) | undefined;
+    let visibility: ((entries: { isIntersecting: boolean }[]) => void) | undefined;
+    Object.defineProperty(window, "matchMedia", {
+      value: () => ({
+        matches: reduced,
+        addEventListener() {
+          /* Motion preference is fixed in this fixture. */
+        },
+      }),
+    });
+    window.requestAnimationFrame = (callback) => {
+      frame = callback;
+      return 1;
+    };
+    window.cancelAnimationFrame = () => {
+      frame = undefined;
+    };
+    Object.defineProperty(window, "IntersectionObserver", {
+      value: class {
+        constructor(callback: typeof visibility) {
+          visibility = callback;
+        }
+        observe() {
+          /* Geometry is controlled by this fixture. */
+        }
+        disconnect() {
+          disconnected++;
+        }
+      },
+    });
+    Object.defineProperty(window, "ResizeObserver", {
+      value: class {
+        constructor(callback: () => void) {
+          resized = callback;
+        }
+        observe() {
+          /* Resize is triggered explicitly. */
+        }
+        disconnect() {
+          /* Cleanup is covered by intersection observation. */
+        }
+      },
+    });
+    const context = {
+      setTransform() {
+        /* Paint bookkeeping is not relevant to scene state assertions. */
+      },
+      clearRect() {
+        /* Paint bookkeeping is not relevant to scene state assertions. */
+      },
+      save() {
+        /* Paint bookkeeping is not relevant to scene state assertions. */
+      },
+      beginPath() {
+        /* Paint bookkeeping is not relevant to scene state assertions. */
+      },
+      rect() {
+        /* Paint bookkeeping is not relevant to scene state assertions. */
+      },
+      clip() {
+        /* Paint bookkeeping is not relevant to scene state assertions. */
+      },
+      translate() {
+        /* Paint bookkeeping is not relevant to scene state assertions. */
+      },
+      restore() {
+        /* Paint bookkeeping is not relevant to scene state assertions. */
+      },
+      drawElementImage() {
+        draws++;
+        if (mode === "failure") throw new Error("native paint failed");
+      },
+    };
+    if (mode !== "dom") {
+      Object.defineProperty(window.HTMLCanvasElement.prototype, "content", { value: "drawable" });
+      Object.defineProperty(window.HTMLCanvasElement.prototype, "getContext", {
+        value: () => context,
+      });
+    }
+    window.eval(read("platform-page.js"));
+    const scene = window.document.querySelector<HTMLElement>(".platform-scene");
+    const hero = window.document.querySelector<HTMLElement>(".hero");
+    const buttons = [...window.document.querySelectorAll<HTMLButtonElement>("[data-scene-select]")];
+    const panels = [...window.document.querySelectorAll<HTMLElement>("[data-scene-panel]")];
+    return {
+      window,
+      scene,
+      hero,
+      buttons,
+      panels,
+      draw: (elapsed = 200) => {
+        const next = frame;
+        frame = undefined;
+        next?.(window.performance.now() + elapsed);
+      },
+      resize: () => resized?.(),
+      draws: () => draws,
+      offscreen: () => visibility?.([{ isIntersecting: false }]),
+      frame: () => frame,
+      disconnected: () => disconnected,
+    };
+  }
+
+  it("switches meaningful product views and pressed state without a canvas API", () => {
+    const test = setup("dom");
+    test.buttons[1]?.click();
+    expect(test.scene?.dataset.renderer).toBe("dom");
+    expect(test.hero?.dataset.heroScene).toBe("1");
+    expect(test.panels.map((panel) => panel.hidden)).toEqual([true, false]);
+    expect(test.buttons[1]?.getAttribute("aria-pressed")).toBe("true");
+    test.buttons[0]?.click();
+    expect(test.panels.map((panel) => panel.hidden)).toEqual([false, true]);
+  });
+
+  it("draws native HTML only during a bounded scene change, then stops offscreen", () => {
+    const test = setup("canvas");
+    test.buttons[1]?.click();
+    test.draw();
+    expect(test.draws()).toBe(12);
+    expect(test.scene?.dataset.renderer).toBe("canvas");
+    test.resize();
+    expect(test.frame()).toBeDefined();
+    test.draw(900);
+    expect(test.frame()).toBeUndefined();
+    test.buttons[0]?.click();
+    expect(test.frame()).toBeDefined();
+    const canvas = test.window.document.querySelector<HTMLCanvasElement>(".platform-scene-canvas");
+    expect(canvas?.width).toBeLessThanOrEqual(1100);
+    expect(canvas?.height).toBeLessThanOrEqual(750);
+    test.offscreen();
+    expect(test.frame()).toBeUndefined();
+    expect(canvas?.style.opacity).toBe("0");
+    test.window.dispatchEvent(new test.window.PageTransitionEvent("pagehide"));
+    expect(test.disconnected()).toBe(1);
+  });
+
+  it("keeps reduced-motion scenes static while controls still work", () => {
+    const test = setup("canvas", true);
+    test.buttons[1]?.click();
+    test.draw();
+    expect(test.draws()).toBe(0);
+    expect(test.panels[1]?.hidden).toBe(false);
+    expect(test.frame()).toBeUndefined();
+  });
+
+  it("recovers from native drawing failure and supports repeated switching", () => {
+    const test = setup("failure");
+    test.buttons[1]?.click();
+    test.draw();
+    expect(test.scene?.dataset.renderer).toBe("dom");
+    expect(test.draws()).toBe(1);
+    test.buttons[0]?.click();
+    expect(test.panels[0]?.hidden).toBe(false);
+    expect(test.frame()).toBeUndefined();
   });
 });
