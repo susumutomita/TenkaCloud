@@ -146,6 +146,9 @@
       "platform.primaryNote": "公開中 · 登録不要 · 演習の操作を確認するデモです",
       "platform.choose": "今試せることを比べる ↓",
       "platform.preview": "参加者画面のサンプル · 問題は主催者が選びます",
+      "platform.questionEyebrow": "たとえば、こんな疑問から",
+      "platform.questionLead":
+        "情報漏えいは、学べるテーマの一例です。クラウドの構築・運用も含む多様な問題で、知識を試し、結果から学びます。認可バグの演習は開発中・未公開です。",
       "platform.whyEyebrow": "なぜ、実践なのか",
       "platform.whyTitle":
         '<span class="platform-phrase">知識を、</span><span class="platform-phrase">実践で使える力へ。</span>',
@@ -548,6 +551,9 @@
       "platform.primaryNote": "Available now · No signup · A walkthrough of the exercise workflow",
       "platform.choose": "Compare ways to try it ↓",
       "platform.preview": "Sample participant screen · Organizers select the problems",
+      "platform.questionEyebrow": "Start with a question like this",
+      "platform.questionLead":
+        "Data leaks are one example of what you can study. Try your knowledge and learn from results across varied problems, including cloud infrastructure and operations. The authorization-bug exercise is in development and not published yet.",
       "platform.whyEyebrow": "Why hands-on practice",
       "platform.whyTitle": "Bridge knowing and doing.",
       "platform.whyLead":

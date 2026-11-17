@@ -15,6 +15,15 @@ describe("platform message and retained detail", () => {
       expect(hero?.textContent).not.toMatch(/3分|Three minutes|BROKEN ACCESS CONTROL/);
       const main = document.querySelector("main");
       const order = [...(main?.children ?? [])].map((node) => node.id);
+      expect(order.indexOf("platform")).toBeLessThan(order.indexOf("practice-question"));
+      expect(order.indexOf("practice-question")).toBeLessThan(order.indexOf("why"));
+      const question = document.querySelector("#practice-question");
+      expect(question?.querySelector("h2")?.textContent).toMatch(
+        /ニュースで聞く情報漏えい|Data breaches make the news/,
+      );
+      expect(question?.textContent).toMatch(/一例|one example/);
+      expect(question?.textContent).toMatch(/未公開|not published yet/);
+      expect(question?.querySelector("a,button")).toBeNull();
       expect(order.indexOf("try")).toBeLessThan(order.indexOf("examples"));
       expect(document.querySelectorAll(".platform-start-option")).toHaveLength(3);
       expect(document.querySelector("#try")?.textContent).toMatch(/クラウド|Environment/);
