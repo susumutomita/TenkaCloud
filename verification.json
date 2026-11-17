@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "features": [
+    {
+      "id": "development-gates",
+      "paths": ["scripts/", "apps/", "packages/", "Makefile"],
+      "checks": ["native-gates"],
+      "environment": "Python 3.10+, Bun and locked dependencies. Changed-file tests only; full suite remains required CI."
+    },
+    {
+      "id": "host-domain",
+      "paths": ["scripts/local-host/", "scripts/lib/"],
+      "checks": ["host-types", "host-tests"],
+      "environment": "Bun, SQLite, local loopback and the explicitly selected catalog (make catalog-download catalog-prepare)."
+    },
+    {
+      "id": "event-rehearsal",
+      "paths": ["docker/host/", "scripts/local-host/"],
+      "checks": ["event-rehearsal"],
+      "environment": "Separately prepared real hosting/VM environment; optional rehearsal, not a merge gate."
+    }
+  ],
+  "profiles": {
+    "fast": ["native-gates", "host-types", "host-tests"],
+    "release": ["native-gates", "host-types", "host-tests", "event-rehearsal"]
+  },
+  "checks": {
+    "native-gates": {
+      "argv": ["make", "before-commit"],
+      "timeout_seconds": 1800
+    },
+    "host-types": {
+      "argv": ["bun", "run", "typecheck:host"],
+      "timeout_seconds": 600
+    },
+    "host-tests": {
+      "argv": ["bun", "run", "test:host"],
+      "timeout_seconds": 1800
+    },
+    "event-rehearsal": {
+      "blocked_reason": "No event-specific real hosting/VM rehearsal command is registered. This optional release profile cannot attest a rehearsal; it does not change existing merge requirements."
+    }
+  }
+}

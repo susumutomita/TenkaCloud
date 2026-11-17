@@ -195,3 +195,6 @@ packages/standalone-cli/runtime/
 # Explicitly downloaded catalog view; immutable sources live in .tenkacloud.
 /problems/
 /.catalog-view-*/
+
+# Verification adapter Python cache
+__pycache__/

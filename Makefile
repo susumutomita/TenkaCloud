@@ -76,7 +76,7 @@ dead-code: ## Fail on unused files/exports found by knip | knipで未使用コ�
 
 # Pre-PR gate for the product BODY, run by the pre-commit hook. Tests cover only the changed
 # files (#3367); the required CI check `ci` runs every test.
-GATE_CHECKS := lint dead-code test-changed
+GATE_CHECKS := lint dead-code test-changed verify-contract-test
 
 before-commit: $(GATE_CHECKS) ## Run lint, dead-code and the tests for changed files | commit前のlint・dead-code・変更範囲のテストを実行
 
@@ -89,6 +89,7 @@ before-commit: $(GATE_CHECKS) ## Run lint, dead-code and the tests for changed f
 ci-local: ## Run the full GitHub Actions gate locally | GitHub Actions相当の全gateをローカル実行
 	git fetch --no-tags origin main:refs/remotes/origin/main
 	$(MAKE) audit-deps
+	$(MAKE) verify-contract-test
 	$(MAKE) dead-code
 	$(MAKE) validate-problems
 	$(MAKE) lint-text
@@ -229,3 +230,13 @@ destroy-battles: ## Delete smoke-deployed problem stacks | smoke deployした問
 	  exit 1; \
 	fi
 	@TEAM_SLUG="$(TEAM_SLUG)" bash scripts/destroy-battles.sh $(BATTLES)
+
+.PHONY: verify verify-release verify-contract-test
+verify: ## Record native development and host-domain checks | 既存検証の実行証跡を記録
+	python3 scripts/verification/run.py fast
+
+verify-release: ## Record optional release rehearsal gaps | 任意のリハーサル未実施を記録
+	python3 scripts/verification/run.py release
+
+verify-contract-test: ## Test the pinned verification adapter | 検証adapterと固定版をテスト
+	python3 -m unittest discover -s scripts/verification -p 'test_*.py'
