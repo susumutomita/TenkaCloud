@@ -23,7 +23,7 @@
 }
 .incident-intro { padding-bottom: 32px; }
 .incident-story h2 { font-size: clamp(1.75rem, .5rem + 2.5vw, 2.5rem); line-height: 1.35; margin: 12px 0 16px; }
-.incident-intro > p:last-child { color: var(--ink-3); font-size: 12px; line-height: 1.7; }
+.incident-intro > p:last-child { color: var(--ink-3); font-size: 12px; line-height: 1.7; text-wrap: balance; }
 .incident-kicker { color: var(--ink-3); font: 11px var(--font-mono); letter-spacing: .06em; }
 .incident-layout { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 64px; align-items: start; }
 .incident-stage {
@@ -117,6 +117,8 @@
   .incident-request code { font-size: 12px; }
   .incident-record { top: 110px; right: 14px; width: 220px; }
   .record-person { padding: 14px; }
+  .record-denied { padding: 12px 14px; }
+  .record-lock { font-size: 28px; }
   .record-header, .record-footer { padding: 8px 12px; }
   .record-person strong { font-size: 14px; }
   .incident-result { left: 16px; bottom: 118px; gap: 3px; }
