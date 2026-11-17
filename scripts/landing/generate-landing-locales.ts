@@ -325,14 +325,14 @@ if (import.meta.main) {
     throw new Error("landing/index.html translations are stale");
   if (!checking) writeFileSync(indexPath, japanese);
   const pages = [
-    [englishPath, generateEnglishLanding()],
-    [join(root, "landing/pricing.html"), generatePricingPage("ja")],
-    [join(root, "landing/pricing.en.html"), generatePricingPage("en")],
+    { path: englishPath, generated: generateEnglishLanding() },
+    { path: join(root, "landing/pricing.html"), generated: generatePricingPage("ja") },
+    { path: join(root, "landing/pricing.en.html"), generated: generatePricingPage("en") },
   ];
-  for (const [path, generated] of pages) {
+  for (const { path, generated } of pages) {
     if (checking) {
-      if (readFileSync(path, "utf8") !== generated)
-        throw new Error(`${path} is stale; run generate:landing-locales`);
+      const actual: string = readFileSync(path, { encoding: "utf8" });
+      if (actual !== generated) throw new Error(`${path} is stale; run generate:landing-locales`);
     } else writeFileSync(path, generated);
   }
 }
