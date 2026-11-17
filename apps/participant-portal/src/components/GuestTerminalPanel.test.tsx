@@ -1,6 +1,10 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PortalAuthError } from "../api/portal-client";
+import {
+  PortalAssumeRoleError,
+  PortalAuthError,
+  PortalValidationError,
+} from "../api/portal-client";
 
 /**
  * GuestTerminalPanel: issues a one-use Simulator terminal code and shows it with the terminal
@@ -62,6 +66,40 @@ describe("GuestTerminalPanel", () => {
     fireEvent.click(screen.getByText("sso_credentials.terminal.issue_button"));
     await waitFor(() => expect(screen.getByText("The server is still starting.")).toBeTruthy());
     expect(screen.getByText("sso_credentials.terminal.error_header")).toBeTruthy();
+  });
+
+  it("explains a viewer-role failure and a host validation refusal, and dismisses them", async () => {
+    mockGet.mockRejectedValueOnce(new PortalAssumeRoleError("competitor", "AccessDenied"));
+    render(<GuestTerminalPanel {...props} />);
+    fireEvent.click(screen.getByText("sso_credentials.terminal.issue_button"));
+    expect(await screen.findByText(/sso_credentials\.cli\.assume_role_failed/)).toBeTruthy();
+    mockGet.mockRejectedValueOnce(new PortalValidationError("guest_not_ready"));
+    fireEvent.click(screen.getByText("sso_credentials.terminal.issue_button"));
+    expect(
+      await screen.findByText(/sso_credentials\.validation_error.*guest_not_ready/),
+    ).toBeTruthy();
+    const dismiss = document.querySelector<HTMLButtonElement>('button[class*="dismiss-button"]');
+    fireEvent.click(dismiss as HTMLButtonElement);
+    await waitFor(() =>
+      expect(screen.queryByText("sso_credentials.terminal.error_header")).toBeNull(),
+    );
+  });
+
+  it("copies the code when the clipboard is available and does nothing otherwise", async () => {
+    mockGet.mockResolvedValue({
+      code: "d".repeat(64),
+      terminalUrl: "http://127.0.0.1:4566/_simulator/terminal",
+      expiresAt: "2999-01-01T00:00:00Z",
+    });
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    render(<GuestTerminalPanel {...props} />);
+    fireEvent.click(screen.getByText("sso_credentials.terminal.issue_button"));
+    fireEvent.click(await screen.findByText("sso_credentials.terminal.copy_button"));
+    expect(writeText).toHaveBeenCalledWith("d".repeat(64));
+    Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+    fireEvent.click(screen.getByText("sso_credentials.terminal.copy_button"));
+    expect(writeText).toHaveBeenCalledTimes(1);
   });
 
   it("signs out on an expired session and issues nothing in mock mode", async () => {
