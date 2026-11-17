@@ -18,6 +18,7 @@ import { HostStore } from "../store";
 import { uptimeGeneration } from "../uptime";
 import { DisruptionAws } from "./disruption-fixture";
 import { FakeAws } from "./fake-aws";
+import { bootstrapOrganizer } from "./organizer-fixture";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const cleanup: (() => void)[] = [];
@@ -30,6 +31,7 @@ function fakeBattle() {
   const battle: SimulatorBattle = {
     clockDomain: "tc-clock",
     probe(job) {
+      if (job.status !== "COMPLETE") return undefined;
       calls.push(`probe:${job.jobId}`);
       return async () => ({ ok: true, status: 200, responseTimeMs: 1 });
     },
@@ -90,105 +92,127 @@ test("Hello World Battle is offered in simulator mode only with a configured Bat
   ).toContain("hello-world-battle");
 });
 
-test("the Battle runtime probes, seals and offers a gated guest terminal", async () => {
-  const { battle, calls } = fakeBattle();
-  const fixture = host(battle);
-  const problem = fixture.cloud.catalog().find((entry) => entry.problemId === "hello-world-battle");
-  if (!problem) throw new Error("Battle missing from the simulator catalog");
-  const now = Date.now();
-  const eventId = id();
-  const teamId = id();
-  fixture.store.putEvent({
-    eventId,
-    name: "Battle",
-    status: "READY",
-    createdAt: new Date(now).toISOString(),
-    updatedAt: new Date(now).toISOString(),
-    startsAt: new Date(now - 1000).toISOString(),
-    expiresAt: Math.floor(now / 1000) + 3600,
-    scoringLocked: false,
-    scoreboardFreezeMinutes: 0,
-    problems: [problem],
-  });
-  fixture.store.putTeam({
-    teamId,
-    eventId,
-    internalSlug: "alpha",
-    displayName: "Alpha",
-    loginKey: "battle-team-key",
-    snapshot: null,
-    score: 0,
-    completedProblems: 0,
-    scoreEvents: [],
-    aws: { accountId: "000000000000", roleName: "TenkaCloud-SimulatorDeploy-Role" },
-  });
-  const jobId = id();
-  const job: Job = {
-    jobId,
-    eventId,
-    teamId,
-    problemId: problem.problemId,
-    definition: problem.definition,
-    offset: 0,
-    status: "COMPLETE",
-    deployedAt: now - 1000,
-    unit: JSON.stringify({
-      kind: "cloudformation",
-      accountId: "000000000000",
-      roleArn: "arn:aws:iam::000000000000:role/TenkaCloud-SimulatorDeploy-Role",
-      region: "ap-northeast-1",
-      stackName: "tc-hello-world-battle-alpha",
-      stackId: fixture.aws.seedStack("tc-hello-world-battle-alpha", [
-        { Key: "tenkacloud:job", Value: jobId },
-      ]).stackId,
-      outputs: {
-        ParticipantViewerRoleArn: "arn:aws:iam::000000000000:role/tc-hello-world-battle-viewer",
-        Ec2HostHint: "ec2-10-0-1-5.ap-northeast-1.compute.simulator.invalid",
-        InstanceId: "i-0123456789abcdef0",
-      },
-    }),
-  };
-  fixture.store.putJob(job);
-  const view = await fixture.service.participant(
-    apiRequest({ method: "GET", path: "/portal/me", token: "battle-team-key" }),
-  );
-  const listed = (view.body as { problems: { problemId: string; accessCapabilities?: string[] }[] })
-    .problems[0];
-  expect(listed?.accessCapabilities).toEqual(["guest-terminal", "cli-credentials"]);
-
-  // The job's own probe replaces the public HTTP probe.
-  expect(fixture.engine.uptimeProbe(job)).toBeDefined();
-  expect(calls).toContain(`probe:${job.jobId}`);
-
-  const terminal = () =>
-    fixture.service.participant(
-      apiRequest({
-        method: "GET",
-        path: "/portal/me/guest-terminal",
-        token: "battle-team-key",
-        query: new URLSearchParams({ jobId: job.jobId }),
+test.each(["event", "environment", "seal-failure"] as const)(
+  "the Battle runtime seals through %s teardown and offers a gated terminal",
+  async (teardown) => {
+    const { battle, calls } = fakeBattle();
+    const fixture = host(battle);
+    const seal = battle.seal;
+    battle.seal = async (target) => {
+      expect(target.status).toBe("DELETING");
+      expect(fixture.aws.deleted).toHaveLength(0);
+      await seal(target);
+      if (teardown === "seal-failure") throw new Error("seal unavailable");
+    };
+    const problem = fixture.cloud
+      .catalog()
+      .find((entry) => entry.problemId === "hello-world-battle");
+    if (!problem) throw new Error("Battle missing from the simulator catalog");
+    const now = Date.now();
+    const eventId = id();
+    const teamId = id();
+    fixture.store.putEvent({
+      eventId,
+      name: "Battle",
+      status: "READY",
+      createdAt: new Date(now).toISOString(),
+      updatedAt: new Date(now).toISOString(),
+      startsAt: new Date(now - 1000).toISOString(),
+      expiresAt: Math.floor(now / 1000) + 3600,
+      scoringLocked: false,
+      scoreboardFreezeMinutes: 0,
+      problems: [problem],
+    });
+    fixture.store.putTeam({
+      teamId,
+      eventId,
+      internalSlug: "alpha",
+      displayName: "Alpha",
+      loginKey: "battle-team-key",
+      snapshot: null,
+      score: 0,
+      completedProblems: 0,
+      scoreEvents: [],
+      aws: { accountId: "000000000000", roleName: "TenkaCloud-SimulatorDeploy-Role" },
+    });
+    const jobId = id();
+    const job: Job = {
+      jobId,
+      eventId,
+      teamId,
+      problemId: problem.problemId,
+      definition: problem.definition,
+      offset: 0,
+      status: "COMPLETE",
+      deployedAt: now - 1000,
+      unit: JSON.stringify({
+        kind: "cloudformation",
+        accountId: "000000000000",
+        roleArn: "arn:aws:iam::000000000000:role/TenkaCloud-SimulatorDeploy-Role",
+        region: "ap-northeast-1",
+        stackName: "tc-hello-world-battle-alpha",
+        stackId: fixture.aws.seedStack("tc-hello-world-battle-alpha", [
+          { Key: "tenkacloud:job", Value: jobId },
+        ]).stackId,
+        outputs: {
+          ParticipantViewerRoleArn: "arn:aws:iam::000000000000:role/tc-hello-world-battle-viewer",
+          Ec2HostHint: "ec2-10-0-1-5.ap-northeast-1.compute.simulator.invalid",
+          InstanceId: "i-0123456789abcdef0",
+        },
       }),
+    };
+    fixture.store.putJob(job);
+    const view = await fixture.service.participant(
+      apiRequest({ method: "GET", path: "/portal/me", token: "battle-team-key" }),
     );
-  // Before the guest has answered once, no code is issued (a failed start keeps it busy).
-  await expect(terminal()).rejects.toMatchObject({ status: 409, kind: "guest_not_ready" });
-  expect(calls.some((call) => call.startsWith("terminal:"))).toBe(false);
-  const state = fixture.store.uptimeState(eventId, teamId, job.problemId);
-  fixture.store.putUptimeState(eventId, teamId, job.problemId, {
-    ...state,
-    generation: uptimeGeneration(job),
-    readyAt: now,
-  });
-  const issued = await terminal();
-  expect(issued.body).toMatchObject({
-    code: "c".repeat(64),
-    terminalUrl: "http://127.0.0.1:4566/_simulator/terminal",
-  });
-  expect(calls.at(-1)).toMatch(/^terminal:i-0123456789abcdef0:/u);
+    const listed = (
+      view.body as { problems: { problemId: string; accessCapabilities?: string[] }[] }
+    ).problems[0];
+    expect(listed?.accessCapabilities).toEqual(["guest-terminal", "cli-credentials"]);
 
-  await fixture.cloud.stop(job);
-  expect(calls.at(-1)).toBe(`seal:${job.jobId}`);
-  expect(fixture.aws.deleted).toHaveLength(1);
-});
+    // The job's own probe replaces the public HTTP probe.
+    expect(fixture.engine.uptimeProbe(job)).toBeDefined();
+    expect(fixture.engine.requiresGuestReadiness(job)).toBe(true);
+    expect(fixture.engine.requiresGuestReadiness({ ...job, unit: null })).toBe(true);
+    expect(calls).toContain(`probe:${job.jobId}`);
+
+    const terminal = () =>
+      fixture.service.participant(
+        apiRequest({
+          method: "GET",
+          path: "/portal/me/guest-terminal",
+          token: "battle-team-key",
+          query: new URLSearchParams({ jobId: job.jobId }),
+        }),
+      );
+    // Before the guest has answered once, no code is issued (a failed start keeps it busy).
+    await expect(terminal()).rejects.toMatchObject({ status: 409, kind: "guest_not_ready" });
+    expect(calls.some((call) => call.startsWith("terminal:"))).toBe(false);
+    const state = fixture.store.uptimeState(eventId, teamId, job.problemId);
+    fixture.store.putUptimeState(eventId, teamId, job.problemId, {
+      ...state,
+      generation: uptimeGeneration(job),
+      readyAt: now,
+    });
+    const issued = await terminal();
+    expect(issued.body).toMatchObject({
+      code: "c".repeat(64),
+      terminalUrl: "http://127.0.0.1:4566/_simulator/terminal",
+    });
+    expect(calls.at(-1)).toMatch(/^terminal:i-0123456789abcdef0:/u);
+
+    const token = await bootstrapOrganizer(fixture.service, HOST_KEY);
+    const path =
+      teardown === "event" ? `/events/${eventId}` : `/events/${eventId}/deployments/${jobId}`;
+    expect(
+      (await fixture.service.admin(apiRequest({ method: "DELETE", path, token }))).status,
+    ).toBe(202);
+    await fixture.service.drain();
+    expect(fixture.store.jobs(eventId)[0]?.status).toBe("DELETED");
+    expect(calls.at(-1)).toBe(`seal:${job.jobId}`);
+    expect(fixture.aws.deleted).toHaveLength(1);
+  },
+);
 
 test("Battle disruptions assume the separate command role, never the deploy role", async () => {
   const roles: string[] = [];

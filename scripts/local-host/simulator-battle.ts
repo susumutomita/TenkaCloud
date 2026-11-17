@@ -112,7 +112,7 @@ export function battleKey(owner: BattleOwner): string {
 
 /** The immutable deployment identity the Simulator binds a receipt to on first resolve. */
 export function battleOwner(job: Job): BattleOwner | undefined {
-  if (job.status !== "COMPLETE" || !job.unit || !job.deployedAt) return undefined;
+  if (!job.unit || !job.deployedAt) return undefined;
   let unit: StackUnit;
   try {
     unit = unitOf(job);
@@ -262,6 +262,7 @@ export async function connectSimulatorBattle(
   return {
     clockDomain: availability.clockDomain,
     probe(job) {
+      if (job.status !== "COMPLETE") return undefined;
       const owner = battleOwner(job);
       const hint = owner ? unitOf(job).outputs?.Ec2HostHint : undefined;
       if (!owner || !hint) return undefined;

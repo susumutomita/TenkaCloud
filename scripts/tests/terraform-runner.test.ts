@@ -213,6 +213,8 @@ describe("restricted Terraform organizer runner", () => {
     expect(h.run("plan")).toBe(1);
     const i = setup();
     mkdirSync(i.root, { mode: 0o755 });
+    // Keep this deliberately unsafe fixture independent of the caller's umask.
+    chmodSync(i.root, 0o755);
     expect(i.prepare()).toBe(1);
   });
   test("no modules, backends, credentials, provisioners or interpolation", () => {
