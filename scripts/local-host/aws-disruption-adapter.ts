@@ -16,6 +16,13 @@ import type {
   Observation,
   Submission,
 } from "./disruption-model";
+import {
+  authorityBinding,
+  authorityUnavailable,
+  guardAuthorityClient,
+  type SimulatorAuthority,
+  sameAuthority,
+} from "./simulator-authority";
 
 const credentialsSchema = z.object({
   AccessKeyId: z.string().min(1),
@@ -75,8 +82,20 @@ export class AwsDisruptionAdapter implements DisruptionAdapter {
     private readonly unavailableReason?: string,
     /** A dedicated command role to assume instead of the target's deploy role (Simulator Battle). */
     private readonly commandRoleArn?: string,
-  ) {}
+    private readonly simulatorAuthority?: SimulatorAuthority,
+    private readonly assertConnection?: () => void,
+  ) {
+    const binding = authorityBinding(simulatorAuthority);
+    this.simulatorAuthority = binding ? Object.freeze(binding) : undefined;
+  }
+  private assertAuthority(target: DisruptionTarget): void {
+    this.assertConnection?.();
+    if (!sameAuthority(authorityBinding(target.simulatorAuthority), this.simulatorAuthority))
+      throw authorityUnavailable();
+  }
   private async client(target: DisruptionTarget): Promise<Ssm> {
+    this.assertAuthority(target);
+    if (this.simulatorAuthority && !this.clients.ssm) throw authorityUnavailable();
     // Retained recovery work also needs this capability; a failed job is not sufficient.
     if (this.unavailableReason) throw new Error(this.unavailableReason);
     const assumed = await this.clients.sts.send(
@@ -88,6 +107,7 @@ export class AwsDisruptionAdapter implements DisruptionAdapter {
       }),
       { abortSignal: AbortSignal.timeout(4000) },
     );
+    this.assertAuthority(target);
     const parsed = credentialsSchema.parse(assumed.Credentials);
     const credentials = {
       accessKeyId: parsed.AccessKeyId,
@@ -95,13 +115,16 @@ export class AwsDisruptionAdapter implements DisruptionAdapter {
       sessionToken: parsed.SessionToken,
     };
     const config = { region: target.region, credentials, maxAttempts: 1 };
-    return this.clients.ssm?.(config) ?? new SSMClient(config);
+    return guardAuthorityClient(this.clients.ssm?.(config) ?? new SSMClient(config), () =>
+      this.assertAuthority(target),
+    );
   }
   async submit(args: Parameters<DisruptionAdapter["submit"]>[0]): Promise<Submission> {
     let client: Ssm | undefined;
     try {
       client = await this.client(args.target);
       args.assertCurrent();
+      this.assertAuthority(args.target);
     } catch {
       client?.destroy();
       return {
