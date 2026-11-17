@@ -68,7 +68,7 @@ describe("landing page SEO", () => {
     expect(english).toContain(
       '<link rel="canonical" href="https://tenkacloud.com/index.en.html" />',
     );
-    expect(english).toContain("to hands-on cloud exercises.");
+    expect(english).toContain("How do they happen?");
     expect(english).toContain("Build cloud capability across the org.");
   });
 
@@ -214,6 +214,15 @@ describe("landing interactive onboarding entry", () => {
     expect(hero).not.toContain('href="/portal-demo/start');
     expect(hero).toContain('data-cta="start-drill"');
     expect(hero).toContain("回答を提出。ヒントと採点");
+    expect(hero).toContain("ニュースで聞く情報漏えい、");
+    expect(hero).toContain("どうやって起こるの？");
+    expect(hero).toContain("3分で体験する、セキュリティインシデント。");
+    expect(hero).toContain("漏えいの仕組みを知り、手を動かして止めてみよう。");
+    expect(hero).toContain("3分は目標時間");
+    expect(hero.indexOf("3分は目標時間")).toBeLessThan(hero.indexOf("<h1>"));
+    expect(hero).toContain("所要時間は未検証で、まだプレーできません。");
+    expect(hero).toContain("現在の操作デモを見る");
+    expect(hero).toContain("実環境への攻撃・修復を体験するものではありません。");
     expect(hero).not.toContain("旧版");
   });
 
@@ -247,6 +256,9 @@ describe("landing interactive onboarding entry", () => {
     expect(hero).toContain('href="/docs/getting-started/index.en.html#local-start"');
     expect(hero).toContain('data-cta="local-start"');
     expect(hero).toContain("including hints and scoring");
+    expect(hero).toContain("Three minutes is a target");
+    expect(hero).toContain("this challenge is not playable yet");
+    expect(hero).toContain("Open the current walkthrough");
     expect(hero).not.toContain("Earlier introductory demo");
   });
 });

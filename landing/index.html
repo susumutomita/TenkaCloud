@@ -123,7 +123,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" />
-<link rel="stylesheet" href="./styles/main.css?v=37d79ddd8e" />
+<link rel="stylesheet" href="./styles/main.css?v=6f930e2dab" />
 </head>
 <body>
 
@@ -162,22 +162,24 @@
   <canvas class="ink-bg" aria-hidden="true"></canvas>
   <div class="wrap hero-grid">
     <div class="hero-copy">
+      <p class="hero-preview" data-i18n="hero.preview">開発中の体験 · 3分は目標時間</p>
       <h1>
-        <span data-i18n="hero.h1a">身近な判断問題から、</span><em data-i18n="hero.h1b">クラウドの実践まで。</em>
+        <span data-i18n="hero.h1a">ニュースで聞く情報漏えい、</span><em data-i18n="hero.h1b">どうやって起こるの？</em>
       </h1>
-      <p class="sub" data-i18n="hero.sub">TenkaCloudは、短い回答問題から実際のクラウドを使う演習まで、学ぶ人に合わせて作り、開催できるプラットフォーム。問題選択・チーム運営・採点・結果確認を支えます。</p>
-      <p class="hero-vibe" data-i18n="hero.vibe"><strong>開催する方へ。</strong> ローカル開催は SQLite を使い、AWS アカウントは不要です。Docker 問題には Docker Engine と Compose が必要です。</p>
+      <p class="hero-tagline" data-i18n="hero.tagline">3分で体験する、セキュリティインシデント。</p>
+      <p class="sub" data-i18n="hero.sub">漏えいの仕組みを知り、手を動かして止めてみよう。</p>
+      <p class="hero-vibe" data-i18n="hero.vibe"><strong>最初の1問を準備中です。</strong> 他人の架空の顧客情報が見えてしまう。設定を直し、他人は読めず本人は使えることを確かめる演習です。所要時間は未検証で、まだプレーできません。</p>
       <a class="hero-quest-card" href="/portal-demo/?demo=1&amp;goto=start" data-cta="start-drill">
-        <span class="hero-quest-meta" data-i18n="hero.quest_meta">TenkaCloud ブラウザ体験版 · 登録不要</span>
+        <span class="hero-quest-meta" data-i18n="hero.quest_meta">現在公開中 · ブラウザ操作デモ · 登録不要</span>
         <span class="hero-quest-title" data-i18n="hero.quest_title">演習の流れを、試してみる。</span>
-        <span class="hero-quest-desc" data-i18n="hero.quest_desc">問題を開き、接続先を確かめ、回答を提出。ヒントと採点まで、参加者の操作をブラウザで体験できます。</span>
-        <span class="hero-quest-cta"><span data-i18n="hero.quest_cta">TenkaCloud を体験する</span> →</span>
+        <span class="hero-quest-desc" data-i18n="hero.quest_desc">問題を開き、接続先を確かめ、回答を提出。ヒントと採点までの操作デモです。準備中の情報漏えい問題や、実環境への攻撃・修復を体験するものではありません。</span>
+        <span class="hero-quest-cta"><span data-i18n="hero.quest_cta">現在の操作デモを見る</span> →</span>
       </a>
       <p class="hero-secondary">
         <a href="./portal-demo/?demo=1&amp;goto=%2Fproblems%3Flang%3Dja" data-i18n-href="mailGame.href" data-i18n="nav.games">ゲームで学ぶ</a> ·
         <a href="/docs/getting-started/#local-start" data-i18n-href="hero.startHref" data-cta="local-start"><span data-i18n="hero.cta_demo">自分の PC で起動する</span></a>
         ·
-        <a href="/videos/lp/tenkacloud-60s.mp4?v=54d2534496" target="_blank" rel="noopener noreferrer" data-cta="watch-60s"><span data-i18n="hero.cta_video">▶ 1 分でわかる</span></a>
+        <a href="/videos/lp/tenkacloud-60s.mp4?v=54d2534496" target="_blank" rel="noopener noreferrer" data-cta="watch-60s"><span data-i18n="hero.cta_video">▶ 現行の紹介動画（1分）</span></a>
         ·
         <span data-i18n="hero.host_prefix">主催者の方へ:</span>
         <a href="./docs/manual/organizer/" target="_blank" rel="noopener noreferrer" data-cta="deploy-aws" data-i18n-href="hero.hostHref"><span data-i18n="hero.cta_host">開催ガイド</span> →</a>
@@ -655,7 +657,7 @@
 </footer>
 
 <script src="./ink-bg.js" defer></script>
-<script src="./app.js?v=826f3201bf" defer></script>
+<script src="./app.js?v=594b48643f" defer></script>
 
 </body>
 </html>

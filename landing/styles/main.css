@@ -143,10 +143,7 @@ p { margin: 0; }
   letter-spacing: 0;
   text-wrap: balance;
 }
-/* TenkaCloudChallenge#468 (funnel): the killer line above speaks to cloud
-   engineers; this second band catches vibe coders — people who built an app
-   with AI and want to ship it safely. Free / no AWS account / in-browser is
-   what local play already offers; real AWS is only the StackStack finale. */
+/* Keep the upcoming incident exercise distinct from the available walkthrough. */
 .hero .hero-vibe {
   max-width: 410px;
   margin: 18px 0 0;
@@ -838,3 +835,6 @@ footer .footer-legal-links { display: inline-flex; flex-wrap: wrap; gap: 0 6px; 
 .exercise-idea {max-width:760px;margin:20px auto;font-size:14px;line-height:1.8;color:var(--ink-2);}
 
 .learning-loop {margin:18px 0 12px;font-size:clamp(18px,2vw,24px);font-weight:700;color:var(--blue);line-height:1.6;}
+
+.hero .hero-preview { font-size: 12px; font-weight: 700; color: var(--ink-2); margin: 0 0 16px; }
+.hero .hero-tagline { font-size: 20px; line-height: 1.6; font-weight: 700; margin: 0 0 12px; max-width: 440px; }
