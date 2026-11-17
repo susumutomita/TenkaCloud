@@ -36,6 +36,9 @@
   let source = null;
   let failed = false;
   let disposed = false;
+  let distortionStart = 0;
+  /** @type {Animation | null} */
+  let distortionAnimation = null;
 
   function renderState() {
     root.dataset.phase = String(phase);
@@ -57,7 +60,33 @@
       button.setAttribute("aria-pressed", String(button.dataset.personSelect === person));
     });
     updateSource(denied);
+    beginDistortion();
     schedulePaint();
+  }
+
+  function stopDistortion() {
+    distortionStart = 0;
+    distortionAnimation?.cancel();
+    distortionAnimation = null;
+  }
+
+  function beginDistortion() {
+    stopDistortion();
+    if (!visible || document.hidden || motion.matches) return;
+    distortionStart = performance.now();
+    const layer = element(".incident-world");
+    // The reference's flowing entry/exit becomes a short wave in the data layer.
+    // DOM text, responses and controls are outside this layer and remain readable.
+    if (typeof layer.animate === "function") {
+      distortionAnimation = layer.animate(
+        [
+          { transform: "translate(0, 0) skewY(0deg)" },
+          { transform: "translate(-10px, 6px) skewY(-3deg)", offset: 0.42 },
+          { transform: "translate(0, 0) skewY(0deg)" },
+        ],
+        { duration: 760, easing: "cubic-bezier(.22, 1, .36, 1)" },
+      );
+    }
   }
 
   /** @param {boolean} denied */
@@ -123,16 +152,39 @@
     return dpr;
   }
 
-  /** @param {DrawableContext} ctx @param {HTMLElement} node */
-  function drawEcho(ctx, node) {
-    // Readable record stays in DOM; only its visual echo is fragmented.
-    if (phase === 1 && !motion.matches) {
-      for (let i = 0; i < 5; i++) {
-        ctx.drawElementImage(node, 0, i * 12, 250, 12, i * -12, i * 24, 250, 12);
-      }
-    } else {
+  /** @param {DrawableContext} ctx @param {HTMLElement} node @param {number} elapsed */
+  function drawEcho(ctx, node, elapsed) {
+    if (motion.matches || elapsed >= 1) {
       ctx.drawElementImage(node, 0, 0);
+      return;
     }
+    const strength = Math.sin(elapsed * Math.PI) * 30;
+    const slice = (node.offsetHeight || 72) / 18;
+    // Bounded 2D band displacement: a flowing HTML echo, no WebGPU dependency.
+    for (let i = 0; i < 18; i++) {
+      const wave = Math.sin(i * 0.48 - elapsed * 7);
+      const drift = wave * strength + elapsed * strength;
+      ctx.drawElementImage(
+        node,
+        0,
+        i * slice,
+        250,
+        slice,
+        drift,
+        i * slice - strength * 0.45,
+        250 + strength * 0.6,
+        slice + 1,
+      );
+    }
+  }
+
+  /** @param {DrawableContext} ctx @param {number} width @param {number} height */
+  function placeEcho(ctx, width, height) {
+    const drift = motion.matches ? 0 : progress * 28;
+    ctx.save();
+    ctx.globalAlpha = phase === 1 ? 0.65 : 0.22;
+    ctx.translate(width * 0.12, height * 0.4 + drift);
+    ctx.rotate(phase === 1 && !motion.matches ? -0.14 : 0);
   }
 
   function paint() {
@@ -144,14 +196,14 @@
       const dpr = resizeSurface(width, height);
       context.setTransform(dpr, 0, 0, dpr, 0, 0);
       context.clearRect(0, 0, width, height);
-      const drift = motion.matches ? 0 : progress * 28;
-      context.save();
-      context.globalAlpha = phase === 1 ? 0.65 : 0.22;
-      context.translate(width * 0.12, height * 0.4 + drift);
-      context.rotate(phase === 1 && !motion.matches ? -0.14 : 0);
-      drawEcho(context, source);
+      placeEcho(context, width, height);
+      const elapsed = distortionStart
+        ? Math.min(1, (performance.now() - distortionStart) / 760)
+        : 1;
+      drawEcho(context, source, elapsed);
       context.restore();
       root.dataset.renderer = "canvas";
+      if (elapsed < 1) schedulePaint();
     } catch (error) {
       console.warn("Incident visual: HTML-in-Canvas failed; using DOM scene.", error);
       fallback();
@@ -198,12 +250,27 @@
   );
   window.addEventListener("scroll", onScroll, { ...options, passive: true });
   window.addEventListener("resize", schedulePaint, options);
-  motion.addEventListener("change", schedulePaint, options);
-  document.addEventListener("visibilitychange", schedulePaint, options);
+  motion.addEventListener(
+    "change",
+    () => {
+      stopDistortion();
+      schedulePaint();
+    },
+    options,
+  );
+  document.addEventListener(
+    "visibilitychange",
+    () => {
+      if (document.hidden) stopDistortion();
+      schedulePaint();
+    },
+    options,
+  );
   const intersection = new IntersectionObserver(([entry]) => {
     visible = entry.isIntersecting;
     if (visible) onScroll();
     else {
+      stopDistortion();
       cancelAnimationFrame(frame);
       frame = 0;
     }
@@ -213,6 +280,7 @@
   resize.observe(canvas);
   function cleanup() {
     disposed = true;
+    stopDistortion();
     abort.abort();
     intersection.disconnect();
     resize.disconnect();

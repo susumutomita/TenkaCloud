@@ -21,6 +21,8 @@ function setup(mode: "unsupported" | "drawable" | "failure" = "unsupported") {
   let intersection: (entries: { isIntersecting: boolean }[]) => void = (_entries) => undefined;
   let frame: (() => void) | undefined;
   let draws = 0;
+  let clock = 100;
+  Object.defineProperty(window.performance, "now", { value: () => clock });
   let disconnected = 0;
   let tops = [100, 1200, 2200];
   const context = {
@@ -123,6 +125,9 @@ function setup(mode: "unsupported" | "drawable" | "failure" = "unsupported") {
     draws: () => draws,
     disconnected: () => disconnected,
     warnings,
+    advance: (milliseconds: number) => {
+      clock += milliseconds;
+    },
     intersection,
   };
 }
@@ -185,6 +190,24 @@ describe("incident explanation", () => {
     page.click("[data-fix]");
     page.flush();
     expect(page.draws()).toBe(before);
+    page.dom.window.close();
+  });
+
+  it("settles the native data distortion instead of keeping a perpetual render loop", () => {
+    const page = setup("drawable");
+    page.flush();
+    page.click('[data-person-select="other"]');
+    page.flush();
+    const moving = page.draws();
+    page.advance(900);
+    page.flush();
+    expect(page.draws()).toBeGreaterThan(moving);
+    const settled = page.draws();
+    page.flush();
+    expect(page.draws()).toBe(settled);
+    expect(page.http()).toBe("200 OK");
+    page.click("[data-fix]");
+    expect(page.http()).toBe("403 Forbidden");
     page.dom.window.close();
   });
 

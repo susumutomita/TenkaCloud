@@ -124,9 +124,10 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" />
 <link rel="stylesheet" href="./styles/main.css?v=6f930e2dab" />
-<link rel="stylesheet" href="./styles/incident.css?v=790fac83d9" />
+<link rel="stylesheet" href="./styles/incident.css?v=3fdb3307cb" />
 </head>
 <body>
+<a class="landing-skip" href="#main-start" data-i18n="incident.skip">本文へ移動</a>
 
 <nav class="nav">
   <div class="wrap">
@@ -159,11 +160,12 @@
   </div>
 </nav>
 
+<main>
 <section class="hero">
 
   <div class="wrap hero-grid">
     <div class="hero-copy">
-      <p class="hero-preview" data-i18n="hero.preview">開発中の体験 · 3分は目標時間</p>
+      <p id="main-start" tabindex="-1" class="hero-preview" data-i18n="hero.preview">開発中の体験 · 3分は目標時間</p>
       <h1>
         <span data-i18n="hero.h1a">ニュースで聞く情報漏えい、</span><em data-i18n="hero.h1b">どうやって起こるの？</em>
       </h1>
@@ -204,16 +206,13 @@
       <div class="incident-stage-top"><span>ACCESS / TRACE</span><span class="incident-stage-number">001 — 003</span></div>
       <div class="incident-world" aria-hidden="true">
         <svg class="incident-wires" viewBox="0 0 640 420" preserveAspectRatio="none">
-          <defs><pattern id="incident-grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M32 0H0V32" fill="none" stroke="currentColor" stroke-width=".5"/></pattern></defs>
-          <rect width="640" height="420" fill="url(#incident-grid)"/>
           <path class="wire-own" d="M25 100H160Q190 100 190 130V210H610"/>
           <path class="wire-other" d="M25 320H120Q150 320 150 290V210H610"/>
           <path class="wire-blocked" d="M25 320H120Q150 320 150 290V210H298"/>
           <circle class="wire-node" cx="190" cy="210" r="12"/>
           <path class="wire-gate" d="M300 60V360"/>
         </svg>
-        <div class="incident-orbit orbit-one"></div><div class="incident-orbit orbit-two"></div>
-        <div class="incident-echo"><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="incident-echo"><i></i><i></i><i></i></div>
         <canvas class="incident-canvas" content="drawable"></canvas>
         <span class="incident-boundary" data-i18n="incident.boundary">サーバー側の境界</span>
       </div>
@@ -610,6 +609,8 @@
   </div>
 </section>
 
+</main>
+
 <footer>
   <div class="wrap">
     <div>
@@ -665,8 +666,8 @@
   </div>
 </footer>
 
-<script src="./incident-story.js?v=48c51ae03f" defer></script>
-<script src="./app.js?v=7520f90d3f" defer></script>
+<script src="./incident-story.js?v=ba1b4811ea" defer></script>
+<script src="./app.js?v=88f56c0314" defer></script>
 
 </body>
 </html>
