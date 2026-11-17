@@ -125,7 +125,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" />
 <link rel="stylesheet" href="./styles/main.css?v=6f930e2dab" />
 <link rel="stylesheet" href="./styles/incident.css?v=2c9a2150f4" />
-<link rel="stylesheet" href="./styles/platform.css?v=5d57bccc5c" />
+<link rel="stylesheet" href="./styles/platform.css?v=0e9c20d1e8" />
 </head>
 <body class="platform-landing">
 <a class="landing-skip" href="#main-start" data-i18n="incident.skip">本文へ移動</a>
@@ -210,7 +210,7 @@
             </div>
             <div class="portal-collapsed" data-i18n="preview.quests.cleared">⌄ 解決済み (0)</div>
           </div></div>
-<div class="platform-scene-panel" data-scene-panel="1"><video class="platform-background-video" data-ambient-video data-src="/assets/lp-motion/organizer.mp4?v=e1179c0a66" poster="./assets/lp-motion/organizer.jpg" muted loop playsinline preload="none" aria-hidden="true"></video><div class="portal-preview score-events-preview">
+<div class="platform-scene-panel" data-scene-panel="1"><video class="platform-background-video" data-ambient-video data-src="/assets/lp-motion/organizer.mp4?v=2500ab19ef" poster="./assets/lp-motion/organizer.jpg" muted loop playsinline preload="none" aria-hidden="true"></video><div class="portal-preview score-events-preview">
             <div class="portal-page-title" data-i18n="preview.score_events.title">Score events</div>
             <div class="portal-page-desc" data-i18n="preview.score_events.desc">自チームのスコア変動履歴 (30 秒ごと自動更新、新しい順 100 件まで)</div>
             <div class="portal-container">
@@ -263,8 +263,20 @@
 <button type="button" data-scene-select="0" aria-pressed="true"><span>01</span> <span data-i18n="platform.sceneQuests">問題に挑む</span></button>
 <button type="button" data-scene-select="1" aria-pressed="false"><span>02</span> <span data-i18n="platform.sceneScores">演習を開く</span></button>
 </div>
-</div></div><p class="hero-secondary"><a href="/videos/lp/tenkacloud-60s.mp4?v=54d2534496" target="_blank" rel="noopener noreferrer" data-cta="watch-60s"><span data-i18n="hero.cta_video">▶ 現行の紹介動画（1分）</span></a></p><p class="hero-trust" data-i18n="hero.trust">合同会社 BULL 運営 · Apache 2.0</p></div></div></section>
+</div></div><p class="hero-secondary"><a href="https://youtu.be/k3087kMJmgI" target="_blank" rel="noopener noreferrer" data-cta="watch-60s"><span data-i18n="hero.cta_video">▶ 1分で見る</span></a></p><p class="hero-trust" data-i18n="hero.trust">合同会社 BULL 運営 · Apache 2.0</p></div></div></section>
 
+
+<section class="platform-section platform-custom" id="custom-problems" aria-labelledby="custom-title">
+<div class="wrap platform-custom-layout">
+<div><h2 id="custom-title" data-i18n="platform.customTitle">自分たちの課題を、<br>練習問題に。</h2>
+<p class="platform-lead" data-i18n="platform.customBody">教えたい手順も、繰り返すミスも。チームに合う問題を作り、一緒に試せます。</p>
+<a href="./docs/manual/problem-author/" data-i18n-href="extend.cta3Href" data-i18n="platform.customGuide">問題の作り方を見る →</a></div>
+<figure class="platform-problem-sheet"><figcaption data-i18n="platform.customExample">自分で作る問題文の例</figcaption>
+<h3 data-i18n="platform.customTopic">使っていないリソースを探す</h3>
+<dl><div><dt data-i18n="platform.customSituationLabel">状況</dt><dd data-i18n="platform.customSituation">毎月のクラウド費用が増えている。</dd></div>
+<div><dt data-i18n="platform.customGoalLabel">ゴール</dt><dd data-i18n="platform.customGoal">不要なリソースを特定し、停止する。</dd></div>
+<div><dt data-i18n="platform.customFirstLabel">最初の操作</dt><dd data-i18n="platform.customFirst">利用状況と作成者を調べる。</dd></div></dl>
+</figure></div></section>
 
 <section class="platform-section" id="practice-question" aria-labelledby="practice-question-title">
 <div class="wrap">
@@ -308,9 +320,9 @@
 <div class="platform-start-list">
 <article class="platform-start-option"><a class="platform-entry-media" href="/portal-demo/?demo=1&amp;goto=start" aria-labelledby="entry-demo-title"><video data-ambient-video data-src="/assets/lp-motion/participant.mp4?v=e8d2438279" poster="./assets/lp-motion/participant.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></a><p class="platform-option-meta" data-i18n="platform.demoStatus">ブラウザー / 登録不要</p><h3 id="entry-demo-title" data-i18n="platform.demoTitle">操作を試す</h3><p data-i18n="platform.demoBody">問題を開いて、回答・採点まで。</p><a href="/portal-demo/?demo=1&amp;goto=start" data-i18n="platform.demoLink">操作デモへ →</a></article>
 <article class="platform-start-option" id="security-minigames"><a class="platform-entry-media" href="./portal-demo/?demo=1&goto=%2Fproblems%3Flang%3Dja" data-i18n-href="mailGame.href" aria-labelledby="entry-game-title"><video data-ambient-video data-src="/assets/lp-motion/game.mp4?v=bd46212461" poster="./assets/lp-motion/game.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></a><p class="platform-option-meta" data-i18n="platform.gameStatus">ブラウザー / AWS・登録不要</p><h3 id="entry-game-title" data-i18n="mailGame.h">ゲームで遊ぶ</h3><p data-i18n="platform.gameBody">セキュリティの基礎を、ブラウザーで。</p><a href="./portal-demo/?demo=1&goto=%2Fproblems%3Flang%3Dja" data-i18n-href="mailGame.href" data-i18n="mailGame.cta">ゲーム一覧へ →</a></article>
-<article class="platform-start-option"><a class="platform-entry-media" href="/docs/getting-started/#local-start" data-i18n-href="hero.startHref" aria-labelledby="entry-host-title"><video data-ambient-video data-src="/assets/lp-motion/organizer.mp4?v=e1179c0a66" poster="./assets/lp-motion/organizer.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></a><p class="platform-option-meta" data-i18n="platform.localStatus">自分のPC / AWS不要</p><h3 id="entry-host-title" data-i18n="platform.localTitle">自分で開催する</h3><p data-i18n="platform.localShort">問題を選んで、チームを招待。</p><a href="/docs/getting-started/#local-start" data-i18n-href="hero.startHref" data-i18n="hero.cta_demo" data-cta="local-start">起動ガイドへ →</a></article>
+<article class="platform-start-option"><a class="platform-entry-media" href="/docs/getting-started/#local-start" data-i18n-href="hero.startHref" aria-labelledby="entry-host-title"><video data-ambient-video data-src="/assets/lp-motion/organizer.mp4?v=2500ab19ef" poster="./assets/lp-motion/organizer.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></a><p class="platform-option-meta" data-i18n="platform.localStatus">自分のPC / AWS不要</p><h3 id="entry-host-title" data-i18n="platform.localTitle">自分で開催する</h3><p data-i18n="platform.localShort">問題を選んで、チームを招待。</p><a href="/docs/getting-started/#local-start" data-i18n-href="hero.startHref" data-i18n="hero.cta_demo" data-cta="local-start">起動ガイドへ →</a></article>
 </div><details class="platform-entry-notes"><summary data-i18n="platform.entryNotes">利用条件とデモの範囲</summary><p data-i18n="hero.quest_desc">問題を開いて接続先を確認し、回答を提出する操作デモです。実環境への攻撃・修復を行うものではありません。</p><p data-i18n="platform.localBody">ローカル開催は AWS アカウント不要。Docker 問題の条件やクラウド開催は起動ガイドで確認できます。</p></details>
-<div class="platform-film"><div><p class="eyebrow" data-i18n="platform.filmEyebrow">1分で見る</p><h3 id="film-title" data-i18n="platform.filmTitle">参加から開催まで、実際の画面で。</h3></div><video controls playsinline preload="none" poster="./assets/lp-motion/film.jpg" aria-labelledby="film-title"><source src="/videos/lp/tenkacloud-60s.mp4?v=54d2534496" type="video/mp4"></video><p data-i18n="platform.filmNote">ローカル環境で収録した操作画面です。動画は音楽と効果音付きです。</p></div>
+<div class="platform-film"><div><p class="eyebrow" data-i18n="platform.filmEyebrow">1分で見る</p><h3 id="film-title" data-i18n="platform.filmTitle">参加から開催まで、実際の画面で。</h3></div><video controls playsinline preload="none" poster="./assets/lp-motion/film.jpg" aria-labelledby="film-title"><source src="/videos/lp/tenkacloud-60s.mp4?v=54d2534496" type="video/mp4"></video><p><a href="https://youtu.be/k3087kMJmgI" target="_blank" rel="noopener noreferrer" data-i18n="platform.youtube">YouTube で見る ↗</a></p><p data-i18n="platform.filmNote">ローカル環境で収録した操作画面です。動画は音楽と効果音付きです。</p></div>
 <p class="platform-fee-note" data-i18n="platform.feeNote">OSS 本体のライセンス料は無料です。AWS などの環境利用料は別で、運営代行は任意の有料サービスです。</p>
 </div>
 </section>
@@ -697,7 +709,7 @@
 <script src="./platform-motion.js?v=2701037cc6" defer></script>
 <script src="./platform-page.js?v=b0701d9579" defer></script>
 <script src="./incident-story.js?v=ba1b4811ea" defer></script>
-<script src="./app.js?v=e96adb5d6a" defer></script>
+<script src="./app.js?v=9dd7073d52" defer></script>
 
 </body>
 </html>

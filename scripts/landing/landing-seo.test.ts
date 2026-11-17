@@ -489,12 +489,13 @@ describe("product video placement (#2696 P1)", () => {
     expect(bytes).toBeLessThan(25 * 1024 * 1024);
   });
 
-  it("should link the 60s video from the hero secondary row on both pages", () => {
+  it("should link the official YouTube video from the hero and retain the self-hosted full film", () => {
     for (const page of ["landing/index.html", "landing/index.en.html"]) {
       const html = read(page);
       expect(html).toContain('data-cta="watch-60s"');
       const version = currentMediaVersions()["videos/lp/tenkacloud-60s.mp4"];
-      expect(html).toContain(`href="/videos/lp/tenkacloud-60s.mp4?v=${version}"`);
+      expect(html).toContain('href="https://youtu.be/k3087kMJmgI"');
+      expect(html).toContain(`src="/videos/lp/tenkacloud-60s.mp4?v=${version}"`);
       expect(html).not.toContain("tenkacloud-30s.mp4");
     }
   });

@@ -289,3 +289,31 @@ html[data-motion="paused"] .platform-landing .hero { transition: none; }
 .platform-landing .hero-copy { padding-bottom: 60px; }
 @media(max-width:980px) { .platform-landing .hero-copy { padding-bottom: 128px; } .platform-landing .hero .platform-preview::after, .platform-landing .hero[data-hero-scene="1"] .platform-preview::after { background: linear-gradient(90deg,rgba(16,24,32,.95),rgba(16,24,32,.8) 62%,rgba(16,24,32,.6)); } }
 @media print { .platform-landing .hero, .platform-landing .hero[data-hero-scene="1"] { background: #fff; } }
+
+/* Keep real screen text out of the headline's reading area. */
+.platform-landing .hero h1 { max-width: 850px; }
+.platform-preview .portal-preview { display: none; }
+.platform-background-video { inset: 20% 0 auto auto; width: 54%; height: 56%; object-fit: contain; object-position: center; mask-image: linear-gradient(90deg,transparent,#000 30%); filter: brightness(.8); }
+.platform-landing .hero .platform-preview::after, .platform-landing .hero[data-hero-scene="1"] .platform-preview::after { background: linear-gradient(90deg,#101820 0%,#101820 48%,rgba(16,24,32,.8) 56%,transparent 73%); }
+.platform-custom { background: #f5f7fb; }
+.platform-custom-layout { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 64px; }
+.platform-custom h2 { margin-top: 0; }
+.platform-custom-layout > div > a { display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; font-weight: 600; }
+.platform-problem-sheet { margin: 0; padding: 36px; background: #fff; border-top: 3px solid var(--blue); box-shadow: 0 16px 48px rgba(7,17,31,.05); }
+.platform-problem-sheet figcaption { font-size: 12px; color: var(--ink-3); }
+.platform-problem-sheet h3 { font-size: 25px; line-height: 1.5; margin: 24px 0; }
+.platform-problem-sheet dl { margin: 0; }
+.platform-problem-sheet dl > div { border-top: 1px solid var(--line); padding: 16px 0; }
+.platform-problem-sheet dt { font-size: 11px; color: var(--ink-3); margin-bottom: 8px; }
+.platform-problem-sheet dd { font-size: 15px; line-height: 1.7; margin: 0; }
+@media(max-width:980px) {
+  .platform-landing .hero .platform-preview { position: relative; inset: auto; height: 260px; width: 100%; min-height: 260px; margin-top: 28px; }
+  .platform-landing .hero .platform-preview::after { display: none; }
+  .platform-landing .hero-copy { padding-bottom: 0; }
+  .platform-background-video { inset: 0; width: 100%; height: 190px; mask-image: none; filter: none; }
+  .platform-landing .hero .platform-scene-controls { left: 0; right: 0; bottom: 0; }
+  .platform-custom-layout { grid-template-columns: 1fr; gap: 36px; }
+  .platform-problem-sheet { padding: 24px; }
+  .platform-problem-sheet h3 { font-size: 22px; }
+}
+@media print { .platform-custom-layout { display: block; } .platform-problem-sheet { border: 1px solid var(--line); box-shadow: none; break-inside: avoid; } }

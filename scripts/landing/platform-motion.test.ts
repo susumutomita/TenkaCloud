@@ -158,3 +158,34 @@ describe("visual entries and separate pricing", () => {
     });
   }
 });
+
+describe("team-specific practice is visible before individual incident examples", () => {
+  for (const locale of ["ja", "en"] as const) {
+    it(`${locale} labels the authoring example and links to the real author guide`, () => {
+      const doc = new JSDOM(read(locale === "ja" ? "index.html" : "index.en.html")).window.document;
+      const sections = [...doc.querySelectorAll("main > section")].map((section) => section.id);
+      expect(sections.indexOf("custom-problems")).toBeLessThan(
+        sections.indexOf("practice-question"),
+      );
+      const section = doc.getElementById("custom-problems");
+      expect(section?.querySelector("h2")?.textContent).toMatch(/自分たちの課題|Your team/);
+      expect(section?.querySelector("figcaption")?.textContent).toMatch(
+        /自分で作る問題文の例|example problem you could write/,
+      );
+      expect(section?.querySelectorAll("a")).toHaveLength(1);
+      expect(section?.querySelector("a")?.getAttribute("href")).toBe(
+        `./docs/manual/problem-author/${locale === "en" ? "index.en.html" : ""}`,
+      );
+      expect(section?.querySelectorAll("button,form")).toHaveLength(0);
+      expect(doc.querySelector(".hero-secondary a")?.getAttribute("href")).toBe(
+        "https://youtu.be/k3087kMJmgI",
+      );
+      expect(doc.querySelector(".platform-film a")?.textContent).toMatch(
+        locale === "ja" ? /YouTube で見る/ : /Watch on YouTube/,
+      );
+      expect(doc.querySelector(".platform-film video source")?.getAttribute("src")).toContain(
+        "tenkacloud-60s.mp4",
+      );
+    });
+  }
+});
