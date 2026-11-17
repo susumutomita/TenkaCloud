@@ -1,17 +1,15 @@
 /* Platform first; examples and operational details stay available on demand. */
 .platform-landing .hero { padding: 64px 0 56px; }
 .platform-landing .hero-copy { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 24px 56px; align-items: start; }
-.platform-landing .hero .hero-preview, .platform-landing .hero h1, .platform-landing .hero .sub, .platform-tagline, .platform-target-note, .platform-hero-actions, .platform-landing .hero-trust { grid-column: 1; margin: 0; }
+.platform-landing .hero .hero-preview, .platform-landing .hero h1, .platform-landing .hero .sub, .platform-hero-actions, .platform-landing .hero-trust { grid-column: 1; margin: 0; }
 .platform-landing .hero h1 { font-size: clamp(2rem, 1.3rem + 2.2vw, 3.25rem); line-height: 1.3; max-width: 590px; }
 .platform-landing .hero .sub { font-size: 16px; line-height: 1.85; font-weight: 400; text-wrap: pretty; }
-.platform-tagline { font-size: 18px; line-height: 1.7; font-weight: 700; }
-.platform-target-note { font-size: 13px; line-height: 1.8; color: var(--ink-2); }
 .platform-hero-actions { display: flex; align-items: flex-start; flex-direction: column; gap: 12px; }
 .platform-primary { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 12px 22px; border-radius: 999px; color: var(--paper); background: var(--blue); font-size: 14px; font-weight: 700; text-decoration: none; }
 .platform-primary:hover { background: #075197; }
 .platform-hero-actions > a:not(.platform-primary), .platform-role-links a, .platform-section a:not(.platform-primary) { color: var(--blue); text-underline-offset: 4px; }
 .platform-muted { color: var(--ink-3); font-size: 12px; line-height: 1.8; }
-.platform-preview { grid-column: 2; grid-row: 1 / span 7; min-width: 0; align-self: center; }
+.platform-preview { grid-column: 2; grid-row: 1 / span 5; min-width: 0; align-self: center; }
 .platform-preview > p { color: var(--ink-3); font-size: 11px; line-height: 1.7; margin-bottom: 10px; }
 .platform-preview .portal-preview { border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; box-shadow: 0 12px 35px rgba(8,20,37,.06); background: var(--paper); }
 .platform-section { padding: 64px 0; }

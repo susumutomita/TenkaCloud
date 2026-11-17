@@ -12,15 +12,7 @@ describe("platform message and retained detail", () => {
       const { document } = new JSDOM(read(file)).window;
       const hero = document.querySelector(".hero");
       expect(hero?.textContent).toMatch(/OSS の演習・競技基盤|open-source platform/);
-      expect(hero?.querySelector("h1")?.textContent).toMatch(
-        /ニュースで聞く情報漏えい|Data breaches make the news/,
-      );
-      expect(hero?.textContent).toMatch(/未実測|unmeasured target/);
-      expect(hero?.textContent).toMatch(/認可バグ問題は未公開|not published yet/);
-      expect(hero?.querySelector('[data-i18n="platform.definition"]')?.textContent).toMatch(
-        /主催者|Organizers/,
-      );
-      expect(hero?.textContent).not.toContain("BROKEN ACCESS CONTROL");
+      expect(hero?.textContent).not.toMatch(/3分|Three minutes|BROKEN ACCESS CONTROL/);
       const main = document.querySelector("main");
       const order = [...(main?.children ?? [])].map((node) => node.id);
       expect(order.indexOf("try")).toBeLessThan(order.indexOf("examples"));
