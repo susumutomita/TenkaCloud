@@ -28,6 +28,7 @@ type AwsClients = Pick<
   | "simulatorEndpoint"
   | "simulatorConsole"
   | "simulatorServices"
+  | "simulatorBattle"
 >;
 
 /** Credentials come from the AWS SDK's default chain, never from a flag. */

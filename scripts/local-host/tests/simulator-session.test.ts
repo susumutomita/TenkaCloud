@@ -56,6 +56,35 @@ test("loopback defaults to managed simulator; opt-out and explicit external conn
   ).toBeUndefined();
 });
 
+test("a Battle bundle is only for automatic same-machine Simulator startup", () => {
+  expect(
+    parseOptions(["--battle-bundle", "/fixture/bundle"], "/fixture", {}).managedSimulator,
+  ).toEqual({ battleBundle: "/fixture/bundle" });
+  expect(
+    parseOptions(
+      ["--simulator-binary", "/fixture/native", "--battle-bundle", "/fixture/bundle"],
+      "/fixture",
+      {},
+    ).managedSimulator,
+  ).toEqual({ binary: "/fixture/native", battleBundle: "/fixture/bundle" });
+  const external = [
+    "--simulator-endpoint",
+    settings.endpoint,
+    "--simulator-token-file",
+    settings.tokenFile,
+    "--simulator-region",
+    settings.region,
+  ];
+  for (const args of [
+    ["--no-simulator", "--battle-bundle", "/fixture/bundle"],
+    [...external, "--battle-bundle", "/fixture/bundle"],
+    // eslint-disable-next-line sonarjs/no-hardcoded-ip -- Parsing fixture only; no connection is made.
+    ["--lan", "192.168.1.2", "--unsafe-lan", "--battle-bundle", "/fixture/bundle"],
+    ["--battle-bundle", " "],
+  ])
+    expect(() => parseOptions(args, "/fixture", {})).toThrow("--battle-bundle");
+});
+
 test("explicit native binary bypasses download and shuts down after host drains", async () => {
   noProxy();
   const order: string[] = [];

@@ -5,7 +5,12 @@ import { SSMClient } from "@aws-sdk/client-ssm";
 import { STSClient } from "@aws-sdk/client-sts";
 import { normalizeSimulatorEndpointUrl } from "@tenkacloud/portal-contracts";
 import { connectCloudHosting } from "./cloud-hosting";
-import { bootstrapSimulatorRole, SIMULATOR_DEPLOY_ROLE } from "./simulator-bootstrap";
+import { connectSimulatorBattle } from "./simulator-battle";
+import {
+  bootstrapSimulatorRole,
+  SIMULATOR_COMMAND_ROLE,
+  SIMULATOR_DEPLOY_ROLE,
+} from "./simulator-bootstrap";
 import { connectSimulatorCapabilities } from "./simulator-console";
 
 export type SimulatorSettings = {
@@ -175,10 +180,17 @@ export async function connectSimulatorHosting(
     secretAccessKey,
     assertSimulatorProxyDisabled,
   );
+  // Only a Simulator started with a configured Battle VM runtime reports this.
+  const battle = await connectSimulatorBattle(
+    endpoint,
+    secretAccessKey,
+    assertSimulatorProxyDisabled,
+  );
   const connection = await connectCloudHosting(root, directory, region, {
     simulatorEndpoint: endpoint,
     simulatorConsole: capabilities.console,
     simulatorServices: capabilities.nativeSdkServices,
+    ...(battle ? { simulatorBattle: battle } : {}),
     sts: guardedSimulatorClient(
       new STSClient({
         endpoint,
@@ -211,6 +223,7 @@ export async function connectSimulatorHosting(
       connection,
     );
     await connection.verify("000000000000", SIMULATOR_DEPLOY_ROLE);
+    if (battle) await connection.verify("000000000000", SIMULATOR_COMMAND_ROLE);
   }
   return {
     ...connection,

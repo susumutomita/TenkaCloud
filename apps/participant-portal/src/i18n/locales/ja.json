@@ -357,6 +357,18 @@
       "stage_competitor": "競技者アカウントへの AssumeRole",
       "stage_participant_viewer": "問題ごとの ParticipantViewerRole",
       "security_note": "※ 資格情報は画面外には保存されません。 ページを離れる / 再読み込みで消えます。 漏洩リスクを下げるため、 共有や貼り付け先には注意してください。"
+    },
+    "terminal": {
+      "section_header": "サーバの中に入る（ゲスト端末）",
+      "body": "この問題のサーバの中でコマンドを実行できる端末です。SSH や秘密鍵は使いません。2 つの URL を登録して採点が始まると、1 回だけ使えるコードを発行できます。コードを端末ページに貼り付けて開いてください。",
+      "issue_button": "端末コードを発行する",
+      "reissue_button": "コードを発行し直す",
+      "code_label": "1 回だけ使えるコード（{expiresAt} まで有効）",
+      "copy_button": "コードをコピー",
+      "open_button": "端末ページを開く",
+      "steps": "「端末ページを開く」で表示された画面にコードを貼り付け、「Open terminal / 端末を開く」を押してください。期限が切れたらコードを発行し直してください。",
+      "error_header": "端末コードを発行できませんでした",
+      "mock_blocked": "モックモードでは端末コードを発行できません。"
     }
   },
   "problem_panel": {

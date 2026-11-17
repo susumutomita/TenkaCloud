@@ -9,12 +9,14 @@ import type { ParticipantProblemView } from "../api/portal-client";
 import { useAuth } from "../auth/AuthProvider";
 import { useTeamView } from "../auth/TeamViewProvider";
 import { CliCredentialsPanel } from "../components/CliCredentialsPanel";
+import { GuestTerminalPanel } from "../components/GuestTerminalPanel";
 import { useConsoleAccess } from "../components/useConsoleAccess";
 import type { AppConfig } from "../config";
 import { useIsMock } from "../config-context";
 import {
   externalPortalUrl,
   hasAwsAccessCapability,
+  hasGuestTerminal,
   problemProvider,
   providerLabel,
 } from "../data/providers";
@@ -131,7 +133,8 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
           >
             <SpaceBetween size="m">
               {problem.consoleKind === "simulator" &&
-                !hasAwsAccessCapability(problem, "console") && (
+                !hasAwsAccessCapability(problem, "console") &&
+                !hasGuestTerminal(problem) && (
                   <Alert type="info">{t("sso_credentials.simulator_console_update")}</Alert>
                 )}
               {!hasAwsAccessCapability(problem, "console") &&
@@ -148,6 +151,15 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
                   { label: t("sso_credentials.label_region"), value: problem.region },
                 ]}
               />
+              {sessionToken && hasGuestTerminal(problem) && (
+                <GuestTerminalPanel
+                  apiBaseUrl={config.apiBaseUrl}
+                  sessionToken={sessionToken}
+                  jobId={problem.jobId}
+                  onAuthError={auth.logout}
+                  mockBlocked={isMock}
+                />
+              )}
               {sessionToken && hasAwsAccessCapability(problem, "cli-credentials") && (
                 <CliCredentialsPanel
                   apiBaseUrl={config.apiBaseUrl}
