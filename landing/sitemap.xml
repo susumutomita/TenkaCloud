@@ -59,4 +59,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://tenkacloud.com/legal.en.html" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://tenkacloud.com/legal.html" />
   </url>
+  <url><loc>https://tenkacloud.com/pricing.html</loc><xhtml:link rel="alternate" hreflang="en" href="https://tenkacloud.com/pricing.en.html" /></url>
+  <url><loc>https://tenkacloud.com/pricing.en.html</loc><xhtml:link rel="alternate" hreflang="ja" href="https://tenkacloud.com/pricing.html" /></url>
 </urlset>

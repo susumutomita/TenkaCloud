@@ -201,3 +201,91 @@
 .platform-landing .platform-scene-controls button:focus-visible { outline: 3px solid #07111f; outline-offset: 3px; box-shadow: 0 0 0 6px #fff; }
 @media print { .platform-landing .hero { min-height: 0; overflow: visible; padding-block: 30px; } }
 @media (forced-colors: active) { .platform-landing .platform-scene-controls button:focus-visible { outline-color: Highlight; } }
+
+/* Moving footage and staggered type share one full-bleed scene. */
+.platform-landing .hero { min-height: calc(100dvh - 56px); }
+.platform-landing .hero > .wrap { min-height: calc(100dvh - 172px); }
+.platform-landing .hero-copy { padding-bottom: 100px; }
+.platform-landing .hero .platform-preview { position: absolute; inset: -76px -6.2% -40px; display: block; margin: 0; min-height: 0; }
+.platform-scene, .platform-scene-panels { height: 100%; min-height: 0; }
+.platform-scene-panel { position: absolute; inset: 0; overflow: hidden; }
+.platform-background-video { position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; }
+.platform-scene-panel > .portal-preview { min-height: 100%; }
+.platform-landing .hero .platform-preview::after { display: block; inset: 0; background: linear-gradient(90deg,rgba(6,36,83,.96),rgba(7,45,101,.82) 48%,rgba(7,25,49,.25) 88%); }
+.platform-landing .hero[data-hero-scene="1"] .platform-preview::after { background: linear-gradient(90deg,rgba(7,17,31,.96),rgba(7,17,31,.82) 48%,rgba(7,17,31,.25) 88%); }
+.platform-landing .hero .platform-preview > p { right: 7%; bottom: 108px; }
+.platform-landing .hero .platform-scene-controls { position: absolute; right: 7%; bottom: 38px; margin: 0; z-index: 4; }
+.platform-motion-toggle > span { font: 600 12px var(--font-sans) !important; }
+.motion-line { display: block; transform-origin: left center; }
+.platform-landing .hero h1 > em { transform-origin: left center; }
+.platform-start-list { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 28px; border: 0; }
+.platform-start-option { display: flex; flex-direction: column; padding: 0 0 24px; gap: 12px; border-bottom: 1px solid var(--line); }
+.platform-start-option .platform-entry-media { display: block; width: 100%; padding: 0; min-height: 0; overflow: hidden; aspect-ratio: 16 / 10; background: #eef2f8; }
+.platform-entry-media :is(img,video) { width: 100%; height: 100%; object-fit: cover; display: block; }
+.platform-start-option h3 { font-size: 26px; margin: 0; }
+.platform-start-option .platform-option-meta { font-size: 11px; margin: 0; }
+.platform-start-option > p:not(.platform-option-meta) { font-size: 14px; margin: 0; }
+.platform-start-option > a:last-child { margin-top: auto; }
+.platform-entry-notes { margin: 20px 0; font-size: 13px; color: var(--ink-2); }
+.platform-entry-notes summary { cursor: pointer; padding: 14px 0; }
+.platform-entry-notes p { max-width: 760px; margin: 8px 0 16px; line-height: 1.85; }
+.platform-film { display: grid; grid-template-columns: .65fr 1.35fr; gap: 24px 40px; align-items: center; margin-top: 90px; }
+.platform-film h3 { font-size: 30px; line-height: 1.5; }
+.platform-film > video { width: 100%; aspect-ratio: 16 / 9; background: #07111f; }
+.platform-film > p { grid-column: 2; color: var(--ink-3); font-size: 12px; margin: -10px 0 0; }
+.platform-roles { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 56px; margin-block: 50px; }
+.platform-role { border-top: 1px solid var(--line); padding-top: 24px; }
+.platform-role > img { width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; margin-bottom: 24px; }
+.platform-role h3 { font-size: 28px; line-height: 1.5; margin-block: 10px; }
+.platform-role p:not(.eyebrow) { font-size: 15px; line-height: 1.8; margin-bottom: 20px; }
+.platform-role a { display: inline-flex; min-height: 44px; align-items: center; font-size: 14px; font-weight: 600; margin-right: 18px; }
+.platform-author-flow { display: flex; flex-wrap: wrap; gap: 8px; padding-left: 20px; margin: 10px 0 20px; font-size: 12px; }
+.platform-author-flow li { padding: 6px 16px 6px 0; }
+.platform-usecase-link { display: inline-flex; min-height: 44px; align-items: center; margin-bottom: 12px; }
+.platform-price-link { margin: 26px 0; }
+#support #contact { padding: 16px 0 0; font-size: 13px; }
+.platform-landing .hero[data-hero-scene] { transition-duration: 1.2s; }
+html[data-motion="paused"] .platform-landing .hero { transition: none; }
+@media (prefers-reduced-motion: no-preference) {
+  html[data-motion="running"] .hero .motion-line, html[data-motion="running"] .hero h1 > em { animation: hero-type-arrive 1.3s cubic-bezier(.22,.7,.2,1) both; }
+  html[data-motion="running"] .hero .motion-line:nth-child(2) { animation-delay: .12s; }
+  html[data-motion="running"] .hero h1 > em { animation-delay: .24s; }
+  html[data-motion="running"] main > .platform-section[data-motion-seen="true"] > .wrap > :is(h2,.platform-lead,.platform-start-list,.platform-roles) { animation: chapter-type-arrive 1.1s cubic-bezier(.22,.7,.2,1) both; }
+  html[data-motion="running"] main > .platform-section[data-motion-seen="true"] > .wrap > .platform-lead { animation-delay: .12s; }
+  html[data-motion="running"] main > .platform-section[data-motion-seen="true"] > .wrap > :is(.platform-start-list,.platform-roles) { animation-delay: .2s; }
+  @keyframes hero-type-arrive { from { transform: translateY(45px) skewX(7deg) scaleX(1.08); opacity: .7; } to { transform: none; opacity: 1; } }
+  @keyframes chapter-type-arrive { from { transform: translateY(50px) skewY(1.5deg); opacity: .75; } to { transform: none; opacity: 1; } }
+}
+@media(max-width:980px) {
+  .platform-landing .hero { min-height: calc(100dvh - 100px); }
+  .platform-landing .hero > .wrap { min-height: 0; }
+  .platform-landing .hero .platform-preview { inset: -42px -6.8% -30px; }
+  .platform-landing .hero-copy { padding-bottom: 100px; }
+  .platform-landing .hero .platform-preview > p { display: none; }
+  .platform-landing .hero .platform-scene-controls { right: 6%; left: 6%; bottom: 30px; gap: 8px; justify-content: flex-start; }
+  .platform-scene-controls button { padding: 10px 13px; font-size: 11px; min-height: 44px; }
+  .platform-scene-controls button > span:first-child { font-size: 10px; }
+  .platform-motion-toggle { order: 3; }
+  .platform-background-video { object-position: 54% center; }
+  .platform-landing .hero .platform-preview::after { background: linear-gradient(90deg,rgba(6,36,83,.94),rgba(7,45,101,.76) 62%,rgba(7,25,49,.55)); }
+  .platform-landing .hero[data-hero-scene="1"] .platform-preview::after { background: linear-gradient(90deg,rgba(7,17,31,.94),rgba(7,17,31,.76) 62%,rgba(7,17,31,.55)); }
+  .platform-start-list, .platform-roles, .platform-film { grid-template-columns: 1fr; gap: 40px; }
+  .platform-start-option .platform-entry-media { aspect-ratio: 16 / 9; }
+  .platform-film { margin-top: 64px; gap: 20px; }
+  .platform-film > p { grid-column: auto; margin: 0; }
+  .platform-role > img { margin-bottom: 16px; }
+  .platform-role h3 { font-size: 25px; }
+}
+@media print { .platform-landing .hero .platform-preview, .platform-motion-toggle, .platform-entry-media { display: none; } .platform-start-list,.platform-roles,.platform-film { display: block; } .platform-film > video { display: none; } }
+
+.platform-landing .hero .platform-preview { align-self: stretch; height: auto; }
+.platform-landing .hero .platform-scene { position: absolute; inset: 0; height: auto; }
+.platform-scene:not([data-renderer]) [data-scene-panel="1"] { display: none; }
+
+/* Neutral tones follow the recorded interface; blue remains the brand accent. */
+.platform-landing .hero, .platform-landing .hero[data-hero-scene="1"] { background: #17212b; }
+.platform-landing .hero .platform-preview::after, .platform-landing .hero[data-hero-scene="1"] .platform-preview::after { z-index: 2; background: linear-gradient(90deg,rgba(16,24,32,.96),rgba(16,24,32,.82) 48%,rgba(16,24,32,.25) 88%); }
+.platform-scene { isolation: isolate; }
+.platform-landing .hero-copy { padding-bottom: 60px; }
+@media(max-width:980px) { .platform-landing .hero-copy { padding-bottom: 128px; } .platform-landing .hero .platform-preview::after, .platform-landing .hero[data-hero-scene="1"] .platform-preview::after { background: linear-gradient(90deg,rgba(16,24,32,.95),rgba(16,24,32,.8) 62%,rgba(16,24,32,.6)); } }
+@media print { .platform-landing .hero, .platform-landing .hero[data-hero-scene="1"] { background: #fff; } }

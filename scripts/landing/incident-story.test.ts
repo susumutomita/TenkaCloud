@@ -257,7 +257,7 @@ describe("incident explanation", () => {
       expect(document.querySelector(".incident-chapters")?.textContent).toContain("200");
       expect(document.querySelector<HTMLElement>(".incident-controls")?.hidden).toBe(true);
       expect(document.querySelector(".incident-development")?.textContent).toMatch(
-        /開発中|in development/,
+        /説明するためのデモ|explanatory demo/,
       );
     }
   });

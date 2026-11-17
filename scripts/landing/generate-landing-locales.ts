@@ -79,13 +79,25 @@ function extractObject<T>(source: string, variable: string): T {
 
 function replaceElementContent(html: string, key: string, value: string): string {
   const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const pattern = new RegExp(
-    `(<([\\w:-]+)\\b[^>]*\\bdata-i18n="${escapedKey}"[^>]*>)([\\s\\S]*?)(<\\/\\2>)`,
-    "g",
-  );
-  return html.replace(pattern, (_match, opening, _tag, _content, closing) => {
-    return `${opening}${value}${closing}`;
-  });
+  const opening = new RegExp(`<([\\w:-]+)\\b[^>]*\\bdata-i18n="${escapedKey}"[^>]*>`, "g");
+  const edits: { start: number; end: number; value: string }[] = [];
+  for (const match of html.matchAll(opening)) {
+    const start = match.index + match[0].length;
+    const tags = new RegExp(`<(/?)${match[1]}\\b[^>]*>`, "g");
+    tags.lastIndex = start;
+    let depth = 1;
+    for (let tag = tags.exec(html); tag; tag = tags.exec(html)) {
+      depth += tag[1] ? -1 : 1;
+      if (depth === 0) {
+        edits.push({ start, end: tag.index, value });
+        break;
+      }
+    }
+  }
+  for (const edit of edits.toReversed()) {
+    html = html.slice(0, edit.start) + edit.value + html.slice(edit.end);
+  }
+  return html;
 }
 
 function replaceI18nAttribute(
@@ -272,17 +284,55 @@ export function generateEnglishLanding(): string {
   return html;
 }
 
+function translatePage(html: string, locale: "ja" | "en"): string {
+  const i18n = extractObject<Record<"ja" | "en", Record<string, TranslationValue>>>(
+    readFileSync(appPath, "utf8"),
+    "I18N",
+  );
+  for (const [key, value] of Object.entries(i18n[locale])) {
+    if (typeof value !== "string") continue;
+    html = replaceElementContent(html, key, value);
+    for (const attribute of ["href", "src", "title"] as const)
+      html = replaceI18nAttribute(html, key, value, attribute);
+  }
+  return html;
+}
+
+export function generatePricingPage(locale: "ja" | "en"): string {
+  let html = translatePage(readFileSync(join(root, "landing/pricing.html"), "utf8"), locale);
+  const title =
+    locale === "ja" ? "TenkaCloud | 料金と提供範囲" : "TenkaCloud | Pricing and service scope";
+  const description =
+    locale === "ja"
+      ? "TenkaCloud の運営支援サービスの料金、提供範囲、対象外の作業。OSS 本体のライセンス料とクラウド利用料は別です。"
+      : "TenkaCloud event operations pricing, deliverables and exclusions. OSS licensing, cloud usage and service fees are separate.";
+  html = html.replace('<html lang="ja">', `<html lang="${locale}">`);
+  html = replaceTagContent(html, "title", title);
+  html = replaceAttributeContent(html, '<meta name="description" content="', description, '">');
+  html = replaceAttributeContent(
+    html,
+    '<link rel="canonical" href="',
+    `https://tenkacloud.com/pricing${locale === "en" ? ".en" : ""}.html`,
+    '">',
+  );
+  return html;
+}
+
 if (import.meta.main) {
-  const generated = generateEnglishLanding();
-  if (process.argv.includes("--check")) {
-    const current = readFileSync(englishPath, "utf8");
-    if (current !== generated) {
-      console.error(
-        "landing/index.en.html is stale; run bun run scripts/landing/generate-landing-locales.ts",
-      );
-      process.exit(1);
-    }
-  } else {
-    writeFileSync(englishPath, generated);
+  const checking = process.argv.includes("--check");
+  const japanese = translatePage(readFileSync(indexPath, "utf8"), "ja");
+  if (checking && japanese !== readFileSync(indexPath, "utf8"))
+    throw new Error("landing/index.html translations are stale");
+  if (!checking) writeFileSync(indexPath, japanese);
+  const pages = [
+    [englishPath, generateEnglishLanding()],
+    [join(root, "landing/pricing.html"), generatePricingPage("ja")],
+    [join(root, "landing/pricing.en.html"), generatePricingPage("en")],
+  ];
+  for (const [path, generated] of pages) {
+    if (checking) {
+      if (readFileSync(path, "utf8") !== generated)
+        throw new Error(`${path} is stale; run generate:landing-locales`);
+    } else writeFileSync(path, generated);
   }
 }

@@ -192,12 +192,12 @@ describe("platform-first landing entry", () => {
   }
   it("defines the platform and routes its primary action to the current walkthrough", () => {
     const hero = heroSection(index);
-    expect(hero).toContain("クラウドと<br>セキュリティを、");
-    expect(hero).toContain("実践で学ぶ。");
     expect(hero).toContain(
-      "TenkaCloud は、クラウドとセキュリティを手を動かして学ぶ OSS の演習・競技基盤",
+      '<span class="motion-line">クラウドと</span><span class="motion-line">セキュリティを、</span>',
     );
-    expect(hero).toContain("問題・チーム・回答・採点・ランキング");
+    expect(hero).toContain("実践で学ぶ。");
+    expect(hero).toContain("クラウドとセキュリティを、実際に動かして学ぶ OSS 基盤");
+    expect(hero).toContain("独自問題を使うチームの研修");
     expect(hero).toContain('href="/portal-demo/?demo=1&amp;goto=start"');
     expect(hero).toContain('data-cta="start-drill"');
     expect(hero).toContain("登録不要");
@@ -206,33 +206,33 @@ describe("platform-first landing entry", () => {
     expect(hero).not.toContain("ニュースで聞く情報漏えい");
     expect(hero).not.toContain("Codespaces");
   });
-  it("keeps the approved incident copy inside one explicitly in-development example", () => {
+  it("keeps the incident question below the platform and labels the interaction as explanatory", () => {
+    const question = index.slice(
+      index.indexOf('id="practice-question"'),
+      index.indexOf('id="why"'),
+    );
+    expect(question).toContain("ニュースで聞く情報漏えい、");
+    expect(question).toContain("どうやって起こるの？");
     const example = index.slice(index.indexOf('id="examples"'), index.indexOf('id="hosting"'));
     expect(example).toContain('<details class="platform-case">');
     expect(example).not.toContain('<details class="platform-case" open');
-    for (const copy of [
-      "ニュースで聞く情報漏えい、",
-      "どうやって起こるの？",
-      "3分で体験する、セキュリティインシデント。",
-      "漏えいの仕組みを知り、手を動かして止めてみよう。",
-      "3分は目標時間",
-      "所要時間は未検証で、まだプレーできません。",
-      "採点付き演習ではありません",
-    ]) {
-      expect(example).toContain(copy);
-    }
+    expect(example).toContain("仕組みを説明するためのデモ");
+    expect(example).toContain("架空のデータ");
+    expect(example).toContain("採点は行いません");
+    expect(example).not.toContain("3分");
+    expect(example).not.toContain("開発中");
   });
   it("shows available paths before the example and preserves role-specific guides", () => {
     const start = index.indexOf('id="try"');
     expect(start).toBeLessThan(index.indexOf('id="examples"'));
     const paths = index.slice(start, index.indexOf('id="examples"'));
-    expect(paths).toContain("実環境への攻撃・修復を体験するものではありません。");
+    expect(paths).toContain("実環境への攻撃・修復を行うものではありません。");
     expect(paths).toContain('data-i18n-href="mailGame.href"');
     expect(paths).toContain('href="/docs/getting-started/#local-start"');
     expect(index).toContain('data-cta="deploy-aws"');
     expect(index).toContain('href="./docs/manual/organizer/"');
-    expect(index).toContain('data-cta="get-quote"');
-    expect(index).toContain('href="#pricing"');
+    expect(index).toContain('href="./pricing.html"');
+    expect(index).toContain('id="pricing"');
   });
   it("keeps language switches on the matching startup guide", () => {
     expect(app).toContain('"hero.startHref": "/docs/getting-started/#local-start"');
@@ -244,9 +244,9 @@ describe("platform-first landing entry", () => {
     expect(hero).toContain("open-source platform");
     expect(hero).toContain("Open the browser walkthrough");
     expect(hero).not.toContain("Three minutes");
-    expect(english).toContain("including hints and scoring");
-    expect(english).toContain("Three minutes is a target");
-    expect(english).toContain("this challenge is not playable yet");
+    expect(english).toContain("Write the problem, hints and answers");
+    expect(english).toContain("explanatory demo using fictional data");
+    expect(english).toContain("no scoring");
     expect(english).toContain('href="/docs/getting-started/index.en.html#local-start"');
     expect(english).toContain('href="./docs/manual/organizer/index.en.html"');
   });
@@ -291,6 +291,11 @@ describe("landing asset cache busting (content-hash stamped)", () => {
             new RegExp(`["'](?:\\.\\./)*/?${asset.replaceAll(".", "\\.")}[^"']*["']`, "g"),
           ),
         ].map((m) => m[0]);
+        // The event page uses the full film; the LP additionally uses its own short clips.
+        if (page.startsWith("ss-bootcamp") && asset.startsWith("assets/lp-motion/")) {
+          expect(references).toHaveLength(0);
+          continue;
+        }
         expect(references.length, `${page} should reference ${asset}`).toBeGreaterThan(0);
         for (const reference of references)
           expect(reference).toContain(`${asset}?v=${media[asset]}`);

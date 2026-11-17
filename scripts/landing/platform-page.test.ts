@@ -8,10 +8,10 @@ const read = (name: string) => readFileSync(join(root, "landing", name), "utf8")
 
 describe("platform message and retained detail", () => {
   for (const file of ["index.html", "index.en.html"]) {
-    it(`${file} distinguishes the product, available actions and one future example`, () => {
+    it(`${file} distinguishes the product, available actions and one explanatory example`, () => {
       const { document } = new JSDOM(read(file)).window;
       const hero = document.querySelector(".hero");
-      expect(hero?.textContent).toMatch(/OSS の演習・競技基盤|open-source platform/);
+      expect(hero?.textContent).toMatch(/OSS 基盤|open-source platform/);
       expect(hero?.textContent).not.toMatch(/3分|Three minutes|BROKEN ACCESS CONTROL/);
       const main = document.querySelector("main");
       const order = [...(main?.children ?? [])].map((node) => node.id);
@@ -21,31 +21,21 @@ describe("platform message and retained detail", () => {
       expect(question?.querySelector("h2")?.textContent).toMatch(
         /ニュースで聞く情報漏えい|Data breaches make the news/,
       );
-      expect(question?.textContent).toMatch(/一例|one example/);
-      expect(question?.textContent).toMatch(/未公開|not published yet/);
+      expect(question?.textContent).toMatch(/たとえば|For example/);
       expect(question?.querySelector("a,button")).toBeNull();
       expect(order.indexOf("try")).toBeLessThan(order.indexOf("examples"));
       expect(document.querySelectorAll(".platform-start-option")).toHaveLength(3);
       expect(document.querySelector("#try")?.textContent).toMatch(/クラウド|Environment/);
       const example = document.querySelector<HTMLDetailsElement>(".platform-case");
       expect(example?.open).toBe(false);
-      expect(example?.textContent).toMatch(/開発中|in development|in-development/);
-      expect(example?.querySelector("[data-i18n='hero.tagline']")?.textContent).toMatch(
-        /3分|three minutes/i,
-      );
+      expect(example?.textContent).toMatch(/採点は行いません|no scoring/);
+      expect(example?.textContent).toMatch(/架空|fictional/);
+      expect(example?.textContent).not.toMatch(/開発中|Three minutes|3分/);
     });
 
     it(`${file} preserves operational, authoring and commercial information in native details`, () => {
       const { document } = new JSDOM(read(file)).window;
-      for (const id of [
-        "modes",
-        "use-cases",
-        "extend",
-        "book",
-        "offerings",
-        "pricing",
-        "contact",
-      ]) {
+      for (const id of ["modes", "use-cases", "extend", "book"]) {
         expect(document.querySelectorAll(`#${id}`)).toHaveLength(1);
         expect(document.getElementById(id)?.closest("details")).not.toBeNull();
       }
@@ -231,6 +221,16 @@ describe("full-size product scene", () => {
 
   it("keeps reduced-motion scenes static while controls still work", () => {
     const test = setup("canvas", true);
+    test.buttons[1]?.click();
+    test.draw();
+    expect(test.draws()).toBe(0);
+    expect(test.panels[1]?.hidden).toBe(false);
+    expect(test.frame()).toBeUndefined();
+  });
+
+  it("switches while paused without restarting native distortion", () => {
+    const test = setup("canvas");
+    test.window.document.documentElement.dataset.motion = "paused";
     test.buttons[1]?.click();
     test.draw();
     expect(test.draws()).toBe(0);

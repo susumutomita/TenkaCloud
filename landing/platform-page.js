@@ -122,7 +122,15 @@
     buttons.forEach((button, index) => {
       button.setAttribute("aria-pressed", String(index === next));
     });
-    if (!animate || motion?.matches || !visible || document.hidden) return;
+    document.dispatchEvent(new CustomEvent("tenka:scene", { detail: { index: next, animate } }));
+    if (
+      !animate ||
+      motion?.matches ||
+      !visible ||
+      document.hidden ||
+      document.documentElement.dataset.motion === "paused"
+    )
+      return;
     const panel = panels[next];
     if (panel && typeof panel.animate === "function") {
       animation = panel.animate(
@@ -147,6 +155,8 @@
       source = document.createElement("div");
       source.className = "platform-canvas-source";
       source.setAttribute("drawable", "");
+      source.setAttribute("aria-hidden", "true");
+      source.inert = true;
       surface.append(source);
       surface.addEventListener(
         "paint",
@@ -184,6 +194,7 @@
         })
       : null;
   resize?.observe(root);
+  document.addEventListener("tenka:pause", stop, options);
   document.addEventListener(
     "visibilitychange",
     () => {
