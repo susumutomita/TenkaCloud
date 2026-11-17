@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { JSDOM } from "jsdom";
 import {
   currentMediaVersions,
   currentVersions,
@@ -190,7 +191,7 @@ describe("platform-first landing entry", () => {
     if (!hero) throw new Error("hero section not found");
     return hero;
   }
-  it("defines the platform and routes its primary action to the current walkthrough", () => {
+  it("defines the platform and routes its primary action to the prominent introductory film", () => {
     const hero = heroSection(index);
     expect(hero).toContain(
       '<span class="motion-line">クラウドと</span><span class="motion-line">セキュリティを、</span>',
@@ -198,9 +199,9 @@ describe("platform-first landing entry", () => {
     expect(hero).toContain("実践で学ぶ。");
     expect(hero).toContain("自分たちの問題で、環境を動かして学ぶ OSS 基盤");
     expect(hero).toContain("演習の開催から回答・採点まで");
-    expect(hero).toContain('href="/portal-demo/?demo=1&amp;goto=start"');
-    expect(hero).toContain('data-cta="start-drill"');
-    expect(hero).toContain("登録不要");
+    expect(hero).toContain('href="#film"');
+    expect(hero).toContain('data-cta="watch-60s"');
+    expect(hero).toContain("実際の画面で紹介");
     expect(hero).toContain('href="#try"');
     expect(hero).not.toContain("3分で体験する");
     expect(hero).not.toContain("ニュースで聞く情報漏えい");
@@ -242,7 +243,7 @@ describe("platform-first landing entry", () => {
     const english = read("landing/index.en.html");
     const hero = heroSection(english);
     expect(hero).toContain("open-source platform");
-    expect(hero).toContain("Open the browser walkthrough");
+    expect(hero).toContain("Watch the one-minute introduction");
     expect(hero).not.toContain("Three minutes");
     expect(english).toContain("Build your service architecture and internal rules");
     expect(english).toContain("explanatory demo using fictional data");
@@ -581,7 +582,7 @@ describe("saved enterprise copy integrated onto the current LP", () => {
       expect(html).not.toContain('id="onboard"');
       expect(html).not.toContain('id="trust-bullets"');
       expect(html).not.toContain('class="future-learning"');
-      const contact = html.match(/<section id="contact">[\s\S]*?<\/section>/)?.[0];
+      const contact = new JSDOM(html).window.document.getElementById("contact")?.outerHTML;
       expect(contact).toContain('href="https://forms.gle/djVprYmq3hFgJA7P9"');
       expect(contact).not.toContain("/discussions");
       expect(contact).toContain(

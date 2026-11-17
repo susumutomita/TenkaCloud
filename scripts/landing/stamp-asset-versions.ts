@@ -164,7 +164,15 @@ function main() {
       console.log(`stamped ${name} (${JSON.stringify(mediaVersions)})`);
     }
   }
-  const versions = currentVersions();
+  const versions = {
+    ...currentVersions(),
+    ...Object.fromEntries(
+      ["styles/pricing.css", "pricing-page.js"].map((name) => [
+        name,
+        assetVersion(readFileSync(join(landing, name))),
+      ]),
+    ),
+  };
   const targets = readdirSync(landing).filter((name) => name.endsWith(".html"));
   for (const name of targets) {
     const path = join(landing, name);
