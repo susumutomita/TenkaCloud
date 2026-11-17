@@ -65,7 +65,7 @@ function battleJob(overrides: Partial<Job> = {}): Job {
   return job;
 }
 
-test("the owner is the deployment's immutable identity and exists only for a completed stack", () => {
+test("the owner is the retained deployment identity independent of running status", () => {
   const job = battleJob();
   expect(battleOwner(job)).toEqual({
     eventId: "event-1",
@@ -78,7 +78,8 @@ test("the owner is the deployment's immutable identity and exists only for a com
     stackId: "arn:aws:cloudformation:ap-northeast-1:000000000000:stack/tc-hello-world-battle/1",
     instanceId: "i-0123456789abcdef0",
   });
-  expect(battleOwner(battleJob({ status: "IN_PROGRESS" }))).toBeUndefined();
+  expect(battleOwner({ ...job, status: "DELETING" })).toEqual(battleOwner(job));
+  expect(battleOwner(battleJob({ unit: undefined }))).toBeUndefined();
   expect(battleOwner(battleJob({ unit: JSON.stringify({ outputs: {} }) }))).toBeUndefined();
 });
 
@@ -306,4 +307,21 @@ test("terminal codes are signed with the participant's viewer credentials and va
       noop,
     ),
   ).rejects.toMatchObject({ status: 409 });
+});
+
+test("seal uses the retained deployment identity while deleting without admitting probes", async () => {
+  const { calls, fetchFn } = fakeSimulator({
+    "/_simulator/v1/battle-capabilities/availability": available,
+    "/_simulator/v1/battle-capabilities/seal": () => json({ sealed: true }),
+  });
+  const battle = await connectSimulatorBattle(ENDPOINT, "t", noop, fetchFn);
+  const job = battleJob();
+  const owner = battleOwner(job);
+  if (!owner) throw new Error("missing owner");
+  const deleting = { ...job, status: "DELETING" as const };
+  expect(battle?.probe(deleting)).toBeUndefined();
+  await battle?.seal(deleting);
+  expect(calls.filter((call) => call.path.endsWith("/seal"))).toEqual([
+    expect.objectContaining({ body: { version: 1, owner, key: battleKey(owner) } }),
+  ]);
 });

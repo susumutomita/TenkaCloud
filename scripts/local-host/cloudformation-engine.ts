@@ -459,12 +459,20 @@ export class CloudFormationEngine implements RuntimeEngine {
   }
 
   /** The Simulator Battle probe for an uptime job; undefined keeps the public HTTP probe. */
-  uptimeProbe(job: Job): ProbeFn | undefined {
+  private battleRuntime(job: Job): SimulatorBattle | undefined {
     if (!this.options.simulatorEndpoint || !this.options.simulatorBattle) return undefined;
     const definition = JSON.parse(job.definition) as StackDefinition;
     if (isFlagStackDefinition(definition) || !isSimulatorBattleProblem(definition.problemId))
       return undefined;
-    return this.options.simulatorBattle.probe(job);
+    return this.options.simulatorBattle;
+  }
+
+  requiresGuestReadiness(job: Job): boolean {
+    return Boolean(this.battleRuntime(job));
+  }
+
+  uptimeProbe(job: Job): ProbeFn | undefined {
+    return this.battleRuntime(job)?.probe(job);
   }
 
   async stop(job: Job): Promise<void> {
@@ -472,10 +480,11 @@ export class CloudFormationEngine implements RuntimeEngine {
     const client = this.client(unit, job);
     const stack = await this.describe(client, unit, job.jobId);
     if (!stack) return;
-    if (this.uptimeProbe(job)) {
+    const battle = this.battleRuntime(job);
+    if (battle) {
       // Stop new probe admissions first. A failed seal is reported; deletion still releases the
       // guest, which is the stronger cleanup.
-      await this.options.simulatorBattle?.seal(job).catch((error: unknown) => {
+      await battle.seal(job).catch((error: unknown) => {
         console.error(
           `Simulator Battle seal for job ${job.jobId} failed: ${error instanceof Error ? error.message : String(error)}`,
         );
