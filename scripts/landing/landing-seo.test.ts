@@ -192,8 +192,8 @@ describe("platform-first landing entry", () => {
   }
   it("defines the platform and routes its primary action to the current walkthrough", () => {
     const hero = heroSection(index);
-    expect(hero).toContain("クラウドと<br>セキュリティを、");
-    expect(hero).toContain("実践で学ぶ。");
+    expect(hero).toContain("ニュースで聞く情報漏えい、");
+    expect(hero).toContain("どうやって起こるの？");
     expect(hero).toContain(
       "TenkaCloud は、クラウドとセキュリティを手を動かして学ぶ OSS の演習・競技基盤",
     );
@@ -202,8 +202,9 @@ describe("platform-first landing entry", () => {
     expect(hero).toContain('data-cta="start-drill"');
     expect(hero).toContain("登録不要");
     expect(hero).toContain('href="#try"');
-    expect(hero).not.toContain("3分で体験する");
-    expect(hero).not.toContain("ニュースで聞く情報漏えい");
+    expect(hero).toContain("3分で体験する、セキュリティインシデント。");
+    expect(hero).toContain("未実測");
+    expect(hero).toContain("認可バグ問題は未公開");
     expect(hero).not.toContain("Codespaces");
   });
   it("keeps the approved incident copy inside one explicitly in-development example", () => {
@@ -243,7 +244,8 @@ describe("platform-first landing entry", () => {
     const hero = heroSection(english);
     expect(hero).toContain("open-source platform");
     expect(hero).toContain("Open the browser walkthrough");
-    expect(hero).not.toContain("Three minutes");
+    expect(hero).toContain("Three minutes is an unmeasured target");
+    expect(hero).toContain("not published yet");
     expect(english).toContain("including hints and scoring");
     expect(english).toContain("Three minutes is a target");
     expect(english).toContain("this challenge is not playable yet");

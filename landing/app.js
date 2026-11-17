@@ -138,8 +138,8 @@
       "nav.github": "GitHub",
 
       "platform.eyebrow": "TenkaCloud / OSS の演習・競技プラットフォーム",
-      "platform.h1a": "クラウドと<br>セキュリティを、",
-      "platform.h1b": "実践で学ぶ。",
+      "platform.targetNote":
+        "3分は開発中の演習の目標時間で、未実測です。認可バグ問題は未公開。今は下の公開中の操作デモで、演習の流れを確認できます。",
       "platform.definition":
         "TenkaCloud は、クラウドとセキュリティを手を動かして学ぶ OSS の演習・競技基盤です。主催者はローカルや AWS で大会を開き、問題・チーム・回答・採点・ランキングを扱えます。",
       "platform.primary": "操作デモをブラウザーで見る →",
@@ -201,7 +201,8 @@
       "platform.finalLink": "操作デモをブラウザーで見る →",
       "hero.h1a": "ニュースで聞く情報漏えい、",
       "hero.h1b": "どうやって起こるの？",
-      "hero.tagline": "3分で体験する、セキュリティインシデント。",
+      "hero.tagline":
+        '<span class="platform-phrase">3分で体験する、</span><span class="platform-phrase">セキュリティインシデント。</span>',
       "incident.skip": "本文へ移動",
       "incident.enter": "漏えいの仕組みを見てみる ↓",
       "incident.title": "たった1つの ID が、境界を越える。",
@@ -540,8 +541,8 @@
       "nav.github": "GitHub",
 
       "platform.eyebrow": "TenkaCloud / Open-source practice and competition platform",
-      "platform.h1a": "Cloud and security,",
-      "platform.h1b": "learned by doing.",
+      "platform.targetNote":
+        "Three minutes is an unmeasured target for an exercise in development. The authorization-bug challenge is not published yet. For now, explore the exercise workflow in the published walkthrough below.",
       "platform.definition":
         "TenkaCloud is an open-source platform for hands-on cloud and security exercises and competitions. Organizers host events locally or on AWS, working with problems, teams, submissions, scoring and rankings.",
       "platform.primary": "Open the browser walkthrough →",
