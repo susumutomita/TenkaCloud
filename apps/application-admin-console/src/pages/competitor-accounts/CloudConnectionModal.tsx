@@ -8,6 +8,7 @@ import Tiles from "@cloudscape-design/components/tiles";
 import { useState } from "react";
 import type {
   CreateCompetitorAccountResponse,
+  SimulatorAuthorityInfo,
   SimulatorConnectionInfo,
 } from "../../api/competitor-accounts-client";
 import type { TeamCredentialProvider } from "../../api/team-credentials-client";
@@ -22,11 +23,13 @@ const PROVIDERS: readonly CloudProvider[] = ["aws", "gcp", "azure", "sakura"];
 export function CloudConnectionModal({
   config,
   simulator,
+  authorities,
   onDismiss,
   onSuccess,
 }: {
   config: AppConfig;
   simulator?: SimulatorConnectionInfo;
+  authorities?: readonly SimulatorAuthorityInfo[];
   onDismiss: () => void;
   onSuccess: (response: CreateCompetitorAccountResponse) => void;
 }) {
@@ -53,15 +56,16 @@ export function CloudConnectionModal({
     if (!busy) onDismiss();
   };
 
-  if (simulator || (showForm && provider === "aws")) {
+  if (authorities || simulator || (showForm && provider === "aws")) {
     return (
       <AddAccountModal
         config={config}
         simulator={simulator}
+        authorities={authorities}
         visible
         onDismiss={onDismiss}
         onSuccess={onSuccess}
-        onBack={simulator ? undefined : back}
+        onBack={simulator || authorities ? undefined : back}
       />
     );
   }

@@ -47,6 +47,7 @@ function parseHostArgs(args: string[]) {
         "behind-proxy": { type: "boolean", default: false },
         "unsafe-http": { type: "boolean", default: false },
         "aws-region": { type: "string" },
+        "simulator-connections": { type: "string" },
         "simulator-endpoint": { type: "string" },
         "simulator-token-file": { type: "string" },
         "simulator-token": { type: "string" },
@@ -70,6 +71,42 @@ function parseHostArgs(args: string[]) {
       );
     throw error;
   }
+}
+
+function externalSimulatorPath(
+  values: ReturnType<typeof parseHostArgs>["values"],
+): string | undefined {
+  const connectionsPath = values["simulator-connections"];
+  if (
+    connectionsPath !== undefined &&
+    (!connectionsPath.trim() ||
+      Object.entries(values).some(
+        ([key, value]) =>
+          key !== "simulator-connections" &&
+          (key.startsWith("simulator-") ||
+            key === "no-simulator" ||
+            key === "update-simulator" ||
+            key === "battle-bundle") &&
+          value !== false,
+      ))
+  )
+    throw new Error("--simulator-connections is an exclusive external connection mode.");
+  return connectionsPath;
+}
+
+function externalSimulatorOption(path?: string): { simulatorConnectionsPath?: string } {
+  return path ? { simulatorConnectionsPath: resolve(path) } : {};
+}
+
+function localSimulatorListener(hostname: string, exposed: boolean, vpn?: string): boolean {
+  return hostname === "127.0.0.1" && !exposed && !vpn;
+}
+
+function isExplicitSimulator(
+  simulator: ReturnType<typeof simulatorSettings>,
+  path?: string,
+): boolean {
+  return Boolean(simulator ?? path);
 }
 
 export function parseOptions(
@@ -113,14 +150,17 @@ export function parseOptions(
     throw new Error(
       "AWS problems require cloud hosting. --aws-region is no longer accepted by make local; use the reviewed make deploy workflow when cloud hosting is ready.",
     );
+  const connectionsPath = externalSimulatorPath(values);
   const simulator = simulatorSettings(values);
-  assertSimulatorOptions(values, simulator, hostname, Boolean(exposure || appliance));
+  const explicitSimulator = isExplicitSimulator(simulator, connectionsPath);
+  assertSimulatorOptions(values, explicitSimulator, hostname, Boolean(exposure || appliance));
   const managedSimulator = managedSimulatorOptions(
     values,
-    Boolean(simulator),
-    hostname === "127.0.0.1" && !exposure && !appliance && !values["vpn-peers"],
+    explicitSimulator,
+    localSimulatorListener(hostname, Boolean(exposure ?? appliance), values["vpn-peers"]),
   );
   return {
+    ...externalSimulatorOption(connectionsPath),
     ...(simulator ? { simulator } : {}),
     ...(managedSimulator ? { managedSimulator } : {}),
     dataDirectory: resolve(values.data ?? joinDefault(repositoryRoot)),
@@ -203,7 +243,7 @@ function managedSimulatorOptions(
 
 function assertSimulatorOptions(
   values: { "simulator-bootstrap"?: boolean; "vpn-peers"?: string; "behind-proxy"?: boolean },
-  simulator: ReturnType<typeof simulatorSettings>,
+  simulator: ReturnType<typeof simulatorSettings> | boolean,
   hostname: string,
   publicSurface: boolean,
 ): void {

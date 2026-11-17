@@ -10,6 +10,7 @@ import Table, { type TableProps } from "@cloudscape-design/components/table";
 import { useState } from "react";
 import type { ApiClient } from "../../api/client";
 import type { CompetitorAccountSummary } from "../../api/competitor-accounts-client";
+import { competitorAccountKey } from "../../api/competitor-accounts-client";
 import {
   getTeamCredentialStatus,
   TEAM_CREDENTIAL_PROVIDERS,
@@ -140,8 +141,8 @@ export function EventCreateTeamsSection({
       id: "account",
       header: t("event_create.col_aws_account"),
       cell: (tr) => {
-        const selected = accountOptions.find((o) => o.value === tr.awsAccountId) ?? null;
-        const selectedAccount = accountById.get(tr.awsAccountId);
+        const selected = accountOptions.find((o) => o.value === competitorAccountKey(tr)) ?? null;
+        const selectedAccount = accountById.get(competitorAccountKey(tr));
         return (
           <SpaceBetween size="xxs">
             <Select
@@ -158,7 +159,10 @@ export function EventCreateTeamsSection({
               onChange={({ detail }) =>
                 onUpdateTeamRow(tr.idx, {
                   /* v8 ignore next */
-                  awsAccountId: detail.selectedOption?.value ?? "",
+                  awsAccountId:
+                    accountById.get(detail.selectedOption?.value ?? "")?.awsAccountId ?? "",
+                  simulatorAuthority: accountById.get(detail.selectedOption?.value ?? "")
+                    ?.simulatorAuthority,
                 })
               }
               invalid={tr.awsAccountId.length > 0 && !ACCOUNT_ID_RE.test(tr.awsAccountId)}

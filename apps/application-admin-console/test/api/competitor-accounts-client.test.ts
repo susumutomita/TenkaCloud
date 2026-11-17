@@ -125,3 +125,14 @@ describe("bulkCreateCompetitorAccounts", () => {
     expect(res.externalId).toBe("ext-1");
   });
 });
+
+it("qualifies verify/delete while keeping legacy paths unchanged", async () => {
+  const { client, calls } = fakeClient({});
+  const binding = { authorityId: "beta", generation: 7 };
+  await verifyCompetitorAccount(client, "000000000000", binding);
+  await deleteCompetitorAccount(client, "000000000000", binding);
+  expect(calls.map((call) => call.path)).toEqual([
+    "admin/competitor-accounts/000000000000/verify?authorityId=beta&generation=7",
+    "admin/competitor-accounts/000000000000?authorityId=beta&generation=7",
+  ]);
+});

@@ -1,4 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { competitorAccountKey } from "./account-binding";
 import {
   type CompetitorAccount,
   HostError,
@@ -17,6 +18,7 @@ import type {
   OrganizerIdentityRecord,
   OrganizerPrincipal,
 } from "./organizer-principal";
+import { type SimulatorAuthority, sameAuthority } from "./simulator-authority";
 export const digest = (value: string): string => createHash("sha256").update(value).digest("hex");
 
 interface BodyRow {
@@ -328,9 +330,9 @@ export class HostStore {
       this.statement("SELECT body FROM host_accounts ORDER BY rowid DESC").all() as BodyRow[]
     ).map((row) => JSON.parse(row.body) as CompetitorAccount);
   }
-  account(accountId: string): CompetitorAccount {
+  account(accountId: string, binding?: SimulatorAuthority): CompetitorAccount {
     const row = this.statement("SELECT body FROM host_accounts WHERE account_id=?").get(
-      accountId,
+      competitorAccountKey(accountId, binding),
     ) as BodyRow | undefined;
     if (!row) throw new HostError(404, "Competitor account not found.");
     return JSON.parse(row.body) as CompetitorAccount;
@@ -338,16 +340,25 @@ export class HostStore {
   putAccount(account: CompetitorAccount): void {
     this.statement(
       "INSERT INTO host_accounts(account_id,body) VALUES (?,?) ON CONFLICT(account_id) DO UPDATE SET body=excluded.body",
-    ).run(account.awsAccountId, JSON.stringify(account));
+    ).run(
+      competitorAccountKey(account.awsAccountId, account.simulatorAuthority),
+      JSON.stringify(account),
+    );
   }
-  deleteAccount(accountId: string): void {
-    this.statement("DELETE FROM host_accounts WHERE account_id=?").run(accountId);
+  deleteAccount(accountId: string, binding?: SimulatorAuthority): void {
+    this.statement("DELETE FROM host_accounts WHERE account_id=?").run(
+      competitorAccountKey(accountId, binding),
+    );
   }
   /** An event assignment remains authoritative until archival and physical cleanup. */
-  accountReferenced(accountId: string): boolean {
+  accountReferenced(accountId: string, binding?: SimulatorAuthority): boolean {
     for (const event of this.events()) {
       for (const team of this.teams(event.eventId)) {
-        if (team.aws?.accountId !== accountId) continue;
+        if (
+          team.aws?.accountId !== accountId ||
+          !sameAuthority(team.aws.simulatorAuthority, binding)
+        )
+          continue;
         if (event.status !== "ARCHIVED") return true;
         if (
           this.jobs(event.eventId, team.teamId).some(

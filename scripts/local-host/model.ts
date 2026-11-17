@@ -156,6 +156,9 @@ export interface AwsTarget {
 
 /** Registration is host-local; the shared ExternalId stays in its private key file. */
 export interface CompetitorAccount {
+  /** Distinguishes delete/re-register while verification is awaiting transport. */
+  registrationId?: string;
+  simulatorAuthority?: import("./simulator-authority").SimulatorAuthority;
   awsAccountId: string;
   region: string;
   competitorRoleName: string;
@@ -168,6 +171,13 @@ export interface CompetitorAccount {
 
 /** Supplied only when the host starts with AWS enabled; tests inject a local verifier. */
 export interface AccountConnection {
+  /** Explicit external connections; only safe descriptors may reach organizer APIs. */
+  readonly authorities?: readonly (import("./simulator-authority").SimulatorAuthority & {
+    readonly region: string;
+    readonly awsAccountId: string;
+    readonly bootstrapRoleName: string;
+  })[];
+  selectAuthority?(binding: import("./simulator-authority").SimulatorAuthority): AccountConnection;
   readonly simulator?: {
     readonly endpoint: string;
     readonly awsAccountId: string;

@@ -1,3 +1,4 @@
+import createWrapper from "@cloudscape-design/components/test-utils/dom";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppConfig } from "../../../src/config";
@@ -182,4 +183,56 @@ it("pins simulator registration to its declared local account and deploy role", 
       }),
     ),
   );
+});
+
+it("requires explicit authority and retains its selection through failure and retry", async () => {
+  const authorities = ["alpha", "beta"].map((authorityId) => ({
+    authorityId,
+    generation: 1,
+    region: "ap-northeast-1",
+    awsAccountId: "000000000000",
+    bootstrapRoleName: "SameRole",
+  }));
+  mockCreate.mockRejectedValueOnce(new Error("verification entry unavailable"));
+  const onSuccess = vi.fn();
+  render(<AddAccountModal {...props({ authorities, onSuccess })} />);
+  expect(submitBtn()).toBeDisabled();
+  const select = createWrapper().findSelect();
+  select?.openDropdown();
+  select?.selectOptionByValue("beta:1");
+  expect(submitBtn()).toBeEnabled();
+  fireEvent.click(submitBtn());
+  expect(await screen.findByText("verification entry unavailable")).toBeInTheDocument();
+  expect(onSuccess).not.toHaveBeenCalled();
+  fireEvent.click(submitBtn());
+  await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+  expect(mockCreate).toHaveBeenCalledTimes(2);
+  for (const call of mockCreate.mock.calls)
+    expect(call[1]).toMatchObject({
+      awsAccountId: "000000000000",
+      competitorRoleName: "SameRole",
+      simulatorAuthority: { authorityId: "beta", generation: 1 },
+    });
+});
+
+it("requires re-selection when the configured generation changes while the modal is open", () => {
+  const entry = {
+    authorityId: "alpha",
+    generation: 1,
+    region: "ap-northeast-1",
+    awsAccountId: "000000000000",
+    bootstrapRoleName: "SameRole",
+  };
+  const p = props({ authorities: [entry] });
+  const { rerender } = render(<AddAccountModal {...p} />);
+  const select = createWrapper().findSelect();
+  select?.openDropdown();
+  select?.selectOption(1);
+  expect(submitBtn()).toBeEnabled();
+  rerender(<AddAccountModal {...p} authorities={[{ ...entry, generation: 2 }]} />);
+  expect(submitBtn()).toBeDisabled();
+  expect(mockCreate).not.toHaveBeenCalled();
+  select?.openDropdown();
+  select?.selectOption(1);
+  expect(submitBtn()).toBeEnabled();
 });

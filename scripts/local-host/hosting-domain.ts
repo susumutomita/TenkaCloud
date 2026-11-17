@@ -9,6 +9,7 @@ import {
 } from "../../packages/portal-contracts/src/scoring-lock-command";
 import type { ApiRequest, ApiResponse } from "../lib/hosting-api";
 import type { ProbeFn } from "../lib/http-probe-client";
+import { accountConnection, accountRequestBinding, competitorAccountKey } from "./account-binding";
 import {
   id,
   issueLocalOrganizerSession,
@@ -73,6 +74,12 @@ import { HostProgression, lockedProblem } from "./progression";
 import { allocateRuntimePorts, validateRuntimePorts } from "./runtime-ports";
 import { SamlSignIn } from "./saml-sign-in";
 import { projectedScore, projectedTimeline } from "./score";
+import {
+  authorityBinding,
+  authorityUnavailable,
+  type SimulatorAuthority,
+  sameAuthority,
+} from "./simulator-authority";
 import {
   digest,
   type HostStore,
@@ -426,6 +433,14 @@ export class HostingDomain {
         teamId: team.teamId,
         internalSlug: team.internalSlug,
         displayName: team.displayName,
+        ...(team.aws
+          ? {
+              awsAccountId: team.aws.accountId,
+              ...(team.aws.simulatorAuthority
+                ? { simulatorAuthority: team.aws.simulatorAuthority }
+                : {}),
+            }
+          : {}),
         ...(query.get("withTeamLoginKeys") === "true" ? { teamLoginKey: team.loginKey } : {}),
       })),
       problems: event.problems.map((problem) => ({
@@ -830,7 +845,8 @@ export class HostingDomain {
     return this.accountConnection;
   }
   private registerAccount(body: Record<string, unknown>): CompetitorAccount {
-    const connection = this.connection();
+    const binding = authorityBinding(body.simulatorAuthority);
+    const connection = accountConnection(this.connection(), binding);
     const awsAccountId = text(body.awsAccountId, "awsAccountId", 12);
     if (!awsAccountPattern.test(awsAccountId))
       throw new HostError(422, "Use a 12-digit AWS account ID.");
@@ -851,10 +867,19 @@ export class HostingDomain {
     if (!awsRoleNamePattern.test(competitorRoleName))
       throw new HostError(422, "Invalid competitor IAM role name.");
     const alias = body.alias === undefined ? undefined : text(body.alias, "alias", 120);
-    if (this.store.accounts().some((account) => account.awsAccountId === awsAccountId))
+    if (
+      this.store
+        .accounts()
+        .some(
+          (account) =>
+            account.awsAccountId === awsAccountId &&
+            sameAuthority(account.simulatorAuthority, binding),
+        )
+    )
       throw new HostError(409, "Competitor account is already registered.");
     const now = new Date(this.now()).toISOString();
     const account: CompetitorAccount = {
+      ...(binding ? { simulatorAuthority: binding, registrationId: id() } : {}),
       awsAccountId,
       region,
       competitorRoleName,
@@ -870,6 +895,8 @@ export class HostingDomain {
   }
   private connectionSetup(cloud = this.accountConnection, discloseExternalId = true) {
     if (!cloud) return {};
+    if (cloud.authorities) return { authorities: cloud.authorities };
+    if (this.accountConnection?.authorities) return {};
     if (cloud.simulator) return { simulator: cloud.simulator };
     return discloseExternalId ? { externalId: cloud.externalId } : {};
   }
@@ -885,7 +912,7 @@ export class HostingDomain {
     requireRole(principal, "manage-connections");
     if (request.path === "/admin/competitor-accounts" && request.method === "POST") {
       const account = this.registerAccount(object(request.body));
-      const cloud = this.connection();
+      const cloud = accountConnection(this.connection(), account.simulatorAuthority);
       return ok(
         {
           ...account,
@@ -901,10 +928,13 @@ export class HostingDomain {
     if (!match) throw new HostError(404, "Unknown host endpoint.");
     const accountId = match[1];
     if (!accountId) throw new HostError(404, "Unknown host endpoint.");
+    const binding = accountRequestBinding(request.query);
+    if (binding || this.accountConnection?.selectAuthority)
+      accountConnection(this.connection(), binding);
     if (request.method === "POST" && match[2] === "verify")
-      return this.verifyAccount(accountId, request.token);
+      return this.verifyAccount(accountId, request.token, binding);
     if (request.method === "DELETE" && !match[2])
-      return this.deleteAccount(accountId, request.token);
+      return this.deleteAccount(accountId, request.token, binding);
     throw new HostError(404, "Unknown host endpoint.");
   }
   private bulkRegisterOne(value: unknown, defaults: Record<string, unknown>) {
@@ -917,12 +947,20 @@ export class HostingDomain {
         ? value.awsAccountId
         : "";
     try {
-      this.registerAccount({ ...defaults, ...object(value) });
-      return { awsAccountId, outcome: "created" as const };
+      const account = this.registerAccount({ ...defaults, ...object(value) });
+      return {
+        awsAccountId,
+        ...(account.simulatorAuthority ? { simulatorAuthority: account.simulatorAuthority } : {}),
+        outcome: "created" as const,
+      };
     } catch (error) {
       const status = error instanceof HostError ? error.status : 500;
       let outcome: "duplicate" | "invalid" | "failed" = "failed";
-      if (status === 409) outcome = "duplicate";
+      if (
+        status === 409 &&
+        !(error instanceof HostError && error.kind === "simulator_authority_unavailable")
+      )
+        outcome = "duplicate";
       else if (status < 500) outcome = "invalid";
       return {
         awsAccountId,
@@ -948,16 +986,25 @@ export class HostingDomain {
       tenkaCloudAccountId: cloud.operatorAccountId,
     });
   }
-  private verifyAccount(accountId: string, token: string): Promise<ApiResponse> {
-    return this.queue.run(`account:${accountId}`, async () => {
+  private verifyAccount(
+    accountId: string,
+    token: string,
+    binding?: SimulatorAuthority,
+  ): Promise<ApiResponse> {
+    return this.queue.run(`account:${competitorAccountKey(accountId, binding)}`, async () => {
       requireRole(this.store.authenticateAdmin(token, this.now()), "manage-connections");
-      const account = this.store.account(accountId);
-      const cloud = this.connection();
+      const account = this.store.account(accountId, binding);
+      const cloud = accountConnection(this.connection(), binding);
+      const recheck = () => {
+        requireRole(this.store.authenticateAdmin(token, this.now()), "manage-connections");
+        if (accountConnection(this.connection(), binding) !== cloud) throw authorityUnavailable();
+        const current = this.store.account(accountId, binding);
+        if (JSON.stringify(current) !== JSON.stringify(account)) throw authorityUnavailable();
+      };
       try {
         await cloud.verify(account.awsAccountId, account.competitorRoleName);
       } catch {
-        const current = this.store.authenticateAdmin(token, this.now());
-        requireRole(current, "manage-connections");
+        recheck();
         const updatedAt = new Date(this.now()).toISOString();
         this.store.putAccount({ ...account, verified: false, verifiedAt: undefined, updatedAt });
         throw new HostError(
@@ -965,8 +1012,7 @@ export class HostingDomain {
           "Could not verify the competitor role. Check the account, role, ExternalId, and operator trust.",
         );
       }
-      const current = this.store.authenticateAdmin(token, this.now());
-      requireRole(current, "manage-connections");
+      recheck();
       const verifiedAt = new Date(this.now()).toISOString();
       const verified = { ...account, verified: true, verifiedAt, updatedAt: verifiedAt };
       return this.store.transaction(() => {
@@ -975,18 +1021,24 @@ export class HostingDomain {
       });
     });
   }
-  private deleteAccount(accountId: string, token: string): Promise<ApiResponse> {
-    return this.queue.run(`account:${accountId}`, async () => {
+  private deleteAccount(
+    accountId: string,
+    token: string,
+    binding?: SimulatorAuthority,
+  ): Promise<ApiResponse> {
+    return this.queue.run(`account:${competitorAccountKey(accountId, binding)}`, async () => {
       const current = this.store.authenticateAdmin(token, this.now());
       requireRole(current, "manage-connections");
-      this.store.account(accountId);
-      if (this.store.accountReferenced(accountId))
+      if (binding || this.accountConnection?.selectAuthority)
+        accountConnection(this.connection(), binding);
+      this.store.account(accountId, binding);
+      if (this.store.accountReferenced(accountId, binding))
         throw new HostError(
           409,
           "Competitor account is assigned to an event or has resources awaiting cleanup.",
         );
       return this.store.transaction(() => {
-        this.store.deleteAccount(accountId);
+        this.store.deleteAccount(accountId, binding);
         return ok({ deleted: true });
       });
     });
@@ -1105,6 +1157,14 @@ export class HostingDomain {
           teamId: team.teamId,
           internalSlug: team.internalSlug,
           teamLoginKey: team.loginKey,
+          ...(team.aws
+            ? {
+                awsAccountId: team.aws.accountId,
+                ...(team.aws.simulatorAuthority
+                  ? { simulatorAuthority: team.aws.simulatorAuthority }
+                  : {}),
+              }
+            : {}),
         })),
       },
       201,
@@ -1119,18 +1179,30 @@ export class HostingDomain {
         422,
         "Select a registered account; event requests cannot override its IAM role.",
       );
-    if (team.region !== undefined && team.region !== this.connection().region)
-      throw new HostError(422, `This host deploys AWS problems in ${this.connection().region}.`);
-    const account = this.store.accounts().find((candidate) => candidate.awsAccountId === accountId);
+    const binding = authorityBinding(team.simulatorAuthority);
+    const connection = accountConnection(this.connection(), binding);
+    if (team.region !== undefined && team.region !== connection.region)
+      throw new HostError(422, `This host deploys AWS problems in ${connection.region}.`);
+    const account = this.store
+      .accounts()
+      .find(
+        (candidate) =>
+          candidate.awsAccountId === accountId &&
+          sameAuthority(candidate.simulatorAuthority, binding),
+      );
     if (!account) throw new HostError(422, `Competitor account ${accountId} is not registered.`);
     if (!account.verified)
       throw new HostError(
         422,
         `Competitor account ${accountId} must be verified before event creation.`,
       );
-    if (account.region !== this.connection().region)
+    if (account.region !== connection.region)
       throw new HostError(422, `Competitor account ${accountId} is registered in another region.`);
-    return { accountId, roleName: account.competitorRoleName };
+    return {
+      accountId,
+      roleName: account.competitorRoleName,
+      ...(account.simulatorAuthority ? { simulatorAuthority: account.simulatorAuthority } : {}),
+    };
   }
   private async mutateEvent(
     event: HostedEvent,

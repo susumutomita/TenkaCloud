@@ -23,6 +23,9 @@ export function CompetitorAccountDeleteModal({
   onConfirm,
 }: CompetitorAccountDeleteModalProps) {
   const t = useT();
+  const binding = target?.simulatorAuthority;
+  const suffix = binding ? ` — ${binding.authorityId} / ${binding.generation}` : "";
+  const accountLabel = target ? `${target.awsAccountId}${suffix}` : "";
   return (
     <Modal
       visible={target !== null}
@@ -48,7 +51,7 @@ export function CompetitorAccountDeleteModal({
     >
       <p>
         {t("competitor_accounts.delete_modal_body_1", {
-          accountId: target?.awsAccountId ?? "",
+          accountId: accountLabel,
         })}
       </p>
       <p>

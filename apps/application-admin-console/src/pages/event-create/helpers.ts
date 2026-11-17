@@ -11,6 +11,7 @@
  */
 import type { MultiselectProps, SelectProps } from "@cloudscape-design/components";
 import type { CompetitorAccountSummary } from "../../api/competitor-accounts-client";
+import { competitorAccountKey } from "../../api/competitor-accounts-client";
 import { AWS_REGIONS } from "../../data/aws-regions";
 import {
   isProviderSelectable,
@@ -40,6 +41,7 @@ export const REGION_OPTIONS: SelectProps.Option[] = AWS_REGIONS.map((r) => ({
  */
 export interface TeamRow {
   internalSlug: string;
+  simulatorAuthority?: import("../../api/competitor-accounts-client").SimulatorAuthority;
   awsAccountId: string;
   /**
    * Non-AWS single-provider events bind deploy credentials by provider + team
@@ -137,8 +139,10 @@ export function buildVerifiedAccountOption(a: CompetitorAccountSummary): SelectP
     (p): p is string => typeof p === "string" && p.length > 0,
   );
   return {
-    value: a.awsAccountId,
-    label: a.awsAccountId,
+    value: competitorAccountKey(a),
+    label: a.simulatorAuthority
+      ? `${a.awsAccountId} — ${a.simulatorAuthority.authorityId} / ${a.simulatorAuthority.generation}`
+      : a.awsAccountId,
     labelTag: a.alias,
     description: descriptionParts.join(" / "),
     filteringTags: descriptionParts,
@@ -146,7 +150,10 @@ export function buildVerifiedAccountOption(a: CompetitorAccountSummary): SelectP
 }
 
 export function formatVerifiedAccountSummary(a: CompetitorAccountSummary): string {
-  return a.alias ? `${a.awsAccountId} (${a.alias})` : a.awsAccountId;
+  const label = a.alias ? `${a.awsAccountId} (${a.alias})` : a.awsAccountId;
+  return a.simulatorAuthority
+    ? `${label} — ${a.simulatorAuthority.authorityId} / ${a.simulatorAuthority.generation}`
+    : label;
 }
 
 /**

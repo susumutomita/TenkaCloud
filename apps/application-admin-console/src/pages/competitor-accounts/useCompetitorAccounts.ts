@@ -2,8 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { canManageConnections, useApiClient } from "../../api/client";
 import {
   type CompetitorAccountSummary,
+  competitorAccountKey,
   deleteCompetitorAccount,
   listCompetitorAccounts,
+  type SimulatorAuthorityInfo,
   type SimulatorConnectionInfo,
   verifyCompetitorAccount,
 } from "../../api/competitor-accounts-client";
@@ -13,6 +15,7 @@ import { type FriendlyError, toFriendlyError } from "../../lib/friendly-error";
 export interface UseCompetitorAccountsResult {
   items: readonly CompetitorAccountSummary[] | null;
   simulator?: SimulatorConnectionInfo;
+  authorities?: readonly SimulatorAuthorityInfo[];
   error: FriendlyError | null;
   verifyInFlight: string | null;
   deleteInFlight: boolean;
@@ -40,6 +43,7 @@ export function useCompetitorAccounts(config: AppConfig): UseCompetitorAccountsR
   const canMutate = canManageConnections(config, apiClient);
   const [items, setItems] = useState<readonly CompetitorAccountSummary[] | null>(null);
   const [simulator, setSimulator] = useState<SimulatorConnectionInfo | undefined>();
+  const [authorities, setAuthorities] = useState<readonly SimulatorAuthorityInfo[] | undefined>();
   const [error, setError] = useState<FriendlyError | null>(null);
   const [verifyInFlight, setVerifyInFlight] = useState<string | null>(null);
   const [deleteInFlight, setDeleteInFlight] = useState(false);
@@ -55,6 +59,7 @@ export function useCompetitorAccounts(config: AppConfig): UseCompetitorAccountsR
       const res = await listCompetitorAccounts(apiClient);
       setItems(res.items);
       setSimulator(res.simulator);
+      setAuthorities(res.authorities);
       setError(null);
     } catch (err) {
       setError(toFriendlyError(err));
@@ -70,7 +75,15 @@ export function useCompetitorAccounts(config: AppConfig): UseCompetitorAccountsR
       if (!apiClient || !canMutate) return;
       setVerifyInFlight(awsAccountId);
       try {
-        const res = await verifyCompetitorAccount(apiClient, awsAccountId);
+        const account = items?.find((item) => competitorAccountKey(item) === awsAccountId);
+        if (!account) throw new Error("Select a registered account.");
+        const res = account.simulatorAuthority
+          ? await verifyCompetitorAccount(
+              apiClient,
+              account.awsAccountId,
+              account.simulatorAuthority,
+            )
+          : await verifyCompetitorAccount(apiClient, account.awsAccountId);
         // Issue #2696: trust 検証が通ったときだけ signal を立てる (= verified=false の
         // 応答や例外では立てない)。 直近成功のみ保持し、 失敗は既存の error 表示に任せる。
         setLastVerified(res.verified ? res : null);
@@ -82,7 +95,7 @@ export function useCompetitorAccounts(config: AppConfig): UseCompetitorAccountsR
         setVerifyInFlight(null);
       }
     },
-    [apiClient, canMutate, reload],
+    [apiClient, canMutate, reload, items],
   );
 
   const clearLastVerified = useCallback(() => setLastVerified(null), []);
@@ -107,7 +120,9 @@ export function useCompetitorAccounts(config: AppConfig): UseCompetitorAccountsR
     let done = 0;
     for (const target of targets) {
       try {
-        await verifyCompetitorAccount(apiClient, target.awsAccountId);
+        if (target.simulatorAuthority)
+          await verifyCompetitorAccount(apiClient, target.awsAccountId, target.simulatorAuthority);
+        else await verifyCompetitorAccount(apiClient, target.awsAccountId);
       } catch (err) {
         // 1 件の失敗で残りを止めない。 最後の理由だけ表示し、 詳細は行の状態が持つ。
         lastError = err;
@@ -127,7 +142,15 @@ export function useCompetitorAccounts(config: AppConfig): UseCompetitorAccountsR
       if (!apiClient || !canMutate) return;
       setDeleteInFlight(true);
       try {
-        await deleteCompetitorAccount(apiClient, awsAccountId);
+        const account = items?.find((item) => competitorAccountKey(item) === awsAccountId);
+        if (!account) throw new Error("Select a registered account.");
+        if (account.simulatorAuthority)
+          await deleteCompetitorAccount(
+            apiClient,
+            account.awsAccountId,
+            account.simulatorAuthority,
+          );
+        else await deleteCompetitorAccount(apiClient, account.awsAccountId);
         await reload();
       } catch (err) {
         setError(toFriendlyError(err));
@@ -135,12 +158,13 @@ export function useCompetitorAccounts(config: AppConfig): UseCompetitorAccountsR
         setDeleteInFlight(false);
       }
     },
-    [apiClient, canMutate, reload],
+    [apiClient, canMutate, reload, items],
   );
 
   return {
     items,
     simulator,
+    authorities,
     error,
     verifyInFlight,
     deleteInFlight,
