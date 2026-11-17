@@ -33,7 +33,15 @@ export function assetVersion(content: string | Buffer): string {
  * 新しいアセットを HTML に足したらここにも足す (= 足し忘れるとキャッシュ
  * バスターが効かず、 古い JS/CSS が配信され続ける)。
  */
-export const STAMPED_ASSETS = ["styles/main.css", "app.js"] as const;
+export const STAMPED_ASSETS = [
+  "styles/main.css",
+  "app.js",
+  "styles/incident.css",
+  "styles/platform.css",
+  "incident-story.js",
+  "platform-page.js",
+  "platform-motion.js",
+] as const;
 
 export type AssetVersions = Record<string, string>;
 
@@ -43,7 +51,12 @@ export type AssetVersions = Record<string, string>;
  * 旧版が再生された)。 参照に内容ハッシュを `?v=` で刻み、 差し替えたら URL も変える。
  * パスは landing/ からの相対。
  */
-export const STAMPED_MEDIA = ["videos/lp/tenkacloud-60s.mp4"] as const;
+export const STAMPED_MEDIA = [
+  "videos/lp/tenkacloud-60s.mp4",
+  "assets/lp-motion/participant.mp4",
+  "assets/lp-motion/organizer.mp4",
+  "assets/lp-motion/game.mp4",
+] as const;
 
 /** STAMPED_MEDIA を参照する HTML (landing/ からの相対)。 参照を足したらここにも足す。 */
 export const MEDIA_PAGES = [
