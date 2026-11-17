@@ -583,12 +583,17 @@ export class CloudFormationEngine implements RuntimeEngine {
   uptimeProbe(job: Job): ProbeFn | undefined {
     const engine = this.jobEngine(job);
     if (engine !== this) return engine.uptimeProbe(job);
-    const probe = this.battleRuntime(job)?.probe(job);
+    const assertCurrent = () => {
+      if (this.jobEngine(job) !== this) throw authorityUnavailable();
+    };
+    const probe = this.battleRuntime(job)?.probe(job, assertCurrent);
     return (
       probe &&
       (async (url, options) => {
-        if (this.jobEngine(job) !== this) throw authorityUnavailable();
-        return probe(url, options);
+        assertCurrent();
+        const result = await probe(url, options);
+        assertCurrent();
+        return result;
       })
     );
   }
@@ -600,6 +605,9 @@ export class CloudFormationEngine implements RuntimeEngine {
     const client = this.client(unit, job);
     const stack = await this.describe(client, unit, job.jobId);
     if (!stack) return;
+    // Describe may await while the retained authority is removed or replaced. Seal is a new
+    // operator request, so admit it only after rechecking the current binding.
+    if (this.jobEngine(job) !== this) throw authorityUnavailable();
     const battle = this.battleRuntime(job);
     if (battle) {
       // Stop new probe admissions first. A failed seal is reported; deletion still releases the

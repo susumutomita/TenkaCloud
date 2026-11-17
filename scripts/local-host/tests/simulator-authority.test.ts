@@ -3,6 +3,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DescribeStacksCommand } from "@aws-sdk/client-cloudformation";
 import { AwsDisruptionAdapter } from "../aws-disruption-adapter";
 import { unitOf } from "../cloud-runtime-contract";
 import {
@@ -16,7 +17,7 @@ import { DisruptionRunner } from "../disruption-runner";
 import { DisruptionStore } from "../disruption-store";
 import type { Job, Team } from "../model";
 import type { SimulatorAuthority } from "../simulator-authority";
-import type { SimulatorBattle } from "../simulator-battle";
+import { connectSimulatorBattle, type SimulatorBattle } from "../simulator-battle";
 import { HostStore } from "../store";
 import { DisruptionAws } from "./disruption-fixture";
 import { FakeAws } from "./fake-aws";
@@ -60,14 +61,20 @@ function request(store: DisruptionStore, requestId: string) {
   });
 }
 
-function fakeCloudFormation(aws: FakeAws, transportCalls: string[]) {
+interface TransportHooks {
+  afterDescribe?: () => Promise<void>;
+}
+
+function fakeCloudFormation(aws: FakeAws, transportCalls: string[], hooks: TransportHooks) {
   return (credentials: CredentialsProvider) => {
     let cached: Awaited<ReturnType<CredentialsProvider>> | undefined;
     return {
       send: async (command: unknown) => {
         cached ??= await credentials();
         transportCalls.push((command as { constructor: { name: string } }).constructor.name);
-        return aws.cloudFormation(async () => required(cached)).send(command);
+        const response = await aws.cloudFormation(async () => required(cached)).send(command);
+        if (command instanceof DescribeStacksCommand) await hooks.afterDescribe?.();
+        return response;
       },
     };
   };
@@ -86,6 +93,7 @@ function fixture() {
     const disruption = new DisruptionAws();
     const calls: string[] = [];
     const transportCalls: string[] = [];
+    const hooks: TransportHooks = {};
     const battle: SimulatorBattle = {
       clockDomain: "same-host-clock",
       probe: () => async () => {
@@ -114,14 +122,14 @@ function fixture() {
       externalId: "fixture-external-id-0123456789",
       operatorAccountId: async () => "999999999999",
       sts: aws.sts as never,
-      cloudFormation: fakeCloudFormation(aws, transportCalls) as never,
+      cloudFormation: fakeCloudFormation(aws, transportCalls, hooks) as never,
       ssm: disruption.ssm as never,
       team: (job) => store.team(job.teamId),
       sleep: async () => undefined,
       pollIntervalMs: 0,
       timeoutMs: 1000,
     };
-    return { name, aws, disruption, calls, transportCalls, options };
+    return { name, aws, disruption, calls, transportCalls, hooks, options };
   });
   const alpha = required(lanes[0]);
   const beta = required(lanes[1]);
@@ -214,6 +222,7 @@ function fixture() {
     job: (name: string) => store.job(name.padEnd(26, "0")),
     store: () => store,
     engines: () => engines,
+    resolve,
     restart: () => {
       store.close();
       store = new HostStore(new Database(path));
@@ -642,4 +651,168 @@ test("routing refuses a leaf engine without the shared live resolver before tran
   expect(f.alpha.aws.assumed).toEqual([]);
   expect(f.beta.aws.assumed).toEqual([]);
   expect(f.beta.disruption.attempts).toEqual([]);
+});
+
+test.each(["removed", "generation", "team-generation"])(
+  "seal race: %s during Describe refuses new seal and delete requests",
+  async (change) => {
+    const f = fixture();
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    f.beta.hooks.afterDescribe = async () => {
+      entered.resolve(undefined);
+      await release.promise;
+    };
+    const stopping = f.cloud().stop(f.job("beta"));
+    await entered.promise;
+    if (change === "removed") f.engines().delete("beta");
+    else if (change === "generation")
+      f.engines().set(
+        "beta",
+        new CloudFormationEngine(root, {
+          ...f.beta.options,
+          simulatorAuthority: binding("beta", 2),
+          simulatorAuthorityEngine: f.resolve,
+        }),
+      );
+    else {
+      const team = f.store().team("beta");
+      f.store().putTeam({
+        ...team,
+        aws: { ...required(team.aws), simulatorAuthority: binding("beta", 2) },
+      });
+    }
+    release.resolve(undefined);
+    await expect(stopping).rejects.toMatchObject({ kind: "simulator_authority_unavailable" });
+    expect(f.beta.calls).toEqual([]);
+    expect(f.beta.transportCalls).toEqual(["DescribeStacksCommand"]);
+    expect(f.beta.aws.deleted).toEqual([]);
+    expect(f.alpha.transportCalls).toEqual([]);
+    await f.cloud().recover(f.job("alpha"));
+    expect(f.alpha.transportCalls).toEqual(["DescribeStacksCommand"]);
+    expect(f.alpha.aws.deleted).toEqual([]);
+  },
+);
+
+test("seal race: unchanged binding after awaited Describe keeps normal cleanup and the other authority", async () => {
+  const f = fixture();
+  f.beta.hooks.afterDescribe = async () => {
+    await Promise.resolve();
+  };
+  await f.cloud().stop(f.job("beta"));
+  expect(f.beta.calls).toEqual(["seal"]);
+  expect(f.beta.aws.deleted).toHaveLength(1);
+  expect(f.beta.transportCalls).toEqual([
+    "DescribeStacksCommand",
+    "DeleteStackCommand",
+    "DescribeStacksCommand",
+  ]);
+  await f
+    .cloud()
+    .participantAwsAccess({ kind: "terminal", job: f.job("alpha"), assertCurrent: current });
+  expect(f.alpha.calls).toEqual(["terminal"]);
+  expect(f.alpha.aws.deleted).toEqual([]);
+});
+
+async function probeRaceFixture(revokeAt?: "resolve" | "wait" | "read") {
+  const f = fixture();
+  const paths: string[] = [];
+  const revoke = () => {
+    f.engines().delete("beta");
+  };
+  const json = (value: unknown) => new Response(JSON.stringify(value), { status: 200 });
+  let now = 0;
+  const battle = await connectSimulatorBattle(
+    "http://127.0.0.1:4566",
+    "fixture-operator-token",
+    current,
+    async (url) => {
+      const path = new URL(url).pathname;
+      paths.push(path);
+      if (path.endsWith("/availability"))
+        return json({ configured: true, protocolVersion: 1, clockDomain: "same-host-clock" });
+      if (path.endsWith("/resolve")) {
+        if (revokeAt === "resolve") revoke();
+        return json({
+          version: 1,
+          handle: "h1",
+          clockDomain: "same-host-clock",
+          binding: {
+            endpoints: {
+              frontend: "http://127.0.0.1:4566/_simulator/v1/battle-capabilities/h1/frontend",
+              api: "http://127.0.0.1:4566/_simulator/v1/battle-capabilities/h1/api",
+            },
+          },
+          slots: {
+            frontend: { wireBinding: {}, service: { name: "frontend", path: "/", port: 80 } },
+            api: { wireBinding: {}, service: { name: "api", path: "/healthz", port: 8080 } },
+          },
+        });
+      }
+      if (path.endsWith("/start")) return json({ resultReady: false });
+      if (path.endsWith("/read")) {
+        if (revokeAt === "read") revoke();
+        return json({
+          resultReady: true,
+          settled: true,
+          result: { error: null, observation: { status: 200, path: "/" } },
+        });
+      }
+      throw new Error("Unexpected fake Battle request");
+    },
+    () => now,
+    async (ms) => {
+      now += ms;
+      if (revokeAt === "wait") revoke();
+    },
+  );
+  f.engines().set(
+    "beta",
+    new CloudFormationEngine(root, {
+      ...f.beta.options,
+      simulatorBattle: required(battle),
+      simulatorAuthorityEngine: f.resolve,
+    }),
+  );
+  const job = f.job("beta");
+  const unit = unitOf(job);
+  unit.outputs = { ...unit.outputs, Ec2HostHint: "127.0.0.1" };
+  job.unit = JSON.stringify(unit);
+  f.store().putJob(job);
+  const probe = required(f.cloud().uptimeProbe(job));
+  return { ...f, paths, probe };
+}
+
+test.each(["resolve", "wait", "read"] as const)(
+  "probe race: removal during %s refuses later requests and successful results",
+  async (phase) => {
+    const f = await probeRaceFixture(phase);
+    await expect(f.probe("http://127.0.0.1/")).rejects.toMatchObject({
+      kind: "simulator_authority_unavailable",
+    });
+    const commands = f.paths.filter((path) => path.endsWith("/start") || path.endsWith("/read"));
+    if (phase === "resolve") expect(commands).toEqual([]);
+    else if (phase === "wait")
+      expect(commands).toEqual(["/_simulator/v1/battle-capabilities/h1/frontend/start"]);
+    else
+      expect(commands).toEqual([
+        "/_simulator/v1/battle-capabilities/h1/frontend/start",
+        "/_simulator/v1/battle-capabilities/h1/frontend/read",
+      ]);
+    expect(f.alpha.transportCalls).toEqual([]);
+    await f.cloud().recover(f.job("alpha"));
+    expect(f.alpha.transportCalls).toEqual(["DescribeStacksCommand"]);
+  },
+);
+
+test("probe race: unchanged binding keeps the production probe and other authority access", async () => {
+  const f = await probeRaceFixture();
+  expect(await f.probe("http://127.0.0.1/")).toMatchObject({ ok: true, status: 200 });
+  expect(f.paths.filter((path) => path.endsWith("/start") || path.endsWith("/read"))).toHaveLength(
+    2,
+  );
+  await f
+    .cloud()
+    .participantAwsAccess({ kind: "terminal", job: f.job("alpha"), assertCurrent: current });
+  expect(f.alpha.calls).toEqual(["terminal"]);
 });

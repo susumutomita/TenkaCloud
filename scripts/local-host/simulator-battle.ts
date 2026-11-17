@@ -20,7 +20,7 @@ import type { ParticipantSessionCredentials } from "./participant-aws-contract";
 export interface SimulatorBattle {
   readonly clockDomain: string;
   /** A probe for this job's two Battle slots, or undefined when the job is not probeable. */
-  probe(job: Job): ProbeFn | undefined;
+  probe(job: Job, assertCurrent?: () => void): ProbeFn | undefined;
   /** Stop new probe admissions before the stack is deleted. */
   seal(job: Job): Promise<void>;
   /** A one-use participant terminal code, signed with the participant's viewer credentials. */
@@ -192,7 +192,12 @@ export async function connectSimulatorBattle(
   sleep: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 ): Promise<SimulatorBattle | undefined> {
   const origin = normalizeSimulatorEndpointUrl(endpoint);
-  const operator = async (path: string, body: unknown): Promise<Response> => {
+  const operator = async (
+    path: string,
+    body: unknown,
+    assertCurrent?: () => void,
+  ): Promise<Response> => {
+    assertCurrent?.();
     guard();
     return httpFetch(new URL(path, origin).href, {
       method: "POST",
@@ -219,32 +224,40 @@ export async function connectSimulatorBattle(
   if (!availability.configured || availability.protocolVersion !== 1) return undefined;
 
   const receipts = new Map<string, Receipt>();
-  const resolve = async (owner: BattleOwner, key: string) => {
+  const resolve = async (owner: BattleOwner, key: string, assertCurrent: () => void) => {
+    assertCurrent();
     const cached = receipts.get(key);
     if (cached) return cached;
-    const response = await operator("/_simulator/v1/battle-capabilities/resolve", {
-      version: 1,
-      owner,
-      key,
-    });
+    const response = await operator(
+      "/_simulator/v1/battle-capabilities/resolve",
+      {
+        version: 1,
+        owner,
+        key,
+      },
+      assertCurrent,
+    );
     if (!response.ok) {
       await response.body?.cancel();
       // An unready or unregistered guest is a Simulator state, not a participant failure.
       throw new Error(`Simulator Battle receipt unavailable (HTTP ${response.status}).`);
     }
     const receipt = receiptSchema.parse(await boundedJson(response, 64 * 1024));
+    assertCurrent();
     if (receipt.clockDomain !== availability.clockDomain)
       throw new Error("Simulator Battle receipt names another clock domain.");
     receipts.set(key, receipt);
     return receipt;
   };
-  const command = async (url: string, body: unknown) => {
-    const response = await operator(new URL(url, origin).pathname, body);
+  const command = async (url: string, body: unknown, assertCurrent: () => void) => {
+    const response = await operator(new URL(url, origin).pathname, body, assertCurrent);
     if (!response.ok) {
       await response.body?.cancel();
       throw new Error(`Simulator Battle probe command failed (HTTP ${response.status}).`);
     }
-    return snapshotSchema.parse(await boundedJson(response, 64 * 1024));
+    const snapshot = snapshotSchema.parse(await boundedJson(response, 64 * 1024));
+    assertCurrent();
+    return snapshot;
   };
 
   /** Reads until the probe has settled; an unsettled probe is a Simulator error, not a failure. */
@@ -261,7 +274,7 @@ export async function connectSimulatorBattle(
 
   return {
     clockDomain: availability.clockDomain,
-    probe(job) {
+    probe(job, assertCurrent = () => undefined) {
       if (job.status !== "COMPLETE") return undefined;
       const owner = battleOwner(job);
       const hint = owner ? unitOf(job).outputs?.Ec2HostHint : undefined;
@@ -272,7 +285,7 @@ export async function connectSimulatorBattle(
         const slot = battleSlotFor(url, hint);
         // Any other URL is not this deployment's service: a failed probe, as an unreachable one.
         if (!slot) return { ok: false, status: undefined, responseTimeMs: 0 };
-        const receipt = await resolve(owner, key);
+        const receipt = await resolve(owner, key, assertCurrent);
         const { mapping, base } = receiptSlot(receipt, slot);
         const common = {
           version: 1,
@@ -281,12 +294,16 @@ export async function connectSimulatorBattle(
           key: randomBytes(16).toString("hex"),
         };
         const snapshot = await settle(
-          await command(`${base}/start`, {
-            ...common,
-            command: "start",
-            deadline: { domain: receipt.clockDomain, epochMs: now() + PROBE_WINDOW_MS },
-          }),
-          () => command(`${base}/read`, { ...common, command: "read" }),
+          await command(
+            `${base}/start`,
+            {
+              ...common,
+              command: "start",
+              deadline: { domain: receipt.clockDomain, epochMs: now() + PROBE_WINDOW_MS },
+            },
+            assertCurrent,
+          ),
+          () => command(`${base}/read`, { ...common, command: "read" }, assertCurrent),
         );
         const observation = snapshot.result?.observation ?? undefined;
         const status = observation?.status;
