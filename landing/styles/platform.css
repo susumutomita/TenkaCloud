@@ -467,3 +467,6 @@ html[data-motion="paused"] .platform-landing .hero { transition: none; }
 
 .platform-section :is(h2,h3):has(> .copy-phrase) { display:flex; flex-wrap:wrap; column-gap:.25em; max-width:100%; }
 .copy-phrase + .copy-phrase { margin-inline-start:0; }
+
+/* A phrase may wrap in a narrow split-screen column, but Japanese words stay intact. */
+.copy-word { display: inline-block; white-space: nowrap; }

@@ -202,3 +202,36 @@ describe("pricing motion is optional and leaves financial content readable", () 
       page.window.close();
     });
 });
+
+// The 1316px split-screen column is narrower than the first Japanese phrase.
+it("keeps the sample heading words intact when its phrase wraps", () => {
+  const dom = new JSDOM(read("index.html"));
+  const style = dom.window.document.createElement("style");
+  style.textContent = read("styles/platform.css");
+  dom.window.document.head.append(style);
+  const title = dom.window.document.querySelector("#entry-demo-title");
+  if (!title) throw new Error("Sample heading is missing");
+  const words = [...title.querySelectorAll(".copy-word")];
+  expect(words.map((word) => word.textContent)).toEqual([
+    "回答・",
+    "ヒント・",
+    "採点を、",
+    "6ステップで",
+    "体験。",
+  ]);
+  for (const word of words) expect(dom.window.getComputedStyle(word).whiteSpace).toBe("nowrap");
+  expect(title?.textContent).toBe("回答・ヒント・採点を、6ステップで体験。");
+});
+
+it("removes the unused workflow promotion in both locales", () => {
+  expect(read("app.js")).not.toContain('"platform.tryLead"');
+  for (const name of ["index.html", "index.en.html"]) {
+    const doc = new JSDOM(read(name)).window.document;
+    expect(doc.querySelector(".platform-final .platform-primary")?.getAttribute("href")).toContain(
+      "goto=%2Fproblems",
+    );
+    expect(doc.querySelector(".platform-final h2")?.textContent).toContain(
+      name === "index.html" ? "本番で試せないことを、" : "Practice what you can’t",
+    );
+  }
+});

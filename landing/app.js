@@ -247,11 +247,9 @@
       "platform.tryEyebrow": "最初の一歩",
       "platform.tryTitle":
         '<span class="copy-phrase">ゲームで基礎を学ぶ。</span><span class="copy-phrase">チームで演習する。</span>',
-      "platform.tryLead":
-        "まずはブラウザーで流れを確かめる。ゲームで基礎に触れる。自分で演習を開催する。目的に合わせて選べます。",
       "platform.demoStatus": "登録不要 / 参加画面のサンプル",
       "platform.demoTitle":
-        '<span class="copy-phrase">回答・ヒント・採点を、</span><span class="copy-phrase">6ステップで体験。</span>',
+        '<span class="copy-phrase"><span class="copy-word">回答・</span><span class="copy-word">ヒント・</span><span class="copy-word">採点を、</span></span><span class="copy-phrase"><span class="copy-word">6ステップで</span><span class="copy-word">体験。</span></span>',
       "platform.demoLink": "サンプル問題に進む →",
       "platform.gameStatus": "ブラウザー / AWS・登録不要",
       "platform.localStatus": "自分のPC / AWS不要",
@@ -741,8 +739,6 @@
       "platform.tryEyebrow": "Start here",
       "platform.tryTitle":
         '<span class="copy-phrase">Learn through games.</span><span class="copy-phrase">Run exercises with your team.</span>',
-      "platform.tryLead":
-        "Explore the workflow in your browser, try a basic game, or host your own exercises. Choose the path that fits your goal.",
       "platform.demoStatus": "NO SIGNUP / SAMPLE PARTICIPANT WORKFLOW",
       "platform.demoTitle":
         '<span class="copy-phrase">Try answers, hints and grading.</span><span class="copy-phrase">In six steps.</span>',
