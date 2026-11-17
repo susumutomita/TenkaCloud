@@ -259,3 +259,148 @@ test("Battle disruptions assume the separate command role, never the deploy role
   expect(submitted.kind).not.toBe("rejected");
   expect(roles).toEqual(["arn:aws:iam::000000000000:role/TenkaCloud-SimulatorCommand-Role"]);
 });
+
+/** Host authorization only: fake AWS/Battle adapters do not attest VM isolation. */
+function twoTeamHost() {
+  const { battle, calls } = fakeBattle();
+  const fixture = host(battle);
+  const problem = fixture.cloud.catalog().find((entry) => entry.problemId === "hello-world-battle");
+  if (!problem) throw new Error("Battle missing from the simulator catalog");
+  const now = Date.now();
+  const eventId = id();
+  fixture.store.putEvent({
+    eventId,
+    name: "Two-team boundary",
+    status: "READY",
+    createdAt: new Date(now).toISOString(),
+    updatedAt: new Date(now).toISOString(),
+    startsAt: new Date(now - 1000).toISOString(),
+    expiresAt: Math.floor(now / 1000) + 3600,
+    scoringLocked: false,
+    scoreboardFreezeMinutes: 0,
+    problems: [problem],
+  });
+  const teams = ["alpha", "beta"].map((slug, index) => {
+    const teamId = id();
+    const jobId = id();
+    const loginKey = `fixture-${slug}-key`;
+    const instanceId = `i-${String(index + 1).padStart(17, "0")}`;
+    fixture.store.putTeam({
+      teamId,
+      eventId,
+      internalSlug: slug,
+      displayName: slug,
+      loginKey,
+      snapshot: null,
+      score: 0,
+      completedProblems: 0,
+      scoreEvents: [],
+      aws: { accountId: "000000000000", roleName: "TenkaCloud-SimulatorDeploy-Role" },
+    });
+    const stackName = `tc-battle-${slug}`;
+    const stack = fixture.aws.seedStack(stackName, [{ Key: "tenkacloud:job", Value: jobId }]);
+    const job: Job = {
+      jobId,
+      eventId,
+      teamId,
+      problemId: problem.problemId,
+      definition: problem.definition,
+      offset: 0,
+      status: "COMPLETE",
+      deployedAt: now - 1000,
+      unit: JSON.stringify({
+        kind: "cloudformation",
+        accountId: "000000000000",
+        roleArn: "arn:aws:iam::000000000000:role/TenkaCloud-SimulatorDeploy-Role",
+        region: "ap-northeast-1",
+        stackName,
+        stackId: stack.stackId,
+        outputs: {
+          ParticipantViewerRoleArn: `arn:aws:iam::000000000000:role/tc-${slug}-viewer`,
+          Ec2HostHint: `ec2-10-0-1-${String(index + 5)}.ap-northeast-1.compute.simulator.invalid`,
+          InstanceId: instanceId,
+        },
+      }),
+    };
+    fixture.store.putJob(job);
+    const ready = () =>
+      fixture.store.putUptimeState(eventId, teamId, job.problemId, {
+        ...fixture.store.uptimeState(eventId, teamId, job.problemId),
+        generation: uptimeGeneration(job),
+        readyAt: now,
+      });
+    const terminal = (target = jobId) =>
+      fixture.service.participant(
+        apiRequest({
+          method: "GET",
+          path: "/portal/me/guest-terminal",
+          token: loginKey,
+          query: new URLSearchParams({ jobId: target }),
+        }),
+      );
+    return { job, instanceId, stack, ready, terminal };
+  });
+  const [alpha, beta] = teams;
+  if (!alpha || !beta) throw new Error("Expected two fixture teams");
+  return { ...fixture, calls, eventId, alpha, beta };
+}
+
+test("two teams sharing an account cannot request each other's Battle terminal", async () => {
+  const f = twoTeamHost();
+  f.alpha.ready();
+  f.beta.ready();
+  for (const [caller, other] of [
+    [f.alpha, f.beta],
+    [f.beta, f.alpha],
+  ] as const) {
+    await expect(caller.terminal(other.job.jobId)).rejects.toMatchObject({
+      status: 403,
+      kind: "unauthorized",
+    });
+  }
+  expect(f.calls).toEqual([]);
+  expect(f.aws.assumed).toEqual([]);
+  await f.alpha.terminal();
+  await f.beta.terminal();
+  expect(f.calls).toHaveLength(2);
+  expect(f.calls[0]).toStartWith(`terminal:${f.alpha.instanceId}:`);
+  expect(f.calls[1]).toStartWith(`terminal:${f.beta.instanceId}:`);
+});
+
+test("one team's readiness cannot unlock the other team's Battle terminal", async () => {
+  const f = twoTeamHost();
+  f.alpha.ready();
+  await expect(f.beta.terminal()).rejects.toMatchObject({ status: 409, kind: "guest_not_ready" });
+  expect(f.calls).toEqual([]);
+  expect(f.aws.assumed).toEqual([]);
+  await f.alpha.terminal();
+  expect(f.calls).toHaveLength(1);
+});
+
+test("tearing down one team's Battle seals only its job and keeps the other accessible", async () => {
+  const f = twoTeamHost();
+  f.alpha.ready();
+  f.beta.ready();
+  const token = await bootstrapOrganizer(f.service, HOST_KEY);
+  await f.service.admin(
+    apiRequest({
+      method: "DELETE",
+      path: `/events/${f.eventId}/deployments/${f.alpha.job.jobId}`,
+      token,
+    }),
+  );
+  await f.service.drain();
+  expect(f.store.jobs(f.eventId).find((job) => job.jobId === f.alpha.job.jobId)?.status).toBe(
+    "DELETED",
+  );
+  expect(f.store.jobs(f.eventId).find((job) => job.jobId === f.beta.job.jobId)?.status).toBe(
+    "COMPLETE",
+  );
+  expect(f.calls).toEqual([`seal:${f.alpha.job.jobId}`]);
+  expect(f.aws.deleted).toEqual([f.alpha.stack.stackId]);
+  expect(f.alpha.stack.status).toBe("DELETE_COMPLETE");
+  expect(f.beta.stack.status).toBe("CREATE_COMPLETE");
+  await expect(f.alpha.terminal()).rejects.toMatchObject({ status: 409, kind: "not_ready" });
+  await f.beta.terminal();
+  expect(f.calls.at(-1)).toStartWith(`terminal:${f.beta.instanceId}:`);
+});
