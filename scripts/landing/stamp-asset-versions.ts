@@ -37,7 +37,9 @@ export const STAMPED_ASSETS = [
   "styles/main.css",
   "app.js",
   "styles/incident.css",
+  "styles/platform.css",
   "incident-story.js",
+  "platform-page.js",
 ] as const;
 
 export type AssetVersions = Record<string, string>;

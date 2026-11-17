@@ -182,84 +182,73 @@ describe("documentation home by role", () => {
 });
 
 /** The browser onboarding is primary; current startup stays accessible after the walkthrough. */
-describe("landing interactive onboarding entry", () => {
+describe("platform-first landing entry", () => {
   const index = read("landing/index.html");
   const app = read("landing/app.js");
-
   function heroSection(html: string): string {
-    const start = html.indexOf('<section class="hero">');
-    const end = html.indexOf('<section class="alt" id="modes">');
-    expect(start, "hero section not found").toBeGreaterThan(-1);
-    expect(end, "modes section not found").toBeGreaterThan(start);
-    return html.slice(start, end);
+    const hero = html.match(/<section class="hero"[^>]*>[\s\S]*?<\/section>/)?.[0];
+    if (!hero) throw new Error("hero section not found");
+    return hero;
   }
-
-  it("should show no stacked primary buttons (cta-primary / cta-row) in the hero", () => {
+  it("defines the platform and routes its primary action to the current walkthrough", () => {
     const hero = heroSection(index);
-    expect(hero).not.toContain("cta-primary");
-    expect(hero).not.toContain("cta-row");
-  });
-
-  it("routes the primary card to the existing six-step browser walkthrough", () => {
-    const hero = heroSection(index);
-    expect([...hero.matchAll(/class="hero-quest-card"/g)]).toHaveLength(1);
-    const card = hero.slice(hero.indexOf('class="hero-quest-card"'));
-    const opening = card.slice(0, card.indexOf(">"));
-    expect(opening).toContain('href="/portal-demo/?demo=1&amp;goto=start"');
-    expect(opening).toContain('data-cta="start-drill"');
-    expect(opening).not.toContain("target=");
-    expect(hero.indexOf('href="/docs/getting-started/#local-start"')).toBeGreaterThan(
-      hero.indexOf('class="hero-secondary"'),
+    expect(hero).toContain("クラウドと<br>セキュリティを、");
+    expect(hero).toContain("実践で学ぶ。");
+    expect(hero).toContain(
+      "TenkaCloud は、クラウドとセキュリティを手を動かして学ぶ OSS の演習・競技基盤",
     );
-    expect(hero).not.toContain('href="/portal-demo/start');
+    expect(hero).toContain("問題・チーム・回答・採点・ランキング");
+    expect(hero).toContain('href="/portal-demo/?demo=1&amp;goto=start"');
     expect(hero).toContain('data-cta="start-drill"');
-    expect(hero).toContain("回答を提出。ヒントと採点");
-    expect(hero).toContain("ニュースで聞く情報漏えい、");
-    expect(hero).toContain("どうやって起こるの？");
-    expect(hero).toContain("3分で体験する、セキュリティインシデント。");
-    expect(hero).toContain("漏えいの仕組みを知り、手を動かして止めてみよう。");
-    expect(hero).toContain("3分は目標時間");
-    expect(hero.indexOf("3分は目標時間")).toBeLessThan(hero.indexOf("<h1>"));
-    expect(hero).toContain("所要時間は未検証で、まだプレーできません。");
-    expect(hero).toContain("現在の操作デモを見る");
-    expect(hero).toContain("実環境への攻撃・修復を体験するものではありません。");
-    expect(hero).not.toContain("旧版");
-  });
-
-  it("should not present the Lite/Codespaces mode choice anywhere in the hero", () => {
-    const hero = heroSection(index);
-    expect(hero).not.toContain("codespaces.new");
+    expect(hero).toContain("登録不要");
+    expect(hero).toContain('href="#try"');
+    expect(hero).not.toContain("3分で体験する");
+    expect(hero).not.toContain("ニュースで聞く情報漏えい");
     expect(hero).not.toContain("Codespaces");
   });
-
-  it("routes the organizer CTA to the current hosting guide while preserving the pricing CTA", () => {
-    const hero = heroSection(index);
-    expect(hero).toContain('data-cta="deploy-aws"');
-    expect(hero).toContain('href="./docs/manual/organizer/"');
-    expect(hero).toContain('data-cta="get-quote"');
-    expect(hero).toContain('href="#pricing"');
+  it("keeps the approved incident copy inside one explicitly in-development example", () => {
+    const example = index.slice(index.indexOf('id="examples"'), index.indexOf('id="hosting"'));
+    expect(example).toContain('<details class="platform-case">');
+    expect(example).not.toContain('<details class="platform-case" open');
+    for (const copy of [
+      "ニュースで聞く情報漏えい、",
+      "どうやって起こるの？",
+      "3分で体験する、セキュリティインシデント。",
+      "漏えいの仕組みを知り、手を動かして止めてみよう。",
+      "3分は目標時間",
+      "所要時間は未検証で、まだプレーできません。",
+      "採点付き演習ではありません",
+    ]) {
+      expect(example).toContain(copy);
+    }
   });
-
+  it("shows available paths before the example and preserves role-specific guides", () => {
+    const start = index.indexOf('id="try"');
+    expect(start).toBeLessThan(index.indexOf('id="examples"'));
+    const paths = index.slice(start, index.indexOf('id="examples"'));
+    expect(paths).toContain("実環境への攻撃・修復を体験するものではありません。");
+    expect(paths).toContain('data-i18n-href="mailGame.href"');
+    expect(paths).toContain('href="/docs/getting-started/#local-start"');
+    expect(index).toContain('data-cta="deploy-aws"');
+    expect(index).toContain('href="./docs/manual/organizer/"');
+    expect(index).toContain('data-cta="get-quote"');
+    expect(index).toContain('href="#pricing"');
+  });
   it("keeps language switches on the matching startup guide", () => {
     expect(app).toContain('"hero.startHref": "/docs/getting-started/#local-start"');
     expect(app).toContain('"hero.startHref": "/docs/getting-started/index.en.html#local-start"');
-    expect(index).toContain('data-i18n-href="hero.startHref"');
   });
-
-  it("publishes the walkthrough and secondary startup path in static English", () => {
+  it("publishes the product definition, available actions and honest example in static English", () => {
     const english = read("landing/index.en.html");
     const hero = heroSection(english);
-    expect(hero).toContain('href="./docs/manual/organizer/index.en.html"');
-    expect(hero).not.toContain("cta-primary");
-    expect([...hero.matchAll(/class="hero-quest-card"/g)]).toHaveLength(1);
-    expect(hero).toContain('data-cta="start-drill"');
-    expect(hero).toContain('href="/docs/getting-started/index.en.html#local-start"');
-    expect(hero).toContain('data-cta="local-start"');
-    expect(hero).toContain("including hints and scoring");
-    expect(hero).toContain("Three minutes is a target");
-    expect(hero).toContain("this challenge is not playable yet");
-    expect(hero).toContain("Open the current walkthrough");
-    expect(hero).not.toContain("Earlier introductory demo");
+    expect(hero).toContain("open-source platform");
+    expect(hero).toContain("Open the browser walkthrough");
+    expect(hero).not.toContain("Three minutes");
+    expect(english).toContain("including hints and scoring");
+    expect(english).toContain("Three minutes is a target");
+    expect(english).toContain("this challenge is not playable yet");
+    expect(english).toContain('href="/docs/getting-started/index.en.html#local-start"');
+    expect(english).toContain('href="./docs/manual/organizer/index.en.html"');
   });
 });
 

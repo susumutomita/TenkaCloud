@@ -73,7 +73,7 @@
 .incident-fix:hover { background: #075197; }
 .incident-reset { border: 1px solid var(--ink-4); background: var(--paper); color: var(--ink-2); }
 .incident-chapter { min-height: 74vh; min-height: 74dvh; padding: 72px 0; scroll-margin-top: 100px; }
-.incident-chapter h3 { font-size: clamp(1.625rem, .5rem + 2vw, 2.25rem); line-height: 1.4; margin: 16px 0 20px; }
+.incident-chapter :is(h3,h4) { font-size: clamp(1.625rem, .5rem + 2vw, 2.25rem); line-height: 1.4; margin: 16px 0 20px; }
 .incident-chapter p { font-size: 15px; line-height: 1.9; color: var(--ink-2); }
 .incident-chapter a { display: inline-block; color: var(--blue); margin-top: 24px; text-underline-offset: 5px; }
 .incident-chapter .incident-insight { margin-top: 24px; padding-left: 16px; border-left: 2px solid #b42318; color: var(--ink-2); }
@@ -127,7 +127,7 @@
   .incident-controls { left: 16px; right: 16px; bottom: 12px; gap: 6px; }
   .incident-controls button { padding: 8px; min-height: 44px; font-size: 11px; }
   .incident-chapter { min-height: 75vh; min-height: 75dvh; padding: 40px 0; scroll-margin-top: 500px; }
-  .incident-chapter h3 { font-size: 1.75rem; }
+  .incident-chapter :is(h3,h4) { font-size: 1.75rem; }
   .incident-chapter p { font-size: 14px; }
   .incident-boundary { top: 2%; left: 45%; font-size: 9px; }
   .incident-outro { padding-top: 48px; padding-bottom: 48px; }

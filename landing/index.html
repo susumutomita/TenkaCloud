@@ -124,9 +124,10 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" />
 <link rel="stylesheet" href="./styles/main.css?v=6f930e2dab" />
-<link rel="stylesheet" href="./styles/incident.css?v=d60dea9166" />
+<link rel="stylesheet" href="./styles/incident.css?v=2c9a2150f4" />
+<link rel="stylesheet" href="./styles/platform.css?v=7a82adcb6b" />
 </head>
-<body>
+<body class="platform-landing">
 <a class="landing-skip" href="#main-start" data-i18n="incident.skip">本文へ移動</a>
 
 <nav class="nav">
@@ -139,8 +140,8 @@
       TenkaCloud
     </div>
     <div class="nav-links">
-      <a href="#modes" data-i18n="nav.product">プロダクト</a>
-      <a href="#use-cases" data-i18n="nav.useCases">活用例</a>
+      <a href="#platform" data-i18n="nav.product">プロダクト</a>
+      <a href="#hosting" data-i18n="nav.useCases">活用例</a>
       <a href="./portal-demo/?demo=1&amp;goto=%2Fproblems%3Flang%3Dja" data-i18n-href="mailGame.href" data-i18n="nav.games">ゲームで学ぶ</a>
       <a href="./docs/" data-i18n="nav.docs">ドキュメント</a>
       <a href="#pricing" data-i18n="nav.pricing">料金</a>
@@ -161,44 +162,157 @@
 </nav>
 
 <main>
-<section class="hero">
 
-  <div class="wrap hero-grid">
-    <div class="hero-copy">
-      <p id="main-start" tabindex="-1" class="hero-preview" data-i18n="hero.preview">開発中の体験 · 3分は目標時間</p>
-      <h1>
-        <span data-i18n="hero.h1a">ニュースで聞く情報漏えい、</span><em data-i18n="hero.h1b">どうやって起こるの？</em>
-      </h1>
-      <p class="hero-tagline" data-i18n="hero.tagline">3分で体験する、セキュリティインシデント。</p>
-      <p class="sub" data-i18n="hero.sub">漏えいの仕組みを知り、手を動かして止めてみよう。</p>
-      <p class="hero-vibe" data-i18n="hero.vibe"><strong>最初の1問を準備中です。</strong> 他人の架空の顧客情報が見えてしまう。設定を直し、他人は読めず本人は使えることを確かめる演習です。所要時間は未検証で、まだプレーできません。</p>
-      <a class="incident-enter" href="#incident" data-i18n="incident.enter">漏えいの仕組みを見てみる ↓</a>
-      <a class="hero-quest-card" href="/portal-demo/?demo=1&amp;goto=start" data-cta="start-drill">
-        <span class="hero-quest-meta" data-i18n="hero.quest_meta">現在公開中 · ブラウザ操作デモ · 登録不要</span>
-        <span class="hero-quest-title" data-i18n="hero.quest_title">演習の流れを、試してみる。</span>
-        <span class="hero-quest-desc" data-i18n="hero.quest_desc">問題を開き、接続先を確かめ、回答を提出。ヒントと採点までの操作デモです。準備中の情報漏えい問題や、実環境への攻撃・修復を体験するものではありません。</span>
-        <span class="hero-quest-cta"><span data-i18n="hero.quest_cta">現在の操作デモを見る</span> →</span>
-      </a>
-      <p class="hero-secondary">
-        <a href="./portal-demo/?demo=1&amp;goto=%2Fproblems%3Flang%3Dja" data-i18n-href="mailGame.href" data-i18n="nav.games">ゲームで学ぶ</a> ·
-        <a href="/docs/getting-started/#local-start" data-i18n-href="hero.startHref" data-cta="local-start"><span data-i18n="hero.cta_demo">自分の PC で起動する</span></a>
-        ·
-        <a href="/videos/lp/tenkacloud-60s.mp4?v=54d2534496" target="_blank" rel="noopener noreferrer" data-cta="watch-60s"><span data-i18n="hero.cta_video">▶ 現行の紹介動画（1分）</span></a>
-        ·
-        <span data-i18n="hero.host_prefix">主催者の方へ:</span>
-        <a href="./docs/manual/organizer/" target="_blank" rel="noopener noreferrer" data-cta="deploy-aws" data-i18n-href="hero.hostHref"><span data-i18n="hero.cta_host">開催ガイド</span> →</a>
-        ·
-        <a href="#pricing" data-cta="get-quote"><span data-i18n="hero.cta_quote">Hosted Event の見積もり</span> →</a>
-      </p>
-      <p class="hero-trust" data-i18n="hero.trust">合同会社 BULL 運営 · Apache 2.0</p>
-    </div>
-  </div>
+<section class="hero" id="platform">
+<div class="wrap">
+<div class="hero-copy">
+<p id="main-start" tabindex="-1" class="hero-preview" data-i18n="platform.eyebrow">TenkaCloud / OSS の演習・競技プラットフォーム
+</p>
+<h1><span  data-i18n="platform.h1a">クラウドと<br>セキュリティを、</span><em  data-i18n="platform.h1b">実践で学ぶ。</em>
+</h1>
+<p class="sub" data-i18n="platform.definition">TenkaCloud は、クラウドとセキュリティを手を動かして学ぶ OSS の演習・競技基盤です。主催者はローカルや AWS で大会を開き、問題・チーム・回答・採点・ランキングを扱えます。
+</p>
+<div class="platform-hero-actions"><a class="platform-primary" href="/portal-demo/?demo=1&amp;goto=start" data-cta="start-drill" data-i18n="platform.primary">操作デモをブラウザーで見る →</a>
+<p class="platform-muted" data-i18n="platform.primaryNote">公開中 · 登録不要 · 演習の操作を確認するデモです
+</p><a href="#try" data-i18n="platform.choose">今試せることを比べる ↓</a>
+</div>
+<div class="platform-preview">
+<p  data-i18n="platform.preview">参加者画面のサンプル · 問題は主催者が選びます
+</p>
+<div class="portal-preview">
+            <div class="portal-page-title" data-i18n="preview.quests.title">問題一覧 (Quests)</div>
+            <div class="portal-page-desc" data-i18n="preview.quests.desc">自チームに deploy された問題のカタログ。各カードからアクセス先 URL に直接遷移できます。</div>
+            <div class="portal-tabs" aria-label="カテゴリで絞り込み">
+              <span class="portal-tab active" data-i18n="preview.quests.all">すべて (3)</span>
+              <span class="portal-tab">Battle (2)</span>
+              <span class="portal-tab">Challenge (1)</span>
+            </div>
+            <div class="portal-container">
+              <div class="portal-container-title" data-i18n="preview.quests.unsolved">未解決 (3)</div>
+              <div class="quest-card-list">
+                <div class="quest-card">
+                  <code>microservice-migration-battle</code>
+                  <span class="portal-badge red">Battle</span>
+                  <span class="portal-badge grey" data-i18n="preview.quests.diff_mid">難易度: 中級</span>
+                  <span class="status-text" data-i18n="preview.quests.in_progress">挑戦中</span>
+                </div>
+                <div class="quest-card">
+                  <code>hello-world</code>
+                  <span class="portal-badge blue">Challenge</span>
+                  <span class="portal-badge grey" data-i18n="preview.quests.diff_intro">難易度: 入門</span>
+                  <span class="status-text pending" data-i18n="preview.quests.unsolved_status">未解答</span>
+                </div>
+                <div class="quest-card">
+                  <code>hello-world-battle</code>
+                  <span class="portal-badge red">Battle</span>
+                  <span class="portal-badge grey" data-i18n="preview.quests.diff_mid">難易度: 中級</span>
+                  <span class="status-text" data-i18n="preview.quests.in_progress">挑戦中</span>
+                </div>
+              </div>
+            </div>
+            <div class="portal-collapsed" data-i18n="preview.quests.cleared">⌄ 解決済み (0)</div>
+          </div></div><p class="hero-secondary"><a href="/videos/lp/tenkacloud-60s.mp4?v=54d2534496" target="_blank" rel="noopener noreferrer" data-cta="watch-60s"><span data-i18n="hero.cta_video">▶ 現行の紹介動画（1分）</span></a></p><p class="hero-trust" data-i18n="hero.trust">合同会社 BULL 運営 · Apache 2.0</p></div></div></section>
+
+
+<section class="platform-section platform-soft" id="why">
+<div class="wrap">
+<p class="eyebrow" data-i18n="platform.whyEyebrow">なぜ、実践なのか
+</p>
+<h2  data-i18n="platform.whyTitle"><span class="platform-phrase">知識を、</span><span class="platform-phrase">実践で使える力へ。</span>
+</h2>
+<p class="platform-lead" data-i18n="platform.whyLead">セキュリティは必要。でも何から始めればいい？ 経験者は少なく、頼るには費用もかかる。教科書で学んだことを、安全な演習の中で試し、結果から学び直せる場所が必要です。
+</p>
+<ol class="platform-loop">
+<li>
+<h3  data-i18n="platform.chooseStep">問題に挑む
+</h3>
+<p  data-i18n="platform.chooseStepBody">主催者が、受講者と目的に合う問題を選びます。基礎ゲーム、Challenge、Battle で学び方を変えられます。
+</p>
+</li>
+<li>
+<h3  data-i18n="platform.practiceStep">手を動かす
+</h3>
+<p  data-i18n="platform.practiceStepBody">答えを考えるだけでなく、対応するシミュレーターや実環境を操作。問題ごとの接続条件と費用はガイドで確認できます。
+</p>
+</li>
+<li>
+<h3  data-i18n="platform.feedbackStep">結果を確かめる
+</h3>
+<p  data-i18n="platform.feedbackStepBody">回答やチェックポイントを提出し、採点・ヒント・得点の変化を振り返ります。もう一度試すことで、理解を確かめます。
+</p>
+</li>
+</ol>
+</div>
 </section>
 
+
+<section class="platform-section" id="try">
+<div class="wrap">
+<p class="eyebrow" data-i18n="platform.tryEyebrow">最初の一歩
+</p>
+<h2  data-i18n="platform.tryTitle">今、試せること。
+</h2>
+<p class="platform-lead" data-i18n="platform.tryLead">まずはブラウザーで流れを確かめる。ゲームで基礎に触れる。自分で演習を開催する。目的に合わせて選べます。
+</p>
+<div class="platform-start-list">
+<article class="platform-start-option">
+<p class="platform-option-meta" data-i18n="platform.demoStatus">公開中 / ブラウザー / 登録不要
+</p>
+<h3  data-i18n="platform.demoTitle">演習の操作を知る
+</h3>
+<p data-i18n="hero.quest_desc">問題を開き、接続先を確かめ、回答を提出。ヒントと採点までの操作デモです。準備中の情報漏えい問題や、実環境への攻撃・修復を体験するものではありません。
+</p><a href="/portal-demo/?demo=1&amp;goto=start" data-i18n="platform.demoLink">現在の操作デモを見る →</a>
+</article>
+<article class="platform-start-option" id="security-minigames">
+<p class="platform-option-meta" data-i18n="platform.gameStatus">公開中 / ブラウザー / AWS・登録不要
+</p>
+<h3 data-i18n="mailGame.h">ゲームで学ぶ。
+</h3>
+<p data-i18n="mailGame.p">まず遊んで、気づいたらもう一度。ブラウザーで試せる基礎ゲームを集めました。AWS・登録不要です。
+</p><a href="./portal-demo/?demo=1&amp;goto=%2Fproblems%3Flang%3Dja" data-i18n-href="mailGame.href" data-i18n="mailGame.cta">ゲーム一覧へ →</a>
+</article>
+<article class="platform-start-option">
+<p class="platform-option-meta" data-i18n="platform.localStatus">起動ガイド公開 / 自分の PC / 主催者向け
+</p>
+<h3  data-i18n="platform.localTitle">演習を自分で開催する
+</h3>
+<p  data-i18n="platform.localBody">ローカル開催は AWS アカウント不要。参加者には主催者が URL とチームキーを渡します。Docker 問題の利用条件やクラウド開催は起動・運営ガイドで確認できます。
+</p><a href="/docs/getting-started/#local-start" data-i18n-href="hero.startHref" data-i18n="hero.cta_demo" data-cta="local-start">自分の PC で起動する</a>
+</article>
+</div>
+<p class="platform-fee-note" data-i18n="platform.feeNote">OSS 本体のライセンス料は無料です。AWS などの環境利用料は別で、運営代行は任意の有料サービスです。
+</p>
+</div>
+</section>
+
+
+<section class="platform-section platform-soft" id="examples">
+<div class="wrap">
+<p class="eyebrow" data-i18n="platform.exampleEyebrow">学び方を、一例で
+</p>
+<h2  data-i18n="platform.exampleTitle"><span class="platform-phrase">起きることを見て、</span><span class="platform-phrase">操作して、</span><span class="platform-phrase">結果を比べる。</span>
+</h2>
+<p class="platform-lead" data-i18n="platform.exampleLead">TenkaCloud で扱う問題は、主催者と目的によって変わります。ここでは開発中の「認可バグ」を一例として、悪影響に気づいて止める学び方を紹介します。
+</p>
+<details class="platform-case">
+<summary><span  data-i18n="platform.caseSummary">開発中の演習例：情報漏えいの仕組みを操作で見る</span>
+</summary>
+<div class="platform-case-copy">
+<p class="hero-preview" data-i18n="hero.preview">開発中の体験 · 3分は目標時間
+</p>
+<h3><span data-i18n="hero.h1a">ニュースで聞く情報漏えい、</span><em data-i18n="hero.h1b">どうやって起こるの？</em>
+</h3>
+<p data-i18n="hero.tagline">3分で体験する、セキュリティインシデント。
+</p>
+<p data-i18n="hero.sub">漏えいの仕組みを知り、手を動かして止めてみよう。
+</p>
+<p class="platform-muted" data-i18n="hero.vibe"><strong>最初の1問を準備中です。</strong> 他人の架空の顧客情報が見えてしまう。設定を直し、他人は読めず本人は使えることを確かめる演習です。所要時間は未検証で、まだプレーできません。
+</p>
+</div>
 <section class="incident-story" id="incident" aria-labelledby="incident-title" data-phase="0" data-person="own">
   <div class="wrap incident-intro">
     <p class="incident-kicker">CASE 001 / BROKEN ACCESS CONTROL</p>
-    <h2 id="incident-title" data-i18n="incident.title">たった1つの ID が、境界を越える。</h2>
+    <h3 id="incident-title" data-i18n="incident.title">たった1つの ID が、境界を越える。</h3>
     <p data-i18n="incident.notice">説明用のローカル演出 · 全データ架空 · 採点付き演習ではありません</p>
   </div>
   <div class="wrap incident-layout">
@@ -242,34 +356,42 @@
     <div class="incident-chapters">
       <article class="incident-chapter" data-step="0">
         <span class="incident-kicker">01 / REQUEST</span>
-        <h3 data-i18n="incident.step1Title">ログインできた。<br>それだけで安全？</h3>
+        <h4 data-i18n="incident.step1Title">ログインできた。<br>それだけで安全？</h4>
         <p data-i18n="incident.step1">自分のページを開くと、サーバーは ID 1042 の情報を返します。ログインの確認は「誰なのか」。でも「誰の情報を読んでよいか」は、別の確認です。</p>
         <a href="#incident-step2" data-i18n="incident.next">ID を1つ変えてみる ↓</a>
       </article>
       <article class="incident-chapter" data-step="1" id="incident-step2">
         <span class="incident-kicker">02 / EXPOSURE</span>
-        <h3 data-i18n="incident.step2Title">ID を変えただけで、<br>他人の情報が見えた。</h3>
+        <h4 data-i18n="incident.step2Title">ID を変えただけで、<br>他人の情報が見えた。</h4>
         <p data-i18n="incident.step2">1042 → 1043。所有者を確認しないサーバーは、別人の架空の個人情報まで返してしまいます。URL を隠すだけでは、この漏えいは止まりません。</p>
         <p class="incident-insight" data-i18n="incident.impact">この先にあるのは、誰かの個人情報。まず、悪影響を実感する。</p>
       </article>
       <article class="incident-chapter" data-step="2">
         <span class="incident-kicker">03 / CONTAINMENT</span>
-        <h3 data-i18n="incident.step3Title">止めるのは漏えい。<br>サービスは止めない。</h3>
+        <h4 data-i18n="incident.step3Title">止めるのは漏えい。<br>サービスは止めない。</h4>
         <p data-i18n="incident.step3">サーバー側で、ログインしたユーザーとデータの所有者を照合。自分の情報は 200、他人の情報は 403。全員を遮断するだけでは正解ではありません。左右の ID を切り替えて、両方を確かめてください。</p>
         <code class="incident-rule">session.userId === record.ownerId</code>
       </article>
     </div>
   </div>
-  <div class="wrap incident-outro">
-    <p class="incident-kicker">UNDERSTAND. TRY. PROTECT.</p>
-    <h2 data-i18n="incident.outroTitle">「知っている」を、<br>「止められる」へ。</h2>
-    <p data-i18n="incident.outro">セキュリティは必要。でも、何から始めればいい？ 経験者は少なく、頼むには費用もかかる。教科書だけでは埋まらない実践との距離を、安全で低コストなシミュレーターや実環境での体験で縮めます。</p>
-    <p class="incident-development" data-i18n="incident.development">この認可バグの演習は開発中で、クラウドでは未公開です。上の演出に採点はありません。3分は目標で、初回の所要時間は未実測です。</p>
-    <a href="/portal-demo/?demo=1&amp;goto=start" class="incident-demo-link" data-i18n="incident.demo">現在公開中の操作デモを見る ↗</a>
-    <p class="incident-demo-note" data-i18n="incident.demoNote">問題を開く・回答を提出する流れのデモです。この情報漏えい演習とは異なります。</p>
-  </div>
-</section>
+  <div class="wrap incident-outro"><p class="incident-development" data-i18n="incident.development">この認可バグの演習は開発中で、クラウドでは未公開です。上の演出に採点はありません。3分は目標で、初回の所要時間は未実測です。</p><a href="#try" data-i18n="platform.backToTry">今試せるものを選ぶ ↑</a></div>
+</section></details></div></section>
 
+
+<section class="platform-section" id="hosting">
+<div class="wrap">
+<p class="eyebrow" data-i18n="platform.hostEyebrow">個人の学びから、チームの演習へ
+</p>
+<h2  data-i18n="platform.hostTitle"><span class="platform-phrase">挑む人にも、</span><span class="platform-phrase">開催する人にも。</span>
+</h2>
+<p class="platform-lead" data-i18n="platform.hostLead">参加者は問題に集中。主催者は、イベント・チーム・問題・得点・進捗をひとつの基盤で管理します。公開問題を選ぶことも、独自教材を組み込むこともできます。ローカルと AWS の対応範囲・検証状況は、問題ごとのガイドで確認できます。
+</p>
+<div class="platform-role-links"><a href="#use-cases" data-i18n="nav.useCases">活用例</a><a href="./docs/manual/participant/" data-i18n-href="mailGame.joinHref" data-i18n="mailGame.join">競技に参加する →</a><a href="./docs/manual/organizer/" data-i18n-href="hero.hostHref" data-i18n="hero.cta_host" data-cta="deploy-aws">開催ガイド</a>
+</div>
+<details class="platform-details">
+<summary><span  data-i18n="platform.featuresSummary">運営機能・競技形式・活用例を詳しく見る</span>
+</summary>
+<div class="platform-detail-content">
 <section class="alt" id="modes">
   <div class="wrap">
     <div class="eyebrow" data-i18n="modes.eyebrow">2 つの競技形式</div>
@@ -369,9 +491,7 @@
       </div>
     </div>
   </div>
-</section>
-
-<section>
+</section><section>
   <div class="wrap audience-intro">
     <div class="eyebrow" data-i18n="aud.eyebrow">誰のための</div>
     <h2 data-i18n="aud.h2">クラウド実戦力を、組織で育てる。</h2>
@@ -397,9 +517,7 @@
       <a class="more" href="./docs/manual/problem-author/" target="_blank" rel="noopener noreferrer" data-i18n-href="aud.c.moreHref"><span data-i18n="aud.c.more">問題を作る</span> ›</a>
     </div>
   </div>
-</section>
-
-<section class="alt" id="use-cases">
+</section><section class="alt" id="use-cases">
   <div class="wrap audience-intro">
     <div class="eyebrow" data-i18n="uc.eyebrow">企業での活用</div>
     <h2 data-i18n="uc.h2">セキュリティ研修を、ゲームにする。</h2>
@@ -440,25 +558,11 @@
       <p data-i18n="uc.f.p">同じ問題や類題を時期を空けて再び出題し、チームの得点や解答状況を前回と比べます。一回の受講で終わらせず、身についたかを確かめられます。</p>
     </div>
   </div>
-</section>
-
-<section id="security-minigames">
-  <div class="wrap">
-    <h2 data-i18n="mailGame.h">ゲームで学ぶ。</h2>
-    <p class="lead" data-i18n="mailGame.p">まず遊んで、気づいたらもう一度。ブラウザーで試せる基礎ゲームを集めました。AWS・登録不要です。</p>
-    <a class="more" href="./portal-demo/?demo=1&amp;goto=%2Fproblems%3Flang%3Dja" data-i18n-href="mailGame.href"><span data-i18n="mailGame.cta">ゲーム一覧へ →</span></a>
-    <p class="lead" data-i18n="mailGame.roles">競技への参加は主催者の招待から。ローカル／クラウドは主催者が選ぶ開催方式です。</p>
-    <p><a class="more" href="./docs/manual/participant/" data-i18n-href="mailGame.joinHref" data-i18n="mailGame.join">競技に参加する →</a> · <a class="more" href="./docs/manual/organizer/" data-i18n-href="mailGame.hostHref" data-i18n="mailGame.host">競技を開催する →</a></p>
-  </div>
-</section>
-
-<section class="alt">
+</section><section class="alt">
   <div class="wrap">
     <div class="stats" id="stats-grid"></div>
   </div>
-</section>
-
-<section id="extend">
+</section></div></details><details class="platform-details"><summary><span  data-i18n="platform.resourcesSummary">教材を作る・AI で始める・本で読む</span></summary><div class="platform-detail-content"><section id="extend">
   <div class="wrap audience-intro">
     <div class="eyebrow" data-i18n="extend.eyebrow">問題は、増やせる</div>
     <h2 data-i18n="extend.h2">足りない問題は、自分で作ればいい。</h2>
@@ -487,11 +591,7 @@
       </div>
     </div>
   </div>
-</section>
-
-<!-- 書籍。 両版を並べて出すのが要点で、フッターの 1 行では読者から見て
-     「自分の言語の版しか存在しない」 ように見えていた (Issue #2974)。 -->
-<section id="book">
+</section><section id="book">
   <div class="wrap audience-intro">
     <div class="eyebrow" data-i18n="book.eyebrow">本で読む</div>
     <h2 data-i18n="book.h2">作り方を、一冊にまとめてあります。</h2>
@@ -507,8 +607,23 @@
       </a>
     </div>
   </div>
-</section>
+</section></div></details></div></section>
 
+
+<section class="platform-section platform-soft" id="support">
+<div class="wrap">
+<p class="eyebrow" data-i18n="platform.supportEyebrow">始め方と費用
+</p>
+<h2  data-i18n="platform.supportTitle"><span class="platform-phrase">自分で始める。</span><span class="platform-phrase">運営を任せる。</span>
+</h2>
+<p class="platform-lead" data-i18n="platform.supportLead">TenkaCloud 本体は Apache 2.0 の OSS です。ライセンス料と、利用するクラウドの料金、運営代行のサービス料金は別のもの。自分で始めたい方はガイドへ、設計・当日運営を任せたい方は提供範囲と料金をご覧ください。
+</p>
+<div class="platform-role-links"><a href="/docs/getting-started/#local-start" data-i18n-href="hero.startHref" data-i18n="hero.cta_demo">自分の PC で起動する</a><a href="#pricing" data-cta="get-quote" data-i18n="platform.pricingLink">運営代行の料金を見る ↓</a>
+</div>
+<details class="platform-details">
+<summary><span  data-i18n="platform.commercialSummary">運営代行の提供範囲・料金・問い合わせ</span>
+</summary>
+<div class="platform-detail-content">
 <section id="offerings" class="alt">
   <div class="wrap audience-intro">
     <div class="eyebrow" data-i18n="offerings.eyebrow">Commercial offerings</div>
@@ -532,9 +647,7 @@
       <p data-i18n="offerings.d.p">A monthly retainer for operating-model / training-roadmap work. <strong>Never bundled</strong> into the two offerings above, so events stay productized. If you want both, that is two line items.</p>
     </div>
   </div>
-</section>
-
-<section id="pricing">
+</section><section id="pricing">
   <div class="wrap">
     <div class="pricing-head">
       <div class="eyebrow" data-i18n="pricing.eyebrow">料金</div>
@@ -593,9 +706,7 @@
     </div>
     <p class="pricing-tail" data-i18n="pricing.tail"><strong>カスタム問題の追加開発</strong>は要件定義から実装まで通常の受託開発と同じスコープになるため、 別途お見積もりします。 それ以上の規模 / 特別要件も含めて、 <a href="#contact">お問い合わせ</a> ください。</p>
   </div>
-</section>
-
-<section id="contact">
+</section><section id="contact">
   <div class="wrap">
     <div class="ent-cta">
       <div class="eyebrow" data-i18n="ent.eyebrow">どのプランがよいか分からない</div>
@@ -607,7 +718,9 @@
       </div>
     </div>
   </div>
-</section>
+</section></div></details></div></section>
+
+<section class="platform-section platform-final"><div class="wrap"><h2  data-i18n="platform.finalTitle">まずは、TenkaCloud の流れを確かめる。</h2><p class="platform-lead" data-i18n="platform.finalBody">公開中の操作デモで、問題を開いて回答するまでを確認できます。登録は不要です。</p><a class="platform-primary" href="/portal-demo/?demo=1&amp;goto=start" data-i18n="platform.finalLink">操作デモをブラウザーで見る →</a></div></section>
 
 </main>
 
@@ -625,7 +738,7 @@
     </div>
     <div>
       <h5>Product</h5>
-      <a href="#modes" data-i18n="footer.p0">概要</a>
+      <a href="#platform" data-i18n="footer.p0">概要</a>
       <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer" data-i18n="footer.p1">問題カタログ</a>
     </div>
     <div>
@@ -666,8 +779,9 @@
   </div>
 </footer>
 
+<script src="./platform-page.js?v=ea43f0525b" defer></script>
 <script src="./incident-story.js?v=ba1b4811ea" defer></script>
-<script src="./app.js?v=88f56c0314" defer></script>
+<script src="./app.js?v=7bcc345d1c" defer></script>
 
 </body>
 </html>

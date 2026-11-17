@@ -7,7 +7,7 @@ const root = join(import.meta.dir, "../..");
 const html = readFileSync(join(root, "landing/index.html"), "utf8");
 const script = readFileSync(join(root, "landing/incident-story.js"), "utf8");
 
-function setup(mode: "unsupported" | "drawable" | "failure" = "unsupported") {
+function setup(mode: "unsupported" | "drawable" | "failure" = "unsupported", reduced = false) {
   const dom = new JSDOM(html, {
     pretendToBeVisual: true,
     runScripts: "outside-only",
@@ -56,7 +56,7 @@ function setup(mode: "unsupported" | "drawable" | "failure" = "unsupported") {
   });
   Object.defineProperty(window, "matchMedia", {
     value: () => ({
-      matches: false,
+      matches: reduced,
       addEventListener() {
         /* Match media stays constant in this fixture. */
       },
@@ -208,6 +208,21 @@ describe("incident explanation", () => {
     expect(page.http()).toBe("200 OK");
     page.click("[data-fix]");
     expect(page.http()).toBe("403 Forbidden");
+    page.dom.window.close();
+  });
+
+  it("keeps a static readable final state when reduced motion is requested", () => {
+    const page = setup("drawable", true);
+    page.flush();
+    const before = page.draws();
+    page.click('[data-person-select="other"]');
+    page.flush();
+    expect(page.draws() - before).toBe(1);
+    page.click("[data-fix]");
+    page.flush();
+    expect(page.http()).toBe("403 Forbidden");
+    page.click('[data-person-select="own"]');
+    expect(page.http()).toBe("200 OK");
     page.dom.window.close();
   });
 

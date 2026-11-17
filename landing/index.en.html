@@ -125,9 +125,10 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" />
 <link rel="stylesheet" href="./styles/main.css?v=6f930e2dab" />
-<link rel="stylesheet" href="./styles/incident.css?v=d60dea9166" />
+<link rel="stylesheet" href="./styles/incident.css?v=2c9a2150f4" />
+<link rel="stylesheet" href="./styles/platform.css?v=7a82adcb6b" />
 </head>
-<body>
+<body class="platform-landing">
 <a class="landing-skip" href="#main-start" data-i18n="incident.skip">Skip to content</a>
 
 <nav class="nav">
@@ -140,8 +141,8 @@
       TenkaCloud
     </div>
     <div class="nav-links">
-      <a href="#modes" data-i18n="nav.product">Product</a>
-      <a href="#use-cases" data-i18n="nav.useCases">Use cases</a>
+      <a href="#platform" data-i18n="nav.product">Product</a>
+      <a href="#hosting" data-i18n="nav.useCases">Use cases</a>
       <a href="./portal-demo/?demo=1&goto=%2Fproblems%3Flang%3Den" data-i18n-href="mailGame.href" data-i18n="nav.games">Learn through games</a>
       <a href="./docs/index.en.html" data-i18n="nav.docs">Docs</a>
       <a href="#pricing" data-i18n="nav.pricing">Pricing</a>
@@ -162,44 +163,124 @@
 </nav>
 
 <main>
-<section class="hero">
 
-  <div class="wrap hero-grid">
-    <div class="hero-copy">
-      <p id="main-start" tabindex="-1" class="hero-preview" data-i18n="hero.preview">Experience in development · Three minutes is a target</p>
-      <h1>
-        <span data-i18n="hero.h1a">Data breaches make the news. </span><em data-i18n="hero.h1b">How do they happen?</em>
-      </h1>
-      <p class="hero-tagline" data-i18n="hero.tagline">Experience a security incident in three minutes.</p>
-      <p class="sub" data-i18n="hero.sub">Understand how data leaks, then practice stopping it.</p>
-      <p class="hero-vibe" data-i18n="hero.vibe"><strong>The first challenge is in development.</strong> Someone else’s fictional customer data is exposed. Fix the settings, then check that others cannot read it while its owner still can. Completion time is unverified; this challenge is not playable yet.</p>
-      <a class="incident-enter" href="#incident" data-i18n="incident.enter">See how a leak happens ↓</a>
-      <a class="hero-quest-card" href="/portal-demo/?demo=1&amp;goto=start" data-cta="start-drill">
-        <span class="hero-quest-meta" data-i18n="hero.quest_meta">Available now · Browser walkthrough · No signup</span>
-        <span class="hero-quest-title" data-i18n="hero.quest_title">Try the exercise flow.</span>
-        <span class="hero-quest-desc" data-i18n="hero.quest_desc">Open a problem, explore its endpoint and submit an answer. This walkthrough shows the workflow, including hints and scoring. It is not the upcoming data-leak challenge or an attack-and-repair exercise against a live environment.</span>
-        <span class="hero-quest-cta"><span data-i18n="hero.quest_cta">Open the current walkthrough</span> →</span>
-      </a>
-      <p class="hero-secondary">
-        <a href="./portal-demo/?demo=1&goto=%2Fproblems%3Flang%3Den" data-i18n-href="mailGame.href" data-i18n="nav.games">Learn through games</a> ·
-        <a href="/docs/getting-started/index.en.html#local-start" data-i18n-href="hero.startHref" data-cta="local-start"><span data-i18n="hero.cta_demo">Start on your computer</span></a>
-        ·
-        <a href="/videos/lp/tenkacloud-60s.mp4?v=54d2534496" target="_blank" rel="noopener noreferrer" data-cta="watch-60s"><span data-i18n="hero.cta_video">▶ Current introduction (1 minute)</span></a>
-        ·
-        <span data-i18n="hero.host_prefix">Hosting an event?</span>
-        <a href="./docs/manual/organizer/index.en.html" target="_blank" rel="noopener noreferrer" data-cta="deploy-aws" data-i18n-href="hero.hostHref"><span data-i18n="hero.cta_host">Hosting guide</span> →</a>
-        ·
-        <a href="#pricing" data-cta="get-quote"><span data-i18n="hero.cta_quote">Get a Hosted Event quote</span> →</a>
-      </p>
-      <p class="hero-trust" data-i18n="hero.trust">Operated by BULL LLC · Apache 2.0</p>
-    </div>
-  </div>
+<section class="hero" id="platform">
+<div class="wrap">
+<div class="hero-copy">
+<p id="main-start" tabindex="-1" class="hero-preview" data-i18n="platform.eyebrow">TenkaCloud / Open-source practice and competition platform</p>
+<h1><span  data-i18n="platform.h1a">Cloud and security,</span><em  data-i18n="platform.h1b">learned by doing.</em>
+</h1>
+<p class="sub" data-i18n="platform.definition">TenkaCloud is an open-source platform for hands-on cloud and security exercises and competitions. Organizers host events locally or on AWS, working with problems, teams, submissions, scoring and rankings.</p>
+<div class="platform-hero-actions"><a class="platform-primary" href="/portal-demo/?demo=1&amp;goto=start" data-cta="start-drill" data-i18n="platform.primary">Open the browser walkthrough →</a>
+<p class="platform-muted" data-i18n="platform.primaryNote">Available now · No signup · A walkthrough of the exercise workflow</p><a href="#try" data-i18n="platform.choose">Compare ways to try it ↓</a>
+</div>
+<div class="platform-preview">
+<p  data-i18n="platform.preview">Sample participant screen · Organizers select the problems</p>
+<div class="portal-preview">
+            <div class="portal-page-title" data-i18n="preview.quests.title">Problem list (Quests)</div>
+            <div class="portal-page-desc" data-i18n="preview.quests.desc">A catalog of problems deployed to your team. Jump directly to each access URL from its card.</div>
+            <div class="portal-tabs" aria-label="カテゴリで絞り込み">
+              <span class="portal-tab active" data-i18n="preview.quests.all">All (3)</span>
+              <span class="portal-tab">Battle (2)</span>
+              <span class="portal-tab">Challenge (1)</span>
+            </div>
+            <div class="portal-container">
+              <div class="portal-container-title" data-i18n="preview.quests.unsolved">Unsolved (3)</div>
+              <div class="quest-card-list">
+                <div class="quest-card">
+                  <code>microservice-migration-battle</code>
+                  <span class="portal-badge red">Battle</span>
+                  <span class="portal-badge grey" data-i18n="preview.quests.diff_mid">Difficulty: intermediate</span>
+                  <span class="status-text" data-i18n="preview.quests.in_progress">In progress</span>
+                </div>
+                <div class="quest-card">
+                  <code>hello-world</code>
+                  <span class="portal-badge blue">Challenge</span>
+                  <span class="portal-badge grey" data-i18n="preview.quests.diff_intro">Difficulty: intro</span>
+                  <span class="status-text pending" data-i18n="preview.quests.unsolved_status">Unanswered</span>
+                </div>
+                <div class="quest-card">
+                  <code>hello-world-battle</code>
+                  <span class="portal-badge red">Battle</span>
+                  <span class="portal-badge grey" data-i18n="preview.quests.diff_mid">Difficulty: intermediate</span>
+                  <span class="status-text" data-i18n="preview.quests.in_progress">In progress</span>
+                </div>
+              </div>
+            </div>
+            <div class="portal-collapsed" data-i18n="preview.quests.cleared">⌄ Cleared (0)</div>
+          </div></div><p class="hero-secondary"><a href="/videos/lp/tenkacloud-60s.mp4?v=54d2534496" target="_blank" rel="noopener noreferrer" data-cta="watch-60s"><span data-i18n="hero.cta_video">▶ Current introduction (1 minute)</span></a></p><p class="hero-trust" data-i18n="hero.trust">Operated by BULL LLC · Apache 2.0</p></div></div></section>
+
+
+<section class="platform-section platform-soft" id="why">
+<div class="wrap">
+<p class="eyebrow" data-i18n="platform.whyEyebrow">Why hands-on practice</p>
+<h2  data-i18n="platform.whyTitle">Bridge knowing and doing.</h2>
+<p class="platform-lead" data-i18n="platform.whyLead">Security matters. But where do you start? Experienced people are scarce and costly. Put textbook knowledge to work in a safe exercise, see what happens, and learn from the result.</p>
+<ol class="platform-loop">
+<li>
+<h3  data-i18n="platform.chooseStep">Choose a problem</h3>
+<p  data-i18n="platform.chooseStepBody">Organizers choose problems for their learners and goals: basic games, Challenges or Battles.</p>
+</li>
+<li>
+<h3  data-i18n="platform.practiceStep">Try it hands-on</h3>
+<p  data-i18n="platform.practiceStepBody">Work with a supported simulator or real environment, as appropriate for the problem. Check its guide for access requirements and costs.</p>
+</li>
+<li>
+<h3  data-i18n="platform.feedbackStep">Check the result</h3>
+<p  data-i18n="platform.feedbackStepBody">Submit answers or checkpoints, then review scoring, hints and score changes. Try again to check your understanding.</p>
+</li>
+</ol>
+</div>
 </section>
 
+
+<section class="platform-section" id="try">
+<div class="wrap">
+<p class="eyebrow" data-i18n="platform.tryEyebrow">Start here</p>
+<h2  data-i18n="platform.tryTitle">What you can try now.</h2>
+<p class="platform-lead" data-i18n="platform.tryLead">Explore the workflow in your browser, try a basic game, or host your own exercises. Choose the path that fits your goal.</p>
+<div class="platform-start-list">
+<article class="platform-start-option">
+<p class="platform-option-meta" data-i18n="platform.demoStatus">Available / Browser / No signup</p>
+<h3  data-i18n="platform.demoTitle">Explore the exercise workflow</h3>
+<p data-i18n="hero.quest_desc">Open a problem, explore its endpoint and submit an answer. This walkthrough shows the workflow, including hints and scoring. It is not the upcoming data-leak challenge or an attack-and-repair exercise against a live environment.</p><a href="/portal-demo/?demo=1&amp;goto=start" data-i18n="platform.demoLink">Open the current walkthrough →</a>
+</article>
+<article class="platform-start-option" id="security-minigames">
+<p class="platform-option-meta" data-i18n="platform.gameStatus">Available / Browser / No AWS or signup</p>
+<h3 data-i18n="mailGame.h">Learn through games.</h3>
+<p data-i18n="mailGame.p">Play, notice something, and try again. Explore browser-based foundation games. No AWS account or registration.</p><a href="./portal-demo/?demo=1&goto=%2Fproblems%3Flang%3Den" data-i18n-href="mailGame.href" data-i18n="mailGame.cta">Browse games →</a>
+</article>
+<article class="platform-start-option">
+<p class="platform-option-meta" data-i18n="platform.localStatus">Setup guide / Your computer / For organizers</p>
+<h3  data-i18n="platform.localTitle">Host your own exercises</h3>
+<p  data-i18n="platform.localBody">Local hosting needs no AWS account. Organizers give participants their URL and team key. Check the setup and organizer guides for Docker exercise requirements and cloud hosting.</p><a href="/docs/getting-started/index.en.html#local-start" data-i18n-href="hero.startHref" data-i18n="hero.cta_demo" data-cta="local-start">Start on your computer</a>
+</article>
+</div>
+<p class="platform-fee-note" data-i18n="platform.feeNote">The OSS license is free. Environment costs, including AWS, are separate. Operated events are an optional paid service.</p>
+</div>
+</section>
+
+
+<section class="platform-section platform-soft" id="examples">
+<div class="wrap">
+<p class="eyebrow" data-i18n="platform.exampleEyebrow">One example of the learning approach</p>
+<h2  data-i18n="platform.exampleTitle">See what happens. Act. Compare the result.</h2>
+<p class="platform-lead" data-i18n="platform.exampleLead">Problems vary with the organizer and learning goal. This in-development authorization bug illustrates one approach: understand the impact, act, and verify the fix.</p>
+<details class="platform-case">
+<summary><span  data-i18n="platform.caseSummary">In-development example: explore how a data leak happens</span>
+</summary>
+<div class="platform-case-copy">
+<p class="hero-preview" data-i18n="hero.preview">Experience in development · Three minutes is a target</p>
+<h3><span data-i18n="hero.h1a">Data breaches make the news. </span><em data-i18n="hero.h1b">How do they happen?</em>
+</h3>
+<p data-i18n="hero.tagline">Experience a security incident in three minutes.</p>
+<p data-i18n="hero.sub">Understand how data leaks, then practice stopping it.</p>
+<p class="platform-muted" data-i18n="hero.vibe"><strong>The first challenge is in development.</strong> Someone else’s fictional customer data is exposed. Fix the settings, then check that others cannot read it while its owner still can. Completion time is unverified; this challenge is not playable yet.</p>
+</div>
 <section class="incident-story" id="incident" aria-labelledby="incident-title" data-phase="0" data-person="own">
   <div class="wrap incident-intro">
     <p class="incident-kicker">CASE 001 / BROKEN ACCESS CONTROL</p>
-    <h2 id="incident-title" data-i18n="incident.title">One changed ID. One broken boundary.</h2>
+    <h3 id="incident-title" data-i18n="incident.title">One changed ID. One broken boundary.</h3>
     <p data-i18n="incident.notice">Local illustration · All data is fictional · Not a scored challenge</p>
   </div>
   <div class="wrap incident-layout">
@@ -243,34 +324,39 @@
     <div class="incident-chapters">
       <article class="incident-chapter" data-step="0">
         <span class="incident-kicker">01 / REQUEST</span>
-        <h3 data-i18n="incident.step1Title">You’re signed in.<br>Are you safe?</h3>
+        <h4 data-i18n="incident.step1Title">You’re signed in.<br>Are you safe?</h4>
         <p data-i18n="incident.step1">Your page requests data for ID 1042. Authentication checks who you are. Authorization checks whose data you may read. Those are different questions.</p>
         <a href="#incident-step2" data-i18n="incident.next">Change just one ID ↓</a>
       </article>
       <article class="incident-chapter" data-step="1" id="incident-step2">
         <span class="incident-kicker">02 / EXPOSURE</span>
-        <h3 data-i18n="incident.step2Title">Change the ID.<br>See someone else’s data.</h3>
+        <h4 data-i18n="incident.step2Title">Change the ID.<br>See someone else’s data.</h4>
         <p data-i18n="incident.step2">1042 → 1043. Without an ownership check, the server returns another person’s fictional information. Hiding the URL will not stop this leak.</p>
         <p class="incident-insight" data-i18n="incident.impact">Behind that response is someone’s personal information. First, feel the impact.</p>
       </article>
       <article class="incident-chapter" data-step="2">
         <span class="incident-kicker">03 / CONTAINMENT</span>
-        <h3 data-i18n="incident.step3Title">Stop the leak.<br>Keep the service running.</h3>
+        <h4 data-i18n="incident.step3Title">Stop the leak.<br>Keep the service running.</h4>
         <p data-i18n="incident.step3">On the server, compare the signed-in user with the data owner. Your data: 200. Someone else’s: 403. Blocking everyone is not a correct fix. Switch between the two IDs to verify both.</p>
         <code class="incident-rule">session.userId === record.ownerId</code>
       </article>
     </div>
   </div>
-  <div class="wrap incident-outro">
-    <p class="incident-kicker">UNDERSTAND. TRY. PROTECT.</p>
-    <h2 data-i18n="incident.outroTitle">From knowing about it<br>to stopping it.</h2>
-    <p data-i18n="incident.outro">Security matters. But where do you start? Experienced people are scarce and expensive. Bridge the gap between textbooks and practice with hands-on experiences in safe, low-cost simulators or real environments.</p>
-    <p class="incident-development" data-i18n="incident.development">This authorization challenge is in development and is not available in the cloud. The illustration above has no scoring. Three minutes is a target; first-run completion time has not been measured.</p>
-    <a href="/portal-demo/?demo=1&amp;goto=start" class="incident-demo-link" data-i18n="incident.demo">Open the current walkthrough ↗</a>
-    <p class="incident-demo-note" data-i18n="incident.demoNote">A demo of opening a problem and submitting an answer. It is separate from this data-leak challenge.</p>
-  </div>
-</section>
+  <div class="wrap incident-outro"><p class="incident-development" data-i18n="incident.development">This authorization challenge is in development and is not available in the cloud. The illustration above has no scoring. Three minutes is a target; first-run completion time has not been measured.</p><a href="#try" data-i18n="platform.backToTry">Choose something available now ↑</a></div>
+</section></details></div></section>
 
+
+<section class="platform-section" id="hosting">
+<div class="wrap">
+<p class="eyebrow" data-i18n="platform.hostEyebrow">From individual learning to team practice</p>
+<h2  data-i18n="platform.hostTitle">For learners and organizers.</h2>
+<p class="platform-lead" data-i18n="platform.hostLead">Participants focus on the problems. Organizers manage events, teams, problems, scores and progress in one platform, using public problems or adding their own materials. Check each problem’s guide for local and AWS support and verification status.</p>
+<div class="platform-role-links"><a href="#use-cases" data-i18n="nav.useCases">Use cases</a><a href="./docs/manual/participant/index.en.html" data-i18n-href="mailGame.joinHref" data-i18n="mailGame.join">Join a competition →</a><a href="./docs/manual/organizer/index.en.html" data-i18n-href="hero.hostHref" data-i18n="hero.cta_host" data-cta="deploy-aws">Hosting guide</a>
+</div>
+<details class="platform-details">
+<summary><span  data-i18n="platform.featuresSummary">Explore hosting features, formats and use cases</span>
+</summary>
+<div class="platform-detail-content">
 <section class="alt" id="modes">
   <div class="wrap">
     <div class="eyebrow" data-i18n="modes.eyebrow">Two competition formats</div>
@@ -370,9 +456,7 @@
       </div>
     </div>
   </div>
-</section>
-
-<section>
+</section><section>
   <div class="wrap audience-intro">
     <div class="eyebrow" data-i18n="aud.eyebrow">Who it's for</div>
     <h2 data-i18n="aud.h2">Build cloud capability across the org.</h2>
@@ -398,9 +482,7 @@
       <a class="more" href="./docs/manual/problem-author/index.en.html" target="_blank" rel="noopener noreferrer" data-i18n-href="aud.c.moreHref"><span data-i18n="aud.c.more">Author a problem</span> ›</a>
     </div>
   </div>
-</section>
-
-<section class="alt" id="use-cases">
+</section><section class="alt" id="use-cases">
   <div class="wrap audience-intro">
     <div class="eyebrow" data-i18n="uc.eyebrow">Enterprise use cases</div>
     <h2 data-i18n="uc.h2">Turn security training into a game.</h2>
@@ -441,25 +523,11 @@
       <p data-i18n="uc.f.p">Run the same or similar problems again after some time, and compare team scores and solve status with the previous round. Training does not end after one session.</p>
     </div>
   </div>
-</section>
-
-<section id="security-minigames">
-  <div class="wrap">
-    <h2 data-i18n="mailGame.h">Learn through games.</h2>
-    <p class="lead" data-i18n="mailGame.p">Play, notice something, and try again. Explore browser-based foundation games. No AWS account or registration.</p>
-    <a class="more" href="./portal-demo/?demo=1&goto=%2Fproblems%3Flang%3Den" data-i18n-href="mailGame.href"><span data-i18n="mailGame.cta">Browse games →</span></a>
-    <p class="lead" data-i18n="mailGame.roles">Join a competition through your organizer's invitation. Local and cloud are hosting choices made by the organizer.</p>
-    <p><a class="more" href="./docs/manual/participant/index.en.html" data-i18n-href="mailGame.joinHref" data-i18n="mailGame.join">Join a competition →</a> · <a class="more" href="./docs/manual/organizer/index.en.html" data-i18n-href="mailGame.hostHref" data-i18n="mailGame.host">Host a competition →</a></p>
-  </div>
-</section>
-
-<section class="alt">
+</section><section class="alt">
   <div class="wrap">
     <div class="stats" id="stats-grid"><div class="stat"><div class="n">0<span class="u">$</span></div><div class="l">OSS license fee. Cloud usage is billed separately.</div></div><div class="stat"><div class="n">100<span class="u">%</span></div><div class="l">Open source. Apache 2.0. End to end.</div></div><div class="stat"><div class="n">2<span class="u">files</span></div><div class="l">Basic AWS problem definition: metadata.json + template.yaml.</div></div><div class="stat"><div class="n">2<span class="u">ways</span></div><div class="l">Local hosting / cloud hosting.</div></div></div>
   </div>
-</section>
-
-<section id="extend">
+</section></div></details><details class="platform-details"><summary><span  data-i18n="platform.resourcesSummary">Create problems, start with AI, or read the book</span></summary><div class="platform-detail-content"><section id="extend">
   <div class="wrap audience-intro">
     <div class="eyebrow" data-i18n="extend.eyebrow">Catalog grows with you</div>
     <h2 data-i18n="extend.h2">Missing a problem? Author your own.</h2>
@@ -488,11 +556,7 @@
       </div>
     </div>
   </div>
-</section>
-
-<!-- 書籍。 両版を並べて出すのが要点で、フッターの 1 行では読者から見て
-     「自分の言語の版しか存在しない」 ように見えていた (Issue #2974)。 -->
-<section id="book">
+</section><section id="book">
   <div class="wrap audience-intro">
     <div class="eyebrow" data-i18n="book.eyebrow">Read the book</div>
     <h2 data-i18n="book.h2">The whole method, in one book.</h2>
@@ -508,8 +572,20 @@
       </a>
     </div>
   </div>
-</section>
+</section></div></details></div></section>
 
+
+<section class="platform-section platform-soft" id="support">
+<div class="wrap">
+<p class="eyebrow" data-i18n="platform.supportEyebrow">Getting started and costs</p>
+<h2  data-i18n="platform.supportTitle">Host it yourself, or get operational help.</h2>
+<p class="platform-lead" data-i18n="platform.supportLead">TenkaCloud is Apache-2.0 open source. The license, cloud resource costs and operated-event service fees are separate. Use the guides to host it yourself, or review the scope and pricing if you want help with design and event operations.</p>
+<div class="platform-role-links"><a href="/docs/getting-started/index.en.html#local-start" data-i18n-href="hero.startHref" data-i18n="hero.cta_demo">Start on your computer</a><a href="#pricing" data-cta="get-quote" data-i18n="platform.pricingLink">View operated-event pricing ↓</a>
+</div>
+<details class="platform-details">
+<summary><span  data-i18n="platform.commercialSummary">Operated-event scope, pricing and contact</span>
+</summary>
+<div class="platform-detail-content">
 <section id="offerings" class="alt">
   <div class="wrap audience-intro">
     <div class="eyebrow" data-i18n="offerings.eyebrow">Commercial offerings</div>
@@ -533,9 +609,7 @@
       <p data-i18n="offerings.d.p">A monthly retainer for operating-model / training-roadmap work. <strong>Never bundled</strong> into the two offerings above, so events stay productized. If you want both, that is two line items.</p>
     </div>
   </div>
-</section>
-
-<section id="pricing">
+</section><section id="pricing">
   <div class="wrap">
     <div class="pricing-head">
       <div class="eyebrow" data-i18n="pricing.eyebrow">Pricing</div>
@@ -594,9 +668,7 @@
     </div>
     <p class="pricing-tail" data-i18n="pricing.tail"><strong>Custom problem authoring</strong> follows the same scope as regular software development (requirements → implementation), so we quote it separately. <a href="#contact">Get in touch</a> for that and for anything beyond these tiers.</p>
   </div>
-</section>
-
-<section id="contact">
+</section><section id="contact">
   <div class="wrap">
     <div class="ent-cta">
       <div class="eyebrow" data-i18n="ent.eyebrow">Not sure which plan fits</div>
@@ -608,7 +680,9 @@
       </div>
     </div>
   </div>
-</section>
+</section></div></details></div></section>
+
+<section class="platform-section platform-final"><div class="wrap"><h2  data-i18n="platform.finalTitle">Start by exploring how TenkaCloud works.</h2><p class="platform-lead" data-i18n="platform.finalBody">The current walkthrough shows how to open a problem and submit an answer. No signup required.</p><a class="platform-primary" href="/portal-demo/?demo=1&amp;goto=start" data-i18n="platform.finalLink">Open the browser walkthrough →</a></div></section>
 
 </main>
 
@@ -622,11 +696,11 @@
         </svg>
         TenkaCloud
       </div>
-      <div class="tag" data-i18n="footer.tag">An open-source tool for hosting hands-on cloud drills on real AWS. Apache 2.0.</div>
+      <div class="tag" data-i18n="footer.tag">An open-source platform for hands-on cloud and security exercises and competitions. Apache 2.0.</div>
     </div>
     <div>
       <h5>Product</h5>
-      <a href="#modes" data-i18n="footer.p0">Overview</a>
+      <a href="#platform" data-i18n="footer.p0">Overview</a>
       <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer" data-i18n="footer.p1">Problems</a>
     </div>
     <div>
@@ -667,8 +741,9 @@
   </div>
 </footer>
 
+<script src="./platform-page.js?v=ea43f0525b" defer></script>
 <script src="./incident-story.js?v=ba1b4811ea" defer></script>
-<script src="./app.js?v=88f56c0314" defer></script>
+<script src="./app.js?v=7bcc345d1c" defer></script>
 
 </body>
 </html>

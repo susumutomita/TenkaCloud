@@ -137,6 +137,68 @@
       "nav.contact": "お問い合わせ",
       "nav.github": "GitHub",
 
+      "platform.eyebrow": "TenkaCloud / OSS の演習・競技プラットフォーム",
+      "platform.h1a": "クラウドと<br>セキュリティを、",
+      "platform.h1b": "実践で学ぶ。",
+      "platform.definition":
+        "TenkaCloud は、クラウドとセキュリティを手を動かして学ぶ OSS の演習・競技基盤です。主催者はローカルや AWS で大会を開き、問題・チーム・回答・採点・ランキングを扱えます。",
+      "platform.primary": "操作デモをブラウザーで見る →",
+      "platform.primaryNote": "公開中 · 登録不要 · 演習の操作を確認するデモです",
+      "platform.choose": "今試せることを比べる ↓",
+      "platform.preview": "参加者画面のサンプル · 問題は主催者が選びます",
+      "platform.whyEyebrow": "なぜ、実践なのか",
+      "platform.whyTitle":
+        '<span class="platform-phrase">知識を、</span><span class="platform-phrase">実践で使える力へ。</span>',
+      "platform.whyLead":
+        "セキュリティは必要。でも何から始めればいい？ 経験者は少なく、頼るには費用もかかる。教科書で学んだことを、安全な演習の中で試し、結果から学び直せる場所が必要です。",
+      "platform.chooseStep": "問題に挑む",
+      "platform.chooseStepBody":
+        "主催者が、受講者と目的に合う問題を選びます。基礎ゲーム、Challenge、Battle で学び方を変えられます。",
+      "platform.practiceStep": "手を動かす",
+      "platform.practiceStepBody":
+        "答えを考えるだけでなく、対応するシミュレーターや実環境を操作。問題ごとの接続条件と費用はガイドで確認できます。",
+      "platform.feedbackStep": "結果を確かめる",
+      "platform.feedbackStepBody":
+        "回答やチェックポイントを提出し、採点・ヒント・得点の変化を振り返ります。もう一度試すことで、理解を確かめます。",
+      "platform.tryEyebrow": "最初の一歩",
+      "platform.tryTitle": "今、試せること。",
+      "platform.tryLead":
+        "まずはブラウザーで流れを確かめる。ゲームで基礎に触れる。自分で演習を開催する。目的に合わせて選べます。",
+      "platform.demoStatus": "公開中 / ブラウザー / 登録不要",
+      "platform.demoTitle": "演習の操作を知る",
+      "platform.demoLink": "現在の操作デモを見る →",
+      "platform.gameStatus": "公開中 / ブラウザー / AWS・登録不要",
+      "platform.localStatus": "起動ガイド公開 / 自分の PC / 主催者向け",
+      "platform.localTitle": "演習を自分で開催する",
+      "platform.localBody":
+        "ローカル開催は AWS アカウント不要。参加者には主催者が URL とチームキーを渡します。Docker 問題の利用条件やクラウド開催は起動・運営ガイドで確認できます。",
+      "platform.feeNote":
+        "OSS 本体のライセンス料は無料です。AWS などの環境利用料は別で、運営代行は任意の有料サービスです。",
+      "platform.exampleEyebrow": "学び方を、一例で",
+      "platform.exampleTitle":
+        '<span class="platform-phrase">起きることを見て、</span><span class="platform-phrase">操作して、</span><span class="platform-phrase">結果を比べる。</span>',
+      "platform.exampleLead":
+        "TenkaCloud で扱う問題は、主催者と目的によって変わります。ここでは開発中の「認可バグ」を一例として、悪影響に気づいて止める学び方を紹介します。",
+      "platform.caseSummary": "開発中の演習例：情報漏えいの仕組みを操作で見る",
+      "platform.backToTry": "今試せるものを選ぶ ↑",
+      "platform.hostEyebrow": "個人の学びから、チームの演習へ",
+      "platform.hostTitle":
+        '<span class="platform-phrase">挑む人にも、</span><span class="platform-phrase">開催する人にも。</span>',
+      "platform.hostLead":
+        "参加者は問題に集中。主催者は、イベント・チーム・問題・得点・進捗をひとつの基盤で管理します。公開問題を選ぶことも、独自教材を組み込むこともできます。ローカルと AWS の対応範囲・検証状況は、問題ごとのガイドで確認できます。",
+      "platform.featuresSummary": "運営機能・競技形式・活用例を詳しく見る",
+      "platform.resourcesSummary": "教材を作る・AI で始める・本で読む",
+      "platform.supportEyebrow": "始め方と費用",
+      "platform.supportTitle":
+        '<span class="platform-phrase">自分で始める。</span><span class="platform-phrase">運営を任せる。</span>',
+      "platform.supportLead":
+        "TenkaCloud 本体は Apache 2.0 の OSS です。ライセンス料と、利用するクラウドの料金、運営代行のサービス料金は別のもの。自分で始めたい方はガイドへ、設計・当日運営を任せたい方は提供範囲と料金をご覧ください。",
+      "platform.pricingLink": "運営代行の料金を見る ↓",
+      "platform.commercialSummary": "運営代行の提供範囲・料金・問い合わせ",
+      "platform.finalTitle": "まずは、TenkaCloud の流れを確かめる。",
+      "platform.finalBody":
+        "公開中の操作デモで、問題を開いて回答するまでを確認できます。登録は不要です。",
+      "platform.finalLink": "操作デモをブラウザーで見る →",
       "hero.h1a": "ニュースで聞く情報漏えい、",
       "hero.h1b": "どうやって起こるの？",
       "hero.tagline": "3分で体験する、セキュリティインシデント。",
@@ -447,7 +509,7 @@
       "ent.cta2": "GitHub を見る",
       "contact.form": "お問い合わせフォーム（要Googleログイン）",
 
-      "footer.tag": "AWS を題材にしたクラウド実戦演習を開催するための OSS ツール。 Apache 2.0。",
+      "footer.tag": "クラウドとセキュリティを実践で学ぶ、OSS の演習・競技基盤。 Apache 2.0。",
       "footer.disclaimer":
         "TenkaCloud は独立した OSS プロジェクトであり、 Amazon Web Services, Inc. またはその関連会社による提供・後援・承認を受けたものではありません。 AWS および関連する名称は Amazon.com, Inc. またはその関連会社の商標です。",
       "footer.p0": "概要",
@@ -477,6 +539,64 @@
       "nav.contact": "Contact",
       "nav.github": "GitHub",
 
+      "platform.eyebrow": "TenkaCloud / Open-source practice and competition platform",
+      "platform.h1a": "Cloud and security,",
+      "platform.h1b": "learned by doing.",
+      "platform.definition":
+        "TenkaCloud is an open-source platform for hands-on cloud and security exercises and competitions. Organizers host events locally or on AWS, working with problems, teams, submissions, scoring and rankings.",
+      "platform.primary": "Open the browser walkthrough →",
+      "platform.primaryNote": "Available now · No signup · A walkthrough of the exercise workflow",
+      "platform.choose": "Compare ways to try it ↓",
+      "platform.preview": "Sample participant screen · Organizers select the problems",
+      "platform.whyEyebrow": "Why hands-on practice",
+      "platform.whyTitle": "Bridge knowing and doing.",
+      "platform.whyLead":
+        "Security matters. But where do you start? Experienced people are scarce and costly. Put textbook knowledge to work in a safe exercise, see what happens, and learn from the result.",
+      "platform.chooseStep": "Choose a problem",
+      "platform.chooseStepBody":
+        "Organizers choose problems for their learners and goals: basic games, Challenges or Battles.",
+      "platform.practiceStep": "Try it hands-on",
+      "platform.practiceStepBody":
+        "Work with a supported simulator or real environment, as appropriate for the problem. Check its guide for access requirements and costs.",
+      "platform.feedbackStep": "Check the result",
+      "platform.feedbackStepBody":
+        "Submit answers or checkpoints, then review scoring, hints and score changes. Try again to check your understanding.",
+      "platform.tryEyebrow": "Start here",
+      "platform.tryTitle": "What you can try now.",
+      "platform.tryLead":
+        "Explore the workflow in your browser, try a basic game, or host your own exercises. Choose the path that fits your goal.",
+      "platform.demoStatus": "Available / Browser / No signup",
+      "platform.demoTitle": "Explore the exercise workflow",
+      "platform.demoLink": "Open the current walkthrough →",
+      "platform.gameStatus": "Available / Browser / No AWS or signup",
+      "platform.localStatus": "Setup guide / Your computer / For organizers",
+      "platform.localTitle": "Host your own exercises",
+      "platform.localBody":
+        "Local hosting needs no AWS account. Organizers give participants their URL and team key. Check the setup and organizer guides for Docker exercise requirements and cloud hosting.",
+      "platform.feeNote":
+        "The OSS license is free. Environment costs, including AWS, are separate. Operated events are an optional paid service.",
+      "platform.exampleEyebrow": "One example of the learning approach",
+      "platform.exampleTitle": "See what happens. Act. Compare the result.",
+      "platform.exampleLead":
+        "Problems vary with the organizer and learning goal. This in-development authorization bug illustrates one approach: understand the impact, act, and verify the fix.",
+      "platform.caseSummary": "In-development example: explore how a data leak happens",
+      "platform.backToTry": "Choose something available now ↑",
+      "platform.hostEyebrow": "From individual learning to team practice",
+      "platform.hostTitle": "For learners and organizers.",
+      "platform.hostLead":
+        "Participants focus on the problems. Organizers manage events, teams, problems, scores and progress in one platform, using public problems or adding their own materials. Check each problem’s guide for local and AWS support and verification status.",
+      "platform.featuresSummary": "Explore hosting features, formats and use cases",
+      "platform.resourcesSummary": "Create problems, start with AI, or read the book",
+      "platform.supportEyebrow": "Getting started and costs",
+      "platform.supportTitle": "Host it yourself, or get operational help.",
+      "platform.supportLead":
+        "TenkaCloud is Apache-2.0 open source. The license, cloud resource costs and operated-event service fees are separate. Use the guides to host it yourself, or review the scope and pricing if you want help with design and event operations.",
+      "platform.pricingLink": "View operated-event pricing ↓",
+      "platform.commercialSummary": "Operated-event scope, pricing and contact",
+      "platform.finalTitle": "Start by exploring how TenkaCloud works.",
+      "platform.finalBody":
+        "The current walkthrough shows how to open a problem and submit an answer. No signup required.",
+      "platform.finalLink": "Open the browser walkthrough →",
       "hero.h1a": "Data breaches make the news. ",
       "hero.h1b": "How do they happen?",
       "hero.tagline": "Experience a security incident in three minutes.",
@@ -792,7 +912,7 @@
       "contact.form": "Contact form (Google sign-in required)",
 
       "footer.tag":
-        "An open-source tool for hosting hands-on cloud drills on real AWS. Apache 2.0.",
+        "An open-source platform for hands-on cloud and security exercises and competitions. Apache 2.0.",
       "footer.disclaimer":
         "TenkaCloud is an independent open-source project and is not affiliated with, endorsed by, or sponsored by Amazon Web Services, Inc. AWS and related marks are trademarks of Amazon.com, Inc. or its affiliates.",
       "footer.p0": "Overview",
