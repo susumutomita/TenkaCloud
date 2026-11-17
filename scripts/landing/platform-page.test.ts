@@ -25,7 +25,7 @@ describe("platform message and retained detail", () => {
       expect(question?.querySelector("a,button")).toBeNull();
       expect(order.indexOf("try")).toBeLessThan(order.indexOf("examples"));
       expect(document.querySelectorAll(".platform-start-option")).toHaveLength(3);
-      expect(document.querySelector("#try")?.textContent).toMatch(/クラウド|Environment/);
+      expect(document.querySelector("#try")?.textContent).toMatch(/クラウド|security|cloud/i);
       const example = document.querySelector<HTMLDetailsElement>(".platform-case");
       expect(example?.open).toBe(false);
       expect(example?.textContent).toMatch(/採点は行いません|no scoring/);

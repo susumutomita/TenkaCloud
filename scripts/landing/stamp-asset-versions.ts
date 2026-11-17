@@ -41,6 +41,7 @@ export const STAMPED_ASSETS = [
   "incident-story.js",
   "platform-page.js",
   "platform-motion.js",
+  "entry-scenes.js",
 ] as const;
 
 export type AssetVersions = Record<string, string>;
@@ -56,6 +57,7 @@ export const STAMPED_MEDIA = [
   "assets/lp-motion/participant.mp4",
   "assets/lp-motion/organizer.mp4",
   "assets/lp-motion/game.mp4",
+  "assets/lp-motion/simulator.mp4",
 ] as const;
 
 /** STAMPED_MEDIA を参照する HTML (landing/ からの相対)。 参照を足したらここにも足す。 */
@@ -162,7 +164,15 @@ function main() {
       console.log(`stamped ${name} (${JSON.stringify(mediaVersions)})`);
     }
   }
-  const versions = currentVersions();
+  const versions = {
+    ...currentVersions(),
+    ...Object.fromEntries(
+      ["styles/pricing.css", "pricing-page.js"].map((name) => [
+        name,
+        assetVersion(readFileSync(join(landing, name))),
+      ]),
+    ),
+  };
   const targets = readdirSync(landing).filter((name) => name.endsWith(".html"));
   for (const name of targets) {
     const path = join(landing, name);
