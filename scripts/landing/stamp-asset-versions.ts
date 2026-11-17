@@ -33,7 +33,12 @@ export function assetVersion(content: string | Buffer): string {
  * 新しいアセットを HTML に足したらここにも足す (= 足し忘れるとキャッシュ
  * バスターが効かず、 古い JS/CSS が配信され続ける)。
  */
-export const STAMPED_ASSETS = ["styles/main.css", "app.js"] as const;
+export const STAMPED_ASSETS = [
+  "styles/main.css",
+  "app.js",
+  "styles/incident.css",
+  "incident-story.js",
+] as const;
 
 export type AssetVersions = Record<string, string>;
 

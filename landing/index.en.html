@@ -125,6 +125,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" />
 <link rel="stylesheet" href="./styles/main.css?v=6f930e2dab" />
+<link rel="stylesheet" href="./styles/incident.css?v=790fac83d9" />
 </head>
 <body>
 
@@ -160,7 +161,7 @@
 </nav>
 
 <section class="hero">
-  <canvas class="ink-bg" aria-hidden="true"></canvas>
+
   <div class="wrap hero-grid">
     <div class="hero-copy">
       <p class="hero-preview" data-i18n="hero.preview">Experience in development · Three minutes is a target</p>
@@ -170,6 +171,7 @@
       <p class="hero-tagline" data-i18n="hero.tagline">Experience a security incident in three minutes.</p>
       <p class="sub" data-i18n="hero.sub">Understand how data leaks, then practice stopping it.</p>
       <p class="hero-vibe" data-i18n="hero.vibe"><strong>The first challenge is in development.</strong> Someone else’s fictional customer data is exposed. Fix the settings, then check that others cannot read it while its owner still can. Completion time is unverified; this challenge is not playable yet.</p>
+      <a class="incident-enter" href="#incident" data-i18n="incident.enter">See how a leak happens ↓</a>
       <a class="hero-quest-card" href="/portal-demo/?demo=1&amp;goto=start" data-cta="start-drill">
         <span class="hero-quest-meta" data-i18n="hero.quest_meta">Available now · Browser walkthrough · No signup</span>
         <span class="hero-quest-title" data-i18n="hero.quest_title">Try the exercise flow.</span>
@@ -189,77 +191,84 @@
       </p>
       <p class="hero-trust" data-i18n="hero.trust">Operated by BULL LLC · Apache 2.0</p>
     </div>
-    <div class="hero-visual">
-      <div class="app-window">
-        <div class="app-topbar">
-          <span>TenkaCloud — TenkaCloud Battle</span>
-          <span class="app-chrome-meta"><span data-i18n="app.lang">◉ English ▼</span><span>◎ Score: 2360 pt / Rank: 1/2</span><span data-i18n="app.profile">♙ Guest ▼</span></span>
+  </div>
+</section>
+
+<section class="incident-story" id="incident" aria-labelledby="incident-title" data-phase="0" data-person="own">
+  <div class="wrap incident-intro">
+    <p class="incident-kicker">CASE 001 / BROKEN ACCESS CONTROL</p>
+    <h2 id="incident-title" data-i18n="incident.title">One changed ID. One broken boundary.</h2>
+    <p data-i18n="incident.notice">Local illustration · All data is fictional · Not a scored challenge</p>
+  </div>
+  <div class="wrap incident-layout">
+    <div class="incident-stage">
+      <div class="incident-stage-top"><span>ACCESS / TRACE</span><span class="incident-stage-number">001 — 003</span></div>
+      <div class="incident-world" aria-hidden="true">
+        <svg class="incident-wires" viewBox="0 0 640 420" preserveAspectRatio="none">
+          <defs><pattern id="incident-grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M32 0H0V32" fill="none" stroke="currentColor" stroke-width=".5"/></pattern></defs>
+          <rect width="640" height="420" fill="url(#incident-grid)"/>
+          <path class="wire-own" d="M25 100H160Q190 100 190 130V210H610"/>
+          <path class="wire-other" d="M25 320H120Q150 320 150 290V210H610"/>
+          <path class="wire-blocked" d="M25 320H120Q150 320 150 290V210H298"/>
+          <circle class="wire-node" cx="190" cy="210" r="12"/>
+          <path class="wire-gate" d="M300 60V360"/>
+        </svg>
+        <div class="incident-orbit orbit-one"></div><div class="incident-orbit orbit-two"></div>
+        <div class="incident-echo"><i></i><i></i><i></i><i></i><i></i></div>
+        <canvas class="incident-canvas" content="drawable"></canvas>
+        <span class="incident-boundary" data-i18n="incident.boundary">Server-side boundary</span>
+      </div>
+      <div class="incident-request"><span data-i18n="incident.signed">Signed in: user 1042</span><code>GET /users/<b data-request-id>1042</b></code></div>
+      <div class="incident-record" data-record>
+        <div class="record-header"><span>FICTIONAL / CUSTOMER</span><span class="record-dot"></span></div>
+        <div class="record-person" data-record-own><span class="record-avatar">A</span><div><strong>Aoi Example</strong><span>aoi@example.invalid</span></div></div>
+        <div class="record-person" data-record-other hidden><span class="record-avatar">R</span><div><strong>Ren Example</strong><span>ren@example.invalid</span></div></div>
+        <div class="record-denied" data-record-denied hidden><span class="record-lock">×</span><strong>ACCESS DENIED</strong></div>
+        <div class="record-footer"><span data-i18n="incident.fiction">Fictional customer data</span><code data-record-id>ID 1042</code></div>
+      </div>
+      <div class="incident-result" role="status" aria-live="polite" aria-atomic="true">
+        <strong data-http>200 OK</strong>
+        <span data-result="own" data-i18n="incident.ownResult">Your information is visible. Expected behavior.</span>
+        <span data-result="leak" data-i18n="incident.leakResult" hidden>Someone else’s information is visible. Authorization is missing.</span>
+        <span data-result="fixed" data-i18n="incident.fixedResult" hidden>No one else’s data is returned. The boundary holds.</span>
+      </div>
+      <div class="incident-controls" hidden>
+        <div class="incident-identities" role="group" aria-label="User ID">
+          <button type="button" data-person-select="own" aria-pressed="true"><span data-i18n="incident.own">You</span> / 1042</button>
+          <button type="button" data-person-select="other" aria-pressed="false"><span data-i18n="incident.other">Someone else</span> / 1043</button>
         </div>
-        <div class="app-body">
-          <aside class="app-sidebar">
-            <div class="app-menu-title"><span data-i18n="app.menu">Menu</span><span>⌄</span></div>
-            <div class="app-menu-group" data-i18n="app.event">• Event</div>
-            <a class="on" data-i18n="app.home">Home</a>
-            <a data-i18n="app.scoreboard">Scoreboard</a>
-            <a data-i18n="app.score_events">Score events</a>
-            <a data-i18n="app.notifications">Notifications</a>
-            <div class="app-menu-group">• Quests</div>
-            <a data-i18n="app.problems">Problems</a>
-            <div class="app-menu-group" data-i18n="app.tools">• Tools</div>
-            <a data-i18n="app.sso">SSO Credentials</a>
-          </aside>
-          <main class="dashboard">
-            <h3 data-i18n="app.welcome">Welcome, Guest</h3>
-            <div class="dashboard-sub" data-i18n="app.welcome_sub">Welcome to TenkaCloud Battle</div>
-            <div class="metric-card">
-              <div class="metric-title" data-i18n="app.team_score">Team cumulative score</div>
-              <div class="metric-grid">
-                <div><div class="metric-label" data-i18n="app.total">Total</div><div class="metric-value green">2360 pt</div></div>
-                <div><div class="metric-label" data-i18n="app.rank">Rank</div><div class="metric-value blue">1 / 2</div></div>
-                <div><div class="metric-label" data-i18n="app.problem_count">Problems</div><div class="metric-value">3</div></div>
-                <div><div class="metric-label" data-i18n="app.completed">Completed</div><div class="metric-value">1</div></div>
-              </div>
-            </div>
-            <div class="chart-card">
-              <div class="chart-head">
-                <div>
-                  <div class="chart-title" data-i18n="app.score_trend">Score trend</div>
-                  <div class="chart-desc" data-i18n="app.score_trend_desc">Showing all 2 teams in this event</div>
-                </div>
-                <div class="select-pill" data-i18n="app.select_team">Select event / team　⌄</div>
-              </div>
-              <svg class="line-chart" viewBox="0 0 760 300" role="img" aria-label="score chart">
-                <rect x="0" y="0" width="760" height="300" fill="#fff"/>
-                <g stroke="#e5e9f0" stroke-width="1">
-                  <path d="M50 25H735M50 65H735M50 105H735M50 145H735M50 185H735M50 225H735M50 265H735"/>
-                  <path d="M50 25V265M130 25V265M210 25V265M290 25V265M370 25V265M450 25V265M530 25V265M610 25V265M690 25V265"/>
-                </g>
-                <polyline fill="none" stroke="#28a35f" stroke-width="2.5" points="50,258 90,250 130,238 170,228 210,212 250,202 290,186 330,176 370,160 410,150 450,134 490,124 530,110 570,100 610,90 650,82 735,76"/>
-                <polyline fill="none" stroke="#1f78d1" stroke-width="2.5" points="50,260 90,253 130,243 170,234 210,220 250,212 290,198 330,190 370,176 410,168 450,154 490,146 530,134 570,127 610,118 650,112 735,107"/>
-                <g font-family="JetBrains Mono, monospace" font-size="11" fill="#344155">
-                  <text x="22" y="29">3000</text><text x="22" y="69">2500</text><text x="22" y="109">2000</text><text x="22" y="149">1500</text><text x="22" y="189">1000</text><text x="30" y="229">500</text><text x="34" y="269">0</text>
-                  <text x="82" y="288">21:37</text><text x="162" y="288">21:39</text><text x="242" y="288">21:41</text><text x="322" y="288">21:43</text><text x="402" y="288">21:45</text><text x="482" y="288">21:47</text><text x="562" y="288">21:49</text><text x="642" y="288">21:51</text>
-                </g>
-                <g transform="translate(575 145)">
-                  <rect width="150" height="74" rx="8" fill="#fff" stroke="#aeb7c5"/>
-                  <text x="13" y="22" font-family="JetBrains Mono, monospace" font-size="12" font-weight="700" fill="#111827">21:50</text>
-                  <path d="M14 42H26" stroke="#1f78d1" stroke-width="4" stroke-linecap="round"/>
-                  <text x="32" y="45" font-family="JetBrains Mono, monospace" font-size="11" fill="#111827">gan        1980 pt</text>
-                  <path d="M14 59H26" stroke="#28a35f" stroke-width="4" stroke-linecap="round"/>
-                  <text x="32" y="62" font-family="JetBrains Mono, monospace" font-size="11" fill="#111827" data-i18n="app.chart_you">(Guest you) 2360 pt</text>
-                </g>
-              </svg>
-              <div class="chart-legend"><span style="color:#1f78d1">━ gan</span><span style="color:#28a35f" data-i18n="app.legend_you">━ (Guest you)</span></div>
-            </div>
-            <div class="challenge-card">
-              <h4 data-i18n="app.challenge_title">Take on problems</h4>
-              <p data-i18n="app.challenge_body">3 problems are deployed. Open the problem list to start.</p>
-              <button class="tiny-button" type="button" data-i18n="app.open_problems">Open problem list</button>
-            </div>
-          </main>
-        </div>
+        <button class="incident-fix" type="button" data-fix data-i18n="incident.fix">Add an ownership check →</button>
+        <button class="incident-reset" type="button" data-reset data-i18n="incident.reset">Start over</button>
       </div>
     </div>
+    <div class="incident-chapters">
+      <article class="incident-chapter" data-step="0">
+        <span class="incident-kicker">01 / REQUEST</span>
+        <h3 data-i18n="incident.step1Title">You’re signed in.<br>Are you safe?</h3>
+        <p data-i18n="incident.step1">Your page requests data for ID 1042. Authentication checks who you are. Authorization checks whose data you may read. Those are different questions.</p>
+        <a href="#incident-step2" data-i18n="incident.next">Change just one ID ↓</a>
+      </article>
+      <article class="incident-chapter" data-step="1" id="incident-step2">
+        <span class="incident-kicker">02 / EXPOSURE</span>
+        <h3 data-i18n="incident.step2Title">Change the ID.<br>See someone else’s data.</h3>
+        <p data-i18n="incident.step2">1042 → 1043. Without an ownership check, the server returns another person’s fictional information. Hiding the URL will not stop this leak.</p>
+        <p class="incident-insight" data-i18n="incident.impact">Behind that response is someone’s personal information. First, feel the impact.</p>
+      </article>
+      <article class="incident-chapter" data-step="2">
+        <span class="incident-kicker">03 / CONTAINMENT</span>
+        <h3 data-i18n="incident.step3Title">Stop the leak.<br>Keep the service running.</h3>
+        <p data-i18n="incident.step3">On the server, compare the signed-in user with the data owner. Your data: 200. Someone else’s: 403. Blocking everyone is not a correct fix. Switch between the two IDs to verify both.</p>
+        <code class="incident-rule">session.userId === record.ownerId</code>
+      </article>
+    </div>
+  </div>
+  <div class="wrap incident-outro">
+    <p class="incident-kicker">UNDERSTAND. TRY. PROTECT.</p>
+    <h2 data-i18n="incident.outroTitle">From knowing about it<br>to stopping it.</h2>
+    <p data-i18n="incident.outro">Security matters. But where do you start? Experienced people are scarce and expensive. Bridge the gap between textbooks and practice with hands-on experiences in safe, low-cost simulators or real environments.</p>
+    <p class="incident-development" data-i18n="incident.development">This authorization challenge is in development and is not available in the cloud. The illustration above has no scoring. Three minutes is a target; first-run completion time has not been measured.</p>
+    <a href="/portal-demo/?demo=1&amp;goto=start" class="incident-demo-link" data-i18n="incident.demo">Open the current walkthrough ↗</a>
+    <p class="incident-demo-note" data-i18n="incident.demoNote">A demo of opening a problem and submitting an answer. It is separate from this data-leak challenge.</p>
   </div>
 </section>
 
@@ -657,8 +666,8 @@
   </div>
 </footer>
 
-<script src="./ink-bg.js" defer></script>
-<script src="./app.js?v=594b48643f" defer></script>
+<script src="./incident-story.js?v=48c51ae03f" defer></script>
+<script src="./app.js?v=7520f90d3f" defer></script>
 
 </body>
 </html>

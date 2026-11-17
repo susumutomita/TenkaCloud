@@ -140,6 +140,38 @@
       "hero.h1a": "ニュースで聞く情報漏えい、",
       "hero.h1b": "どうやって起こるの？",
       "hero.tagline": "3分で体験する、セキュリティインシデント。",
+      "incident.enter": "漏えいの仕組みを見てみる ↓",
+      "incident.title": "たった1つの ID が、境界を越える。",
+      "incident.notice": "説明用のローカル演出 · 全データ架空 · 採点付き演習ではありません",
+      "incident.boundary": "サーバー側の境界",
+      "incident.signed": "ログイン中: ユーザー 1042",
+      "incident.fiction": "架空の顧客データ",
+      "incident.ownResult": "自分の情報が見える。これは正常。",
+      "incident.leakResult": "他人の情報まで見えた。認可の欠落。",
+      "incident.fixedResult": "他人の情報は返さない。境界ができた。",
+      "incident.own": "自分",
+      "incident.other": "他人",
+      "incident.fix": "所有者チェックを入れる →",
+      "incident.reset": "最初から",
+      "incident.step1Title": "ログインできた。<br>それだけで安全？",
+      "incident.step1":
+        "自分のページを開くと、サーバーは ID 1042 の情報を返します。ログインの確認は「誰なのか」。でも「誰の情報を読んでよいか」は、別の確認です。",
+      "incident.next": "ID を1つ変えてみる ↓",
+      "incident.step2Title": "ID を変えただけで、<br>他人の情報が見えた。",
+      "incident.step2":
+        "1042 → 1043。所有者を確認しないサーバーは、別人の架空の個人情報まで返してしまいます。URL を隠すだけでは、この漏えいは止まりません。",
+      "incident.impact": "この先にあるのは、誰かの個人情報。まず、悪影響を実感する。",
+      "incident.step3Title": "止めるのは漏えい。<br>サービスは止めない。",
+      "incident.step3":
+        "サーバー側で、ログインしたユーザーとデータの所有者を照合。自分の情報は 200、他人の情報は 403。全員を遮断するだけでは正解ではありません。左右の ID を切り替えて、両方を確かめてください。",
+      "incident.outroTitle": "「知っている」を、<br>「止められる」へ。",
+      "incident.outro":
+        "セキュリティは必要。でも、何から始めればいい？ 経験者は少なく、頼むには費用もかかる。教科書だけでは埋まらない実践との距離を、安全で低コストなシミュレーターや実環境での体験で縮めます。",
+      "incident.development":
+        "この認可バグの演習は開発中で、クラウドでは未公開です。上の演出に採点はありません。3分は目標で、初回の所要時間は未実測です。",
+      "incident.demo": "現在公開中の操作デモを見る ↗",
+      "incident.demoNote":
+        "問題を開く・回答を提出する流れのデモです。この情報漏えい演習とは異なります。",
       "hero.preview": "開発中の体験 · 3分は目標時間",
       "hero.sub": "漏えいの仕組みを知り、手を動かして止めてみよう。",
       "hero.vibe":
@@ -447,6 +479,39 @@
       "hero.h1a": "Data breaches make the news. ",
       "hero.h1b": "How do they happen?",
       "hero.tagline": "Experience a security incident in three minutes.",
+      "incident.enter": "See how a leak happens ↓",
+      "incident.title": "One changed ID. One broken boundary.",
+      "incident.notice": "Local illustration · All data is fictional · Not a scored challenge",
+      "incident.boundary": "Server-side boundary",
+      "incident.signed": "Signed in: user 1042",
+      "incident.fiction": "Fictional customer data",
+      "incident.ownResult": "Your information is visible. Expected behavior.",
+      "incident.leakResult": "Someone else’s information is visible. Authorization is missing.",
+      "incident.fixedResult": "No one else’s data is returned. The boundary holds.",
+      "incident.own": "You",
+      "incident.other": "Someone else",
+      "incident.fix": "Add an ownership check →",
+      "incident.reset": "Start over",
+      "incident.step1Title": "You’re signed in.<br>Are you safe?",
+      "incident.step1":
+        "Your page requests data for ID 1042. Authentication checks who you are. Authorization checks whose data you may read. Those are different questions.",
+      "incident.next": "Change just one ID ↓",
+      "incident.step2Title": "Change the ID.<br>See someone else’s data.",
+      "incident.step2":
+        "1042 → 1043. Without an ownership check, the server returns another person’s fictional information. Hiding the URL will not stop this leak.",
+      "incident.impact":
+        "Behind that response is someone’s personal information. First, feel the impact.",
+      "incident.step3Title": "Stop the leak.<br>Keep the service running.",
+      "incident.step3":
+        "On the server, compare the signed-in user with the data owner. Your data: 200. Someone else’s: 403. Blocking everyone is not a correct fix. Switch between the two IDs to verify both.",
+      "incident.outroTitle": "From knowing about it<br>to stopping it.",
+      "incident.outro":
+        "Security matters. But where do you start? Experienced people are scarce and expensive. Bridge the gap between textbooks and practice with hands-on experiences in safe, low-cost simulators or real environments.",
+      "incident.development":
+        "This authorization challenge is in development and is not available in the cloud. The illustration above has no scoring. Three minutes is a target; first-run completion time has not been measured.",
+      "incident.demo": "Open the current walkthrough ↗",
+      "incident.demoNote":
+        "A demo of opening a problem and submitting an answer. It is separate from this data-leak challenge.",
       "hero.preview": "Experience in development · Three minutes is a target",
       "hero.sub": "Understand how data leaks, then practice stopping it.",
       "hero.vibe":

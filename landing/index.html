@@ -124,6 +124,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" />
 <link rel="stylesheet" href="./styles/main.css?v=6f930e2dab" />
+<link rel="stylesheet" href="./styles/incident.css?v=790fac83d9" />
 </head>
 <body>
 
@@ -159,7 +160,7 @@
 </nav>
 
 <section class="hero">
-  <canvas class="ink-bg" aria-hidden="true"></canvas>
+
   <div class="wrap hero-grid">
     <div class="hero-copy">
       <p class="hero-preview" data-i18n="hero.preview">開発中の体験 · 3分は目標時間</p>
@@ -169,6 +170,7 @@
       <p class="hero-tagline" data-i18n="hero.tagline">3分で体験する、セキュリティインシデント。</p>
       <p class="sub" data-i18n="hero.sub">漏えいの仕組みを知り、手を動かして止めてみよう。</p>
       <p class="hero-vibe" data-i18n="hero.vibe"><strong>最初の1問を準備中です。</strong> 他人の架空の顧客情報が見えてしまう。設定を直し、他人は読めず本人は使えることを確かめる演習です。所要時間は未検証で、まだプレーできません。</p>
+      <a class="incident-enter" href="#incident" data-i18n="incident.enter">漏えいの仕組みを見てみる ↓</a>
       <a class="hero-quest-card" href="/portal-demo/?demo=1&amp;goto=start" data-cta="start-drill">
         <span class="hero-quest-meta" data-i18n="hero.quest_meta">現在公開中 · ブラウザ操作デモ · 登録不要</span>
         <span class="hero-quest-title" data-i18n="hero.quest_title">演習の流れを、試してみる。</span>
@@ -188,77 +190,84 @@
       </p>
       <p class="hero-trust" data-i18n="hero.trust">合同会社 BULL 運営 · Apache 2.0</p>
     </div>
-    <div class="hero-visual">
-      <div class="app-window">
-        <div class="app-topbar">
-          <span>TenkaCloud — TenkaCloud Battle</span>
-          <span class="app-chrome-meta"><span data-i18n="app.lang">◉ 日本語 ▼</span><span>◎ Score: 2360 pt / Rank: 1/2</span><span data-i18n="app.profile">♙ ゲスト ▼</span></span>
+  </div>
+</section>
+
+<section class="incident-story" id="incident" aria-labelledby="incident-title" data-phase="0" data-person="own">
+  <div class="wrap incident-intro">
+    <p class="incident-kicker">CASE 001 / BROKEN ACCESS CONTROL</p>
+    <h2 id="incident-title" data-i18n="incident.title">たった1つの ID が、境界を越える。</h2>
+    <p data-i18n="incident.notice">説明用のローカル演出 · 全データ架空 · 採点付き演習ではありません</p>
+  </div>
+  <div class="wrap incident-layout">
+    <div class="incident-stage">
+      <div class="incident-stage-top"><span>ACCESS / TRACE</span><span class="incident-stage-number">001 — 003</span></div>
+      <div class="incident-world" aria-hidden="true">
+        <svg class="incident-wires" viewBox="0 0 640 420" preserveAspectRatio="none">
+          <defs><pattern id="incident-grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M32 0H0V32" fill="none" stroke="currentColor" stroke-width=".5"/></pattern></defs>
+          <rect width="640" height="420" fill="url(#incident-grid)"/>
+          <path class="wire-own" d="M25 100H160Q190 100 190 130V210H610"/>
+          <path class="wire-other" d="M25 320H120Q150 320 150 290V210H610"/>
+          <path class="wire-blocked" d="M25 320H120Q150 320 150 290V210H298"/>
+          <circle class="wire-node" cx="190" cy="210" r="12"/>
+          <path class="wire-gate" d="M300 60V360"/>
+        </svg>
+        <div class="incident-orbit orbit-one"></div><div class="incident-orbit orbit-two"></div>
+        <div class="incident-echo"><i></i><i></i><i></i><i></i><i></i></div>
+        <canvas class="incident-canvas" content="drawable"></canvas>
+        <span class="incident-boundary" data-i18n="incident.boundary">サーバー側の境界</span>
+      </div>
+      <div class="incident-request"><span data-i18n="incident.signed">ログイン中: ユーザー 1042</span><code>GET /users/<b data-request-id>1042</b></code></div>
+      <div class="incident-record" data-record>
+        <div class="record-header"><span>FICTIONAL / CUSTOMER</span><span class="record-dot"></span></div>
+        <div class="record-person" data-record-own><span class="record-avatar">A</span><div><strong>Aoi Example</strong><span>aoi@example.invalid</span></div></div>
+        <div class="record-person" data-record-other hidden><span class="record-avatar">R</span><div><strong>Ren Example</strong><span>ren@example.invalid</span></div></div>
+        <div class="record-denied" data-record-denied hidden><span class="record-lock">×</span><strong>ACCESS DENIED</strong></div>
+        <div class="record-footer"><span data-i18n="incident.fiction">架空の顧客データ</span><code data-record-id>ID 1042</code></div>
+      </div>
+      <div class="incident-result" role="status" aria-live="polite" aria-atomic="true">
+        <strong data-http>200 OK</strong>
+        <span data-result="own" data-i18n="incident.ownResult">自分の情報が見える。これは正常。</span>
+        <span data-result="leak" data-i18n="incident.leakResult" hidden>他人の情報まで見えた。認可の欠落。</span>
+        <span data-result="fixed" data-i18n="incident.fixedResult" hidden>他人の情報は返さない。境界ができた。</span>
+      </div>
+      <div class="incident-controls" hidden>
+        <div class="incident-identities" role="group" aria-label="User ID">
+          <button type="button" data-person-select="own" aria-pressed="true"><span data-i18n="incident.own">自分</span> / 1042</button>
+          <button type="button" data-person-select="other" aria-pressed="false"><span data-i18n="incident.other">他人</span> / 1043</button>
         </div>
-        <div class="app-body">
-          <aside class="app-sidebar">
-            <div class="app-menu-title"><span data-i18n="app.menu">メニュー</span><span>⌄</span></div>
-            <div class="app-menu-group" data-i18n="app.event">• イベント</div>
-            <a class="on" data-i18n="app.home">ホーム</a>
-            <a data-i18n="app.scoreboard">スコアボード</a>
-            <a data-i18n="app.score_events">スコアイベント</a>
-            <a data-i18n="app.notifications">お知らせ</a>
-            <div class="app-menu-group">• Quests</div>
-            <a data-i18n="app.problems">問題一覧</a>
-            <div class="app-menu-group" data-i18n="app.tools">• ツール</div>
-            <a data-i18n="app.sso">SSO 資格情報</a>
-          </aside>
-          <main class="dashboard">
-            <h3 data-i18n="app.welcome">ようこそ、ゲストさん</h3>
-            <div class="dashboard-sub" data-i18n="app.welcome_sub">TenkaCloud Battle へようこそ</div>
-            <div class="metric-card">
-              <div class="metric-title" data-i18n="app.team_score">チーム累計スコア</div>
-              <div class="metric-grid">
-                <div><div class="metric-label" data-i18n="app.total">合計</div><div class="metric-value green">2360 pt</div></div>
-                <div><div class="metric-label" data-i18n="app.rank">順位</div><div class="metric-value blue">1 / 2</div></div>
-                <div><div class="metric-label" data-i18n="app.problem_count">問題数</div><div class="metric-value">3</div></div>
-                <div><div class="metric-label" data-i18n="app.completed">完了済</div><div class="metric-value">1</div></div>
-              </div>
-            </div>
-            <div class="chart-card">
-              <div class="chart-head">
-                <div>
-                  <div class="chart-title" data-i18n="app.score_trend">スコア推移</div>
-                  <div class="chart-desc" data-i18n="app.score_trend_desc">同 event 内の全 2 チームを表示</div>
-                </div>
-                <div class="select-pill" data-i18n="app.select_team">event / チームを選択　⌄</div>
-              </div>
-              <svg class="line-chart" viewBox="0 0 760 300" role="img" aria-label="score chart">
-                <rect x="0" y="0" width="760" height="300" fill="#fff"/>
-                <g stroke="#e5e9f0" stroke-width="1">
-                  <path d="M50 25H735M50 65H735M50 105H735M50 145H735M50 185H735M50 225H735M50 265H735"/>
-                  <path d="M50 25V265M130 25V265M210 25V265M290 25V265M370 25V265M450 25V265M530 25V265M610 25V265M690 25V265"/>
-                </g>
-                <polyline fill="none" stroke="#28a35f" stroke-width="2.5" points="50,258 90,250 130,238 170,228 210,212 250,202 290,186 330,176 370,160 410,150 450,134 490,124 530,110 570,100 610,90 650,82 735,76"/>
-                <polyline fill="none" stroke="#1f78d1" stroke-width="2.5" points="50,260 90,253 130,243 170,234 210,220 250,212 290,198 330,190 370,176 410,168 450,154 490,146 530,134 570,127 610,118 650,112 735,107"/>
-                <g font-family="JetBrains Mono, monospace" font-size="11" fill="#344155">
-                  <text x="22" y="29">3000</text><text x="22" y="69">2500</text><text x="22" y="109">2000</text><text x="22" y="149">1500</text><text x="22" y="189">1000</text><text x="30" y="229">500</text><text x="34" y="269">0</text>
-                  <text x="82" y="288">21:37</text><text x="162" y="288">21:39</text><text x="242" y="288">21:41</text><text x="322" y="288">21:43</text><text x="402" y="288">21:45</text><text x="482" y="288">21:47</text><text x="562" y="288">21:49</text><text x="642" y="288">21:51</text>
-                </g>
-                <g transform="translate(575 145)">
-                  <rect width="150" height="74" rx="8" fill="#fff" stroke="#aeb7c5"/>
-                  <text x="13" y="22" font-family="JetBrains Mono, monospace" font-size="12" font-weight="700" fill="#111827">21:50</text>
-                  <path d="M14 42H26" stroke="#1f78d1" stroke-width="4" stroke-linecap="round"/>
-                  <text x="32" y="45" font-family="JetBrains Mono, monospace" font-size="11" fill="#111827">gan        1980 pt</text>
-                  <path d="M14 59H26" stroke="#28a35f" stroke-width="4" stroke-linecap="round"/>
-                  <text x="32" y="62" font-family="JetBrains Mono, monospace" font-size="11" fill="#111827" data-i18n="app.chart_you">(ゲスト あなた) 2360 pt</text>
-                </g>
-              </svg>
-              <div class="chart-legend"><span style="color:#1f78d1">━ gan</span><span style="color:#28a35f" data-i18n="app.legend_you">━ (ゲスト あなた)</span></div>
-            </div>
-            <div class="challenge-card">
-              <h4 data-i18n="app.challenge_title">問題に挑戦</h4>
-              <p data-i18n="app.challenge_body">3問が deploy 済です。問題一覧から挑戦してください。</p>
-              <button class="tiny-button" type="button" data-i18n="app.open_problems">問題一覧を開く</button>
-            </div>
-          </main>
-        </div>
+        <button class="incident-fix" type="button" data-fix data-i18n="incident.fix">所有者チェックを入れる →</button>
+        <button class="incident-reset" type="button" data-reset data-i18n="incident.reset">最初から</button>
       </div>
     </div>
+    <div class="incident-chapters">
+      <article class="incident-chapter" data-step="0">
+        <span class="incident-kicker">01 / REQUEST</span>
+        <h3 data-i18n="incident.step1Title">ログインできた。<br>それだけで安全？</h3>
+        <p data-i18n="incident.step1">自分のページを開くと、サーバーは ID 1042 の情報を返します。ログインの確認は「誰なのか」。でも「誰の情報を読んでよいか」は、別の確認です。</p>
+        <a href="#incident-step2" data-i18n="incident.next">ID を1つ変えてみる ↓</a>
+      </article>
+      <article class="incident-chapter" data-step="1" id="incident-step2">
+        <span class="incident-kicker">02 / EXPOSURE</span>
+        <h3 data-i18n="incident.step2Title">ID を変えただけで、<br>他人の情報が見えた。</h3>
+        <p data-i18n="incident.step2">1042 → 1043。所有者を確認しないサーバーは、別人の架空の個人情報まで返してしまいます。URL を隠すだけでは、この漏えいは止まりません。</p>
+        <p class="incident-insight" data-i18n="incident.impact">この先にあるのは、誰かの個人情報。まず、悪影響を実感する。</p>
+      </article>
+      <article class="incident-chapter" data-step="2">
+        <span class="incident-kicker">03 / CONTAINMENT</span>
+        <h3 data-i18n="incident.step3Title">止めるのは漏えい。<br>サービスは止めない。</h3>
+        <p data-i18n="incident.step3">サーバー側で、ログインしたユーザーとデータの所有者を照合。自分の情報は 200、他人の情報は 403。全員を遮断するだけでは正解ではありません。左右の ID を切り替えて、両方を確かめてください。</p>
+        <code class="incident-rule">session.userId === record.ownerId</code>
+      </article>
+    </div>
+  </div>
+  <div class="wrap incident-outro">
+    <p class="incident-kicker">UNDERSTAND. TRY. PROTECT.</p>
+    <h2 data-i18n="incident.outroTitle">「知っている」を、<br>「止められる」へ。</h2>
+    <p data-i18n="incident.outro">セキュリティは必要。でも、何から始めればいい？ 経験者は少なく、頼むには費用もかかる。教科書だけでは埋まらない実践との距離を、安全で低コストなシミュレーターや実環境での体験で縮めます。</p>
+    <p class="incident-development" data-i18n="incident.development">この認可バグの演習は開発中で、クラウドでは未公開です。上の演出に採点はありません。3分は目標で、初回の所要時間は未実測です。</p>
+    <a href="/portal-demo/?demo=1&amp;goto=start" class="incident-demo-link" data-i18n="incident.demo">現在公開中の操作デモを見る ↗</a>
+    <p class="incident-demo-note" data-i18n="incident.demoNote">問題を開く・回答を提出する流れのデモです。この情報漏えい演習とは異なります。</p>
   </div>
 </section>
 
@@ -656,8 +665,8 @@
   </div>
 </footer>
 
-<script src="./ink-bg.js" defer></script>
-<script src="./app.js?v=594b48643f" defer></script>
+<script src="./incident-story.js?v=48c51ae03f" defer></script>
+<script src="./app.js?v=7520f90d3f" defer></script>
 
 </body>
 </html>
