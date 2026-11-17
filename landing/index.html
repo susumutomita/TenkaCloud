@@ -125,7 +125,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" />
 <link rel="stylesheet" href="./styles/main.css?v=6f930e2dab" />
 <link rel="stylesheet" href="./styles/incident.css?v=2c9a2150f4" />
-<link rel="stylesheet" href="./styles/platform.css?v=0e9c20d1e8" />
+<link rel="stylesheet" href="./styles/platform.css?v=67610982c1" />
 </head>
 <body class="platform-landing">
 <a class="landing-skip" href="#main-start" data-i18n="incident.skip">本文へ移動</a>
@@ -169,9 +169,9 @@
 <p id="main-start" tabindex="-1" class="hero-preview" data-i18n="platform.eyebrow">TenkaCloud / OSS の演習・競技プラットフォーム</p>
 <h1><span data-i18n="platform.h1a"><span class="motion-line">クラウドと</span><span class="motion-line">セキュリティを、</span></span><em data-i18n="platform.h1b">実践で学ぶ。</em>
 </h1>
-<p class="sub" data-i18n="platform.definition">クラウドとセキュリティを、実際に動かして学ぶ OSS 基盤。個人の練習から、独自問題を使うチームの研修まで。</p>
+<p class="sub" data-i18n="platform.definition">自分たちの問題で、環境を動かして学ぶ OSS 基盤。演習の開催から回答・採点まで、ひとつにつながります。</p>
 <div class="platform-hero-actions"><a class="platform-primary" href="/portal-demo/?demo=1&amp;goto=start" data-cta="start-drill" data-i18n="platform.primary">操作デモをブラウザーで見る →</a>
-<p class="platform-muted" data-i18n="platform.primaryNote">公開中 · 登録不要 · 演習の操作を確認するデモです</p><a href="#try" data-i18n="platform.choose">今試せることを比べる ↓</a>
+<p class="platform-muted" data-i18n="platform.primaryNote">公開中 · 登録不要 · 演習の操作を確認するデモです</p><a href="#try" data-i18n="platform.choose">デモ・ゲーム・開催方法を見る ↓</a>
 </div>
 <div class="platform-preview">
 <p  data-i18n="platform.preview">ローカル環境で収録した操作画面</p>
@@ -263,19 +263,27 @@
 <button type="button" data-scene-select="0" aria-pressed="true"><span>01</span> <span data-i18n="platform.sceneQuests">問題に挑む</span></button>
 <button type="button" data-scene-select="1" aria-pressed="false"><span>02</span> <span data-i18n="platform.sceneScores">演習を開く</span></button>
 </div>
-</div></div><p class="hero-secondary"><a href="https://youtu.be/k3087kMJmgI" target="_blank" rel="noopener noreferrer" data-cta="watch-60s"><span data-i18n="hero.cta_video">▶ 1分で見る</span></a></p><p class="hero-trust" data-i18n="hero.trust">合同会社 BULL 運営 · Apache 2.0</p></div></div></section>
+</div></div><p class="hero-secondary"><a href="https://youtu.be/k3087kMJmgI" target="_blank" rel="noopener noreferrer" data-cta="watch-60s"><span data-i18n="hero.cta_video">▶ 1分で見る</span></a></p></div></div></section>
 
+
+<section class="platform-section platform-workflow" id="how-it-works" data-entry-gallery aria-labelledby="workflow-title"><div class="wrap">
+<h2 id="workflow-title" data-i18n="flow.title">問題を選ぶ。操作する。<br>答えを確かめる。</h2>
+<div class="platform-entry-toolbar"><fieldset class="platform-entry-picker"><legend data-i18n="flow.legend">演習の流れを見る</legend><div class="platform-entry-options"><label><input type="radio" name="workflow-scene" value="0" checked><span data-i18n="flow.prepare">01 問題を用意</span></label>
+<label><input type="radio" name="workflow-scene" value="1"><span data-i18n="flow.practice">02 環境で挑戦</span></label>
+<label><input type="radio" name="workflow-scene" value="2"><span data-i18n="flow.score">03 回答・採点</span></label>
+</div></fieldset><button type="button" class="platform-entry-pause" data-motion-toggle hidden><span data-motion-pause data-i18n="motion.pause">動きを止める</span><span data-motion-play data-i18n="motion.play" hidden>動きを再生</span></button></div><div data-entry-stage><article data-entry-panel="0" class="platform-workflow-panel"><div class="platform-entry-scene"><a class="platform-entry-media" href="./docs/manual/problem-author/" aria-labelledby="workflow-prepare-title"><video data-ambient-video data-src="/assets/lp-motion/organizer.mp4?v=2500ab19ef" poster="./assets/lp-motion/organizer.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></a><div class="platform-entry-copy"><p class="platform-option-meta" data-i18n="flow.prepareMeta">主催者 / 演習を作成</p><h3 id="workflow-prepare-title" data-i18n="flow.prepareTitle">オリジナル問題で、<br>演習を開く。</h3><p data-i18n="flow.prepareBody">既存の問題を選ぶ。チームの課題に合わせて作る。問題とチームを選び、演習を開きます。</p><a href="./docs/manual/problem-author/" data-i18n="platform.customGuide">問題の作り方を見る →</a></div></div></article><article data-entry-panel="1" class="platform-workflow-panel"><div class="platform-entry-scene"><a class="platform-entry-media" href="https://github.com/susumutomita/TenkaCloudSimulator#readme" aria-labelledby="workflow-practice-title"><video data-ambient-video data-src="/assets/lp-motion/simulator.mp4?v=41f98ddb11" poster="./assets/lp-motion/simulator.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></a><div class="platform-entry-copy"><p class="platform-option-meta" data-i18n="flow.practiceMeta">Simulator単体 / ローカル環境</p><h3 id="workflow-practice-title" data-i18n="flow.practiceTitle">クラウドの操作を、<br>自分のPCで。</h3><p data-i18n="flow.practiceBody">TenkaCloud Simulatorなら、対応するAPIやコンソールを実AWSへ接続せずに操作できます。作る、試す、結果を確かめる。失敗しても、もう一度。</p><a href="https://github.com/susumutomita/TenkaCloudSimulator#readme" data-i18n="flow.practiceLink">Simulatorを見る →</a></div></div></article><article data-entry-panel="2" class="platform-workflow-panel"><div class="platform-entry-scene"><a class="platform-entry-media" href="/portal-demo/?demo=1&amp;goto=start" aria-labelledby="workflow-score-title"><video data-ambient-video data-src="/assets/lp-motion/participant.mp4?v=e8d2438279" poster="./assets/lp-motion/participant.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></a><div class="platform-entry-copy"><p class="platform-option-meta" data-i18n="flow.scoreMeta">参加者・主催者 / 回答と結果</p><h3 id="workflow-score-title" data-i18n="flow.scoreTitle">答えて、確かめる。<br>次の挑戦へ。</h3><p data-i18n="flow.scoreBody">回答を提出すると採点結果が返り、得点に反映。主催者も結果を確認し、研修や競技を進められます。</p><a href="/portal-demo/?demo=1&amp;goto=start" data-i18n="platform.demoLink">操作デモへ →</a></div></div></article></div><details class="platform-entry-notes"><summary data-i18n="flow.conditions">対応範囲・利用条件</summary><p data-i18n="flow.scope">画面はローカル収録の操作例です。Simulatorの映像は単体環境での操作で、参加者の操作権限は問題により異なります。対応APIは一部に限られ、環境・採点方式・費用も問題ごとに異なります。</p><a href="https://github.com/susumutomita/TenkaCloudSimulator#readme" data-i18n="flow.scopeLink">Simulatorの対応範囲と起動方法</a></details></div></section>
 
 <section class="platform-section platform-custom" id="custom-problems" aria-labelledby="custom-title">
 <div class="wrap platform-custom-layout">
-<div><h2 id="custom-title" data-i18n="platform.customTitle">自分たちの課題を、<br>練習問題に。</h2>
-<p class="platform-lead" data-i18n="platform.customBody">教えたい手順も、繰り返すミスも。チームに合う問題を作り、一緒に試せます。</p>
+<div><h2 id="custom-title" data-i18n="platform.customTitle">オリジナル問題を<br>作れます。</h2>
+<p class="platform-lead" data-i18n="platform.customBody">問題文・ヒント・正解を用意し、チームで挑戦。回答・採点・ランキングを使って、競技形式で実践的に学べます。</p>
+<p class="platform-custom-operations" data-i18n="platform.customOps">対応する問題環境のデプロイと撤収も、主催者画面から実行できます。</p>
 <a href="./docs/manual/problem-author/" data-i18n-href="extend.cta3Href" data-i18n="platform.customGuide">問題の作り方を見る →</a></div>
-<figure class="platform-problem-sheet"><figcaption data-i18n="platform.customExample">自分で作る問題文の例</figcaption>
-<h3 data-i18n="platform.customTopic">使っていないリソースを探す</h3>
-<dl><div><dt data-i18n="platform.customSituationLabel">状況</dt><dd data-i18n="platform.customSituation">毎月のクラウド費用が増えている。</dd></div>
-<div><dt data-i18n="platform.customGoalLabel">ゴール</dt><dd data-i18n="platform.customGoal">不要なリソースを特定し、停止する。</dd></div>
-<div><dt data-i18n="platform.customFirstLabel">最初の操作</dt><dd data-i18n="platform.customFirst">利用状況と作成者を調べる。</dd></div></dl>
+<figure class="platform-problem-sheet"><figcaption data-i18n="platform.customExample">オリジナル問題の活用例</figcaption>
+<h3 data-i18n="platform.customTopic">自社のサービスを題材に</h3>
+<dl><div><dt data-i18n="platform.customSituationLabel">インシデント訓練</dt><dd data-i18n="platform.customSituation">自社サービスの構成に合わせて、調査や対応を練習。</dd></div>
+<div><dt data-i18n="platform.customGoalLabel">新メンバーのオンボーディング</dt><dd data-i18n="platform.customGoal">サービスの構成や運用手順を、実際に操作して覚える。</dd></div>
+<div><dt data-i18n="platform.customFirstLabel">企業ポリシーに沿った演習</dt><dd data-i18n="platform.customFirst">社内ルールに沿った設定や判断を、問題を解きながら確認。</dd></div></dl>
 </figure></div></section>
 
 <section class="platform-section" id="practice-question" aria-labelledby="practice-question-title">
@@ -293,34 +301,29 @@
 <p class="eyebrow" data-i18n="platform.whyEyebrow">なぜ、実践なのか</p>
 <h2  data-i18n="platform.whyTitle"><span class="platform-phrase">知識を、</span><span class="platform-phrase">実践で使える力へ。</span></h2>
 <p class="platform-lead" data-i18n="platform.whyLead">セキュリティは必要。でも何から始めればいい？ 経験者は少なく、頼るには費用もかかる。教科書で学んだことを、安全な演習の中で試し、結果から学び直せる場所が必要です。</p>
-<ol class="platform-loop">
-<li>
-<h3  data-i18n="platform.chooseStep">問題に挑む</h3>
-<p  data-i18n="platform.chooseStepBody">主催者が、受講者と目的に合う問題を選びます。基礎ゲーム、Challenge、Battle で学び方を変えられます。</p>
-</li>
-<li>
-<h3  data-i18n="platform.practiceStep">手を動かす</h3>
-<p  data-i18n="platform.practiceStepBody">答えを考えるだけでなく、対応するシミュレーターや実環境を操作。問題ごとの接続条件と費用はガイドで確認できます。</p>
-</li>
-<li>
-<h3  data-i18n="platform.feedbackStep">結果を確かめる</h3>
-<p  data-i18n="platform.feedbackStepBody">回答やチェックポイントを提出し、採点・ヒント・得点の変化を振り返ります。もう一度試すことで、理解を確かめます。</p>
-</li>
-</ol>
+
 </div>
 </section>
 
 
-<section class="platform-section" id="try">
+<section class="platform-section" id="try" data-entry-gallery>
 <div class="wrap">
 <span class="platform-chapter-index" aria-hidden="true">03</span>
-<p class="eyebrow" data-i18n="platform.tryEyebrow">最初の一歩</p>
-<h2  data-i18n="platform.tryTitle">今、試せること。</h2>
 
-<div class="platform-start-list">
-<article class="platform-start-option"><a class="platform-entry-media" href="/portal-demo/?demo=1&amp;goto=start" aria-labelledby="entry-demo-title"><video data-ambient-video data-src="/assets/lp-motion/participant.mp4?v=e8d2438279" poster="./assets/lp-motion/participant.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></a><p class="platform-option-meta" data-i18n="platform.demoStatus">ブラウザー / 登録不要</p><h3 id="entry-demo-title" data-i18n="platform.demoTitle">操作を試す</h3><p data-i18n="platform.demoBody">問題を開いて、回答・採点まで。</p><a href="/portal-demo/?demo=1&amp;goto=start" data-i18n="platform.demoLink">操作デモへ →</a></article>
-<article class="platform-start-option" id="security-minigames"><a class="platform-entry-media" href="./portal-demo/?demo=1&goto=%2Fproblems%3Flang%3Dja" data-i18n-href="mailGame.href" aria-labelledby="entry-game-title"><video data-ambient-video data-src="/assets/lp-motion/game.mp4?v=bd46212461" poster="./assets/lp-motion/game.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></a><p class="platform-option-meta" data-i18n="platform.gameStatus">ブラウザー / AWS・登録不要</p><h3 id="entry-game-title" data-i18n="mailGame.h">ゲームで遊ぶ</h3><p data-i18n="platform.gameBody">セキュリティの基礎を、ブラウザーで。</p><a href="./portal-demo/?demo=1&goto=%2Fproblems%3Flang%3Dja" data-i18n-href="mailGame.href" data-i18n="mailGame.cta">ゲーム一覧へ →</a></article>
-<article class="platform-start-option"><a class="platform-entry-media" href="/docs/getting-started/#local-start" data-i18n-href="hero.startHref" aria-labelledby="entry-host-title"><video data-ambient-video data-src="/assets/lp-motion/organizer.mp4?v=2500ab19ef" poster="./assets/lp-motion/organizer.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></a><p class="platform-option-meta" data-i18n="platform.localStatus">自分のPC / AWS不要</p><h3 id="entry-host-title" data-i18n="platform.localTitle">自分で開催する</h3><p data-i18n="platform.localShort">問題を選んで、チームを招待。</p><a href="/docs/getting-started/#local-start" data-i18n-href="hero.startHref" data-i18n="hero.cta_demo" data-cta="local-start">起動ガイドへ →</a></article>
+<h2 id="try-title" data-i18n="platform.tryTitle">操作デモ・ゲーム・<br>ローカル開催。</h2>
+
+<div class="platform-entry-toolbar">
+<fieldset class="platform-entry-picker"><legend data-i18n="entry.legend">画面を切り替える</legend><div class="platform-entry-options">
+<label><input type="radio" name="entry-scene" value="0" checked><span data-i18n="entry.demo">操作デモ</span></label>
+<label><input type="radio" name="entry-scene" value="1"><span data-i18n="entry.game">ゲーム</span></label>
+<label><input type="radio" name="entry-scene" value="2"><span data-i18n="entry.host">ローカル開催</span></label>
+</div></fieldset>
+<button type="button" class="platform-entry-pause" data-motion-toggle hidden><span data-motion-pause data-i18n="motion.pause">動きを止める</span><span data-motion-play data-i18n="motion.play" hidden>動きを再生</span></button>
+</div>
+<div class="platform-start-list" data-entry-stage>
+<article class="platform-start-option" data-entry-panel="0"><div class="platform-entry-scene"><a class="platform-entry-media" href="/portal-demo/?demo=1&amp;goto=start" aria-labelledby="entry-demo-title"><video data-ambient-video data-src="/assets/lp-motion/participant.mp4?v=e8d2438279" poster="./assets/lp-motion/participant.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></a><div class="platform-entry-copy"><p class="platform-option-meta" data-i18n="platform.demoStatus">ブラウザー / 登録不要</p><h3 id="entry-demo-title" data-i18n="platform.demoTitle">操作を試す</h3><p data-i18n="platform.demoBody">問題を開いて、回答・採点まで。</p><a href="/portal-demo/?demo=1&amp;goto=start" data-i18n="platform.demoLink">操作デモへ →</a></div></div></article>
+<article class="platform-start-option" data-entry-panel="1" id="security-minigames"><div class="platform-entry-scene"><a class="platform-entry-media" href="./portal-demo/?demo=1&goto=%2Fproblems%3Flang%3Dja" data-i18n-href="mailGame.href" aria-labelledby="entry-game-title"><video data-ambient-video data-src="/assets/lp-motion/game.mp4?v=bd46212461" poster="./assets/lp-motion/game.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></a><div class="platform-entry-copy"><p class="platform-option-meta" data-i18n="platform.gameStatus">ブラウザー / AWS・登録不要</p><h3 id="entry-game-title" data-i18n="mailGame.h">ゲームで遊ぶ</h3><p data-i18n="platform.gameBody">セキュリティの基礎を、ブラウザーで。</p><a href="./portal-demo/?demo=1&goto=%2Fproblems%3Flang%3Dja" data-i18n-href="mailGame.href" data-i18n="mailGame.cta">ゲーム一覧へ →</a></div></div></article>
+<article class="platform-start-option" data-entry-panel="2"><div class="platform-entry-scene"><a class="platform-entry-media" href="/docs/getting-started/#local-start" data-i18n-href="hero.startHref" aria-labelledby="entry-host-title"><video data-ambient-video data-src="/assets/lp-motion/organizer.mp4?v=2500ab19ef" poster="./assets/lp-motion/organizer.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></a><div class="platform-entry-copy"><p class="platform-option-meta" data-i18n="platform.localStatus">自分のPC / AWS不要</p><h3 id="entry-host-title" data-i18n="platform.localTitle">自分で開催する</h3><p data-i18n="platform.localShort">問題を選んで、チームを招待。</p><a href="/docs/getting-started/#local-start" data-i18n-href="hero.startHref" data-i18n="hero.cta_demo" data-cta="local-start">起動ガイドへ →</a></div></div></article>
 </div><details class="platform-entry-notes"><summary data-i18n="platform.entryNotes">利用条件とデモの範囲</summary><p data-i18n="hero.quest_desc">問題を開いて接続先を確認し、回答を提出する操作デモです。実環境への攻撃・修復を行うものではありません。</p><p data-i18n="platform.localBody">ローカル開催は AWS アカウント不要。Docker 問題の条件やクラウド開催は起動ガイドで確認できます。</p></details>
 <div class="platform-film"><div><p class="eyebrow" data-i18n="platform.filmEyebrow">1分で見る</p><h3 id="film-title" data-i18n="platform.filmTitle">参加から開催まで、実際の画面で。</h3></div><video controls playsinline preload="none" poster="./assets/lp-motion/film.jpg" aria-labelledby="film-title"><source src="/videos/lp/tenkacloud-60s.mp4?v=54d2534496" type="video/mp4"></video><p><a href="https://youtu.be/k3087kMJmgI" target="_blank" rel="noopener noreferrer" data-i18n="platform.youtube">YouTube で見る ↗</a></p><p data-i18n="platform.filmNote">ローカル環境で収録した操作画面です。動画は音楽と効果音付きです。</p></div>
 <p class="platform-fee-note" data-i18n="platform.feeNote">OSS 本体のライセンス料は無料です。AWS などの環境利用料は別で、運営代行は任意の有料サービスです。</p>
@@ -402,7 +405,7 @@
       </article>
     </div>
   </div>
-  <div class="wrap incident-outro"><p class="incident-development" data-i18n="incident.development">この画面は仕組みを説明するためのデモです。架空のデータを使い、採点は行いません。</p><a href="#try" data-i18n="platform.backToTry">今試せるものを選ぶ ↑</a></div>
+  <div class="wrap incident-outro"><p class="incident-development" data-i18n="incident.development">この画面は仕組みを説明するためのデモです。架空のデータを使い、採点は行いません。</p><a href="#try" data-i18n="platform.backToTry">デモ・ゲーム・開催方法を見る ↑</a></div>
 </section></details></div></section>
 
 
@@ -413,7 +416,7 @@
 <h2  data-i18n="platform.hostTitle">一人でも、チームでも。</h2>
 <div class="platform-roles">
 <article class="platform-role"><img src="./assets/lp-motion/participant.jpg" alt="" width="1060" height="600" loading="lazy"><p class="eyebrow" data-i18n="platform.learnerLabel">参加する人</p><h3 data-i18n="platform.learnerTitle">解いて、できることを増やす。</h3><p data-i18n="platform.learnerBody">操作して、提出して、結果を確かめる。</p><a href="./docs/manual/participant/" data-i18n-href="mailGame.joinHref" data-i18n="platform.learnerLink">参加方法を見る →</a></article>
-<article class="platform-role"><img src="./assets/lp-motion/organizer.jpg" alt="" width="1060" height="600" loading="lazy"><p class="eyebrow" data-i18n="platform.authorLabel">問題を作り、開催する人</p><h3 data-i18n="platform.authorTitle">教えたいことを、問題にする。</h3><p data-i18n="platform.authorBody">問題文・ヒント・正解を、自分たちの教材に合わせる。</p><ol class="platform-author-flow"><li data-i18n="platform.authorStep1">題材を決める</li><li data-i18n="platform.authorStep2">問題を書く</li><li data-i18n="platform.authorStep3">チームで試す</li></ol><a href="./docs/manual/problem-author/" data-i18n-href="aud.c.moreHref" data-i18n="platform.authorLink">独自の問題を作る →</a> <a href="./docs/manual/organizer/" data-i18n-href="hero.hostHref" data-i18n="hero.cta_host" data-cta="deploy-aws">開催ガイド</a></article>
+<article class="platform-role"><img src="./assets/lp-motion/organizer.jpg" alt="" width="1060" height="600" loading="lazy"><p class="eyebrow" data-i18n="platform.authorLabel">問題を作り、開催する人</p><h3 data-i18n="platform.authorTitle">オリジナル問題を作る。</h3><p data-i18n="platform.authorBody">自社のサービスや社内ルールを、問題文・ヒント・正解に反映。</p><ol class="platform-author-flow"><li data-i18n="platform.authorStep1">題材を決める</li><li data-i18n="platform.authorStep2">問題を書く</li><li data-i18n="platform.authorStep3">チームで試す</li></ol><a href="./docs/manual/problem-author/" data-i18n-href="aud.c.moreHref" data-i18n="platform.authorLink">独自の問題を作る →</a> <a href="./docs/manual/organizer/" data-i18n-href="hero.hostHref" data-i18n="hero.cta_host" data-cta="deploy-aws">開催ガイド</a></article>
 </div>
 <a class="platform-usecase-link" href="#use-cases" data-i18n="nav.useCases">活用例</a>
 <details class="platform-details">
@@ -706,10 +709,11 @@
   </div>
 </footer>
 
-<script src="./platform-motion.js?v=2701037cc6" defer></script>
+<script src="./platform-motion.js?v=634c658c2f" defer></script>
 <script src="./platform-page.js?v=b0701d9579" defer></script>
 <script src="./incident-story.js?v=ba1b4811ea" defer></script>
-<script src="./app.js?v=9dd7073d52" defer></script>
+<script defer src="./entry-scenes.js?v=996ba16de2"></script>
+<script src="./app.js?v=00a7cdce4e" defer></script>
 
 </body>
 </html>

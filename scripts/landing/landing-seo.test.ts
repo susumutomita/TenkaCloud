@@ -196,8 +196,8 @@ describe("platform-first landing entry", () => {
       '<span class="motion-line">クラウドと</span><span class="motion-line">セキュリティを、</span>',
     );
     expect(hero).toContain("実践で学ぶ。");
-    expect(hero).toContain("クラウドとセキュリティを、実際に動かして学ぶ OSS 基盤");
-    expect(hero).toContain("独自問題を使うチームの研修");
+    expect(hero).toContain("自分たちの問題で、環境を動かして学ぶ OSS 基盤");
+    expect(hero).toContain("演習の開催から回答・採点まで");
     expect(hero).toContain('href="/portal-demo/?demo=1&amp;goto=start"');
     expect(hero).toContain('data-cta="start-drill"');
     expect(hero).toContain("登録不要");
@@ -244,7 +244,7 @@ describe("platform-first landing entry", () => {
     expect(hero).toContain("open-source platform");
     expect(hero).toContain("Open the browser walkthrough");
     expect(hero).not.toContain("Three minutes");
-    expect(english).toContain("Write the problem, hints and answers");
+    expect(english).toContain("Build your service architecture and internal rules");
     expect(english).toContain("explanatory demo using fictional data");
     expect(english).toContain("no scoring");
     expect(english).toContain('href="/docs/getting-started/index.en.html#local-start"');

@@ -41,6 +41,7 @@ export const STAMPED_ASSETS = [
   "incident-story.js",
   "platform-page.js",
   "platform-motion.js",
+  "entry-scenes.js",
 ] as const;
 
 export type AssetVersions = Record<string, string>;
@@ -56,6 +57,7 @@ export const STAMPED_MEDIA = [
   "assets/lp-motion/participant.mp4",
   "assets/lp-motion/organizer.mp4",
   "assets/lp-motion/game.mp4",
+  "assets/lp-motion/simulator.mp4",
 ] as const;
 
 /** STAMPED_MEDIA を参照する HTML (landing/ からの相対)。 参照を足したらここにも足す。 */

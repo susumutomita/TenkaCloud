@@ -126,7 +126,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" />
 <link rel="stylesheet" href="./styles/main.css?v=6f930e2dab" />
 <link rel="stylesheet" href="./styles/incident.css?v=2c9a2150f4" />
-<link rel="stylesheet" href="./styles/platform.css?v=0e9c20d1e8" />
+<link rel="stylesheet" href="./styles/platform.css?v=67610982c1" />
 </head>
 <body class="platform-landing">
 <a class="landing-skip" href="#main-start" data-i18n="incident.skip">Skip to content</a>
@@ -170,9 +170,9 @@
 <p id="main-start" tabindex="-1" class="hero-preview" data-i18n="platform.eyebrow">TenkaCloud / Open-source practice and competition platform</p>
 <h1><span data-i18n="platform.h1a"><span class="motion-line">Cloud and security,</span></span><em data-i18n="platform.h1b">learned by doing.</em>
 </h1>
-<p class="sub" data-i18n="platform.definition">An open-source platform for hands-on cloud and security learning. Practice on your own, or run team training with problems you create.</p>
+<p class="sub" data-i18n="platform.definition">An open-source platform for hands-on cloud and security learning. Bring your own problems, run an exercise, and see participants’ answers and scores.</p>
 <div class="platform-hero-actions"><a class="platform-primary" href="/portal-demo/?demo=1&amp;goto=start" data-cta="start-drill" data-i18n="platform.primary">Open the browser walkthrough →</a>
-<p class="platform-muted" data-i18n="platform.primaryNote">Available now · No signup · A walkthrough of the exercise workflow</p><a href="#try" data-i18n="platform.choose">Compare ways to try it ↓</a>
+<p class="platform-muted" data-i18n="platform.primaryNote">Available now · No signup · A walkthrough of the exercise workflow</p><a href="#try" data-i18n="platform.choose">Explore the demo, games and hosting ↓</a>
 </div>
 <div class="platform-preview">
 <p  data-i18n="platform.preview">Actual screens recorded in a local environment</p>
@@ -264,19 +264,27 @@
 <button type="button" data-scene-select="0" aria-pressed="true"><span>01</span> <span data-i18n="platform.sceneQuests">Explore problems</span></button>
 <button type="button" data-scene-select="1" aria-pressed="false"><span>02</span> <span data-i18n="platform.sceneScores">See results</span></button>
 </div>
-</div></div><p class="hero-secondary"><a href="https://youtu.be/k3087kMJmgI" target="_blank" rel="noopener noreferrer" data-cta="watch-60s"><span data-i18n="hero.cta_video">▶ Watch in one minute</span></a></p><p class="hero-trust" data-i18n="hero.trust">Operated by BULL LLC · Apache 2.0</p></div></div></section>
+</div></div><p class="hero-secondary"><a href="https://youtu.be/k3087kMJmgI" target="_blank" rel="noopener noreferrer" data-cta="watch-60s"><span data-i18n="hero.cta_video">▶ Watch in one minute</span></a></p></div></div></section>
 
+
+<section class="platform-section platform-workflow" id="how-it-works" data-entry-gallery aria-labelledby="workflow-title"><div class="wrap">
+<h2 id="workflow-title" data-i18n="flow.title">From problems to practice.<br>From actions to understanding.</h2>
+<div class="platform-entry-toolbar"><fieldset class="platform-entry-picker"><legend data-i18n="flow.legend">Explore the exercise workflow</legend><div class="platform-entry-options"><label><input type="radio" name="workflow-scene" value="0" checked><span data-i18n="flow.prepare">01 Prepare</span></label>
+<label><input type="radio" name="workflow-scene" value="1"><span data-i18n="flow.practice">02 Practice</span></label>
+<label><input type="radio" name="workflow-scene" value="2"><span data-i18n="flow.score">03 Submit & score</span></label>
+</div></fieldset><button type="button" class="platform-entry-pause" data-motion-toggle hidden><span data-motion-pause data-i18n="motion.pause">Pause motion</span><span data-motion-play data-i18n="motion.play" hidden>Play motion</span></button></div><div data-entry-stage><article data-entry-panel="0" class="platform-workflow-panel"><div class="platform-entry-scene"><a class="platform-entry-media" href="./docs/manual/problem-author/" aria-labelledby="workflow-prepare-title"><video data-ambient-video data-src="/assets/lp-motion/organizer.mp4?v=2500ab19ef" poster="./assets/lp-motion/organizer.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></a><div class="platform-entry-copy"><p class="platform-option-meta" data-i18n="flow.prepareMeta">HOST / CREATE AN EXERCISE</p><h3 id="workflow-prepare-title" data-i18n="flow.prepareTitle">Run an exercise<br>with your own problems.</h3><p data-i18n="flow.prepareBody">Choose existing problems or create your own around your team’s needs. Select problems and teams, then start an exercise.</p><a href="./docs/manual/problem-author/" data-i18n="platform.customGuide">See how to write a problem →</a></div></div></article><article data-entry-panel="1" class="platform-workflow-panel"><div class="platform-entry-scene"><a class="platform-entry-media" href="https://github.com/susumutomita/TenkaCloudSimulator#readme" aria-labelledby="workflow-practice-title"><video data-ambient-video data-src="/assets/lp-motion/simulator.mp4?v=41f98ddb11" poster="./assets/lp-motion/simulator.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></a><div class="platform-entry-copy"><p class="platform-option-meta" data-i18n="flow.practiceMeta">STANDALONE SIMULATOR / LOCAL ENVIRONMENT</p><h3 id="workflow-practice-title" data-i18n="flow.practiceTitle">Practice cloud operations.<br>On your own computer.</h3><p data-i18n="flow.practiceBody">TenkaCloud Simulator lets you practice supported APIs and console workflows without connecting to real AWS. Create, test, inspect the result, and try again.</p><a href="https://github.com/susumutomita/TenkaCloudSimulator#readme" data-i18n="flow.practiceLink">Explore Simulator →</a></div></div></article><article data-entry-panel="2" class="platform-workflow-panel"><div class="platform-entry-scene"><a class="platform-entry-media" href="/portal-demo/?demo=1&amp;goto=start" aria-labelledby="workflow-score-title"><video data-ambient-video data-src="/assets/lp-motion/participant.mp4?v=e8d2438279" poster="./assets/lp-motion/participant.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></a><div class="platform-entry-copy"><p class="platform-option-meta" data-i18n="flow.scoreMeta">PARTICIPANT & HOST / ANSWERS AND RESULTS</p><h3 id="workflow-score-title" data-i18n="flow.scoreTitle">Submit. Check the result.<br>Take the next challenge.</h3><p data-i18n="flow.scoreBody">Submit an answer and see the grading result and score. Hosts can follow the results as the training or competition progresses.</p><a href="/portal-demo/?demo=1&amp;goto=start" data-i18n="platform.demoLink">Open the walkthrough →</a></div></div></article></div><details class="platform-entry-notes"><summary data-i18n="flow.conditions">Scope and requirements</summary><p data-i18n="flow.scope">These are locally recorded examples. The Simulator footage shows standalone operation; participant permissions depend on the problem. Only a documented subset of APIs is implemented. Environment requirements, grading and costs vary by problem.</p><a href="https://github.com/susumutomita/TenkaCloudSimulator#readme" data-i18n="flow.scopeLink">Simulator scope and setup</a></details></div></section>
 
 <section class="platform-section platform-custom" id="custom-problems" aria-labelledby="custom-title">
 <div class="wrap platform-custom-layout">
-<div><h2 id="custom-title" data-i18n="platform.customTitle">Your team’s challenges.<br>Your practice problems.</h2>
-<p class="platform-lead" data-i18n="platform.customBody">Turn the steps you teach and mistakes you see into problems your team can work through together.</p>
+<div><h2 id="custom-title" data-i18n="platform.customTitle">Create your own<br>problems.</h2>
+<p class="platform-lead" data-i18n="platform.customBody">Write the brief, hints and answers, then challenge your team. Answers, grading and rankings turn the exercise into a hands-on competition.</p>
+<p class="platform-custom-operations" data-i18n="platform.customOps">Hosts can also deploy and tear down supported problem environments from the admin console.</p>
 <a href="./docs/manual/problem-author/index.en.html" data-i18n-href="extend.cta3Href" data-i18n="platform.customGuide">See how to write a problem →</a></div>
-<figure class="platform-problem-sheet"><figcaption data-i18n="platform.customExample">An example problem you could write</figcaption>
-<h3 data-i18n="platform.customTopic">Find unused resources</h3>
-<dl><div><dt data-i18n="platform.customSituationLabel">Situation</dt><dd data-i18n="platform.customSituation">The monthly cloud bill keeps rising.</dd></div>
-<div><dt data-i18n="platform.customGoalLabel">Goal</dt><dd data-i18n="platform.customGoal">Identify and stop unnecessary resources.</dd></div>
-<div><dt data-i18n="platform.customFirstLabel">First step</dt><dd data-i18n="platform.customFirst">Check usage and identify who created each resource.</dd></div></dl>
+<figure class="platform-problem-sheet"><figcaption data-i18n="platform.customExample">Ways to use your own problems</figcaption>
+<h3 data-i18n="platform.customTopic">Built around your own services</h3>
+<dl><div><dt data-i18n="platform.customSituationLabel">Incident response training</dt><dd data-i18n="platform.customSituation">Practice investigation and response using your service’s architecture.</dd></div>
+<div><dt data-i18n="platform.customGoalLabel">Onboarding new members</dt><dd data-i18n="platform.customGoal">Learn service architecture and operational procedures by trying them.</dd></div>
+<div><dt data-i18n="platform.customFirstLabel">Exercises based on company policy</dt><dd data-i18n="platform.customFirst">Check configurations and decisions against internal rules as you solve problems.</dd></div></dl>
 </figure></div></section>
 
 <section class="platform-section" id="practice-question" aria-labelledby="practice-question-title">
@@ -294,34 +302,29 @@
 <p class="eyebrow" data-i18n="platform.whyEyebrow">Why hands-on practice</p>
 <h2  data-i18n="platform.whyTitle">Bridge knowing and doing.</h2>
 <p class="platform-lead" data-i18n="platform.whyLead">Security matters. But where do you start? Experienced people are scarce and costly. Put textbook knowledge to work in a safe exercise, see what happens, and learn from the result.</p>
-<ol class="platform-loop">
-<li>
-<h3  data-i18n="platform.chooseStep">Choose a problem</h3>
-<p  data-i18n="platform.chooseStepBody">Organizers choose problems for their learners and goals: basic games, Challenges or Battles.</p>
-</li>
-<li>
-<h3  data-i18n="platform.practiceStep">Try it hands-on</h3>
-<p  data-i18n="platform.practiceStepBody">Work with a supported simulator or real environment, as appropriate for the problem. Check its guide for access requirements and costs.</p>
-</li>
-<li>
-<h3  data-i18n="platform.feedbackStep">Check the result</h3>
-<p  data-i18n="platform.feedbackStepBody">Submit answers or checkpoints, then review scoring, hints and score changes. Try again to check your understanding.</p>
-</li>
-</ol>
+
 </div>
 </section>
 
 
-<section class="platform-section" id="try">
+<section class="platform-section" id="try" data-entry-gallery>
 <div class="wrap">
 <span class="platform-chapter-index" aria-hidden="true">03</span>
-<p class="eyebrow" data-i18n="platform.tryEyebrow">Start here</p>
-<h2  data-i18n="platform.tryTitle">What you can try now.</h2>
 
-<div class="platform-start-list">
-<article class="platform-start-option"><a class="platform-entry-media" href="/portal-demo/?demo=1&amp;goto=start" aria-labelledby="entry-demo-title"><video data-ambient-video data-src="/assets/lp-motion/participant.mp4?v=e8d2438279" poster="./assets/lp-motion/participant.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></a><p class="platform-option-meta" data-i18n="platform.demoStatus">Browser / no signup</p><h3 id="entry-demo-title" data-i18n="platform.demoTitle">Try the workflow</h3><p data-i18n="platform.demoBody">Open a problem. Submit an answer. See the score.</p><a href="/portal-demo/?demo=1&amp;goto=start" data-i18n="platform.demoLink">Open the walkthrough →</a></article>
-<article class="platform-start-option" id="security-minigames"><a class="platform-entry-media" href="./portal-demo/?demo=1&goto=%2Fproblems%3Flang%3Den" data-i18n-href="mailGame.href" aria-labelledby="entry-game-title"><video data-ambient-video data-src="/assets/lp-motion/game.mp4?v=bd46212461" poster="./assets/lp-motion/game.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></a><p class="platform-option-meta" data-i18n="platform.gameStatus">Browser / no AWS or signup</p><h3 id="entry-game-title" data-i18n="mailGame.h">Play a game</h3><p data-i18n="platform.gameBody">Security basics, in your browser.</p><a href="./portal-demo/?demo=1&goto=%2Fproblems%3Flang%3Den" data-i18n-href="mailGame.href" data-i18n="mailGame.cta">Browse games →</a></article>
-<article class="platform-start-option"><a class="platform-entry-media" href="/docs/getting-started/index.en.html#local-start" data-i18n-href="hero.startHref" aria-labelledby="entry-host-title"><video data-ambient-video data-src="/assets/lp-motion/organizer.mp4?v=2500ab19ef" poster="./assets/lp-motion/organizer.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></a><p class="platform-option-meta" data-i18n="platform.localStatus">Your PC / no AWS account</p><h3 id="entry-host-title" data-i18n="platform.localTitle">Host your own event</h3><p data-i18n="platform.localShort">Choose problems. Invite your team.</p><a href="/docs/getting-started/index.en.html#local-start" data-i18n-href="hero.startHref" data-i18n="hero.cta_demo" data-cta="local-start">Open the startup guide →</a></article>
+<h2 id="try-title" data-i18n="platform.tryTitle">Try the demo. Play a game.<br>Host your own event.</h2>
+
+<div class="platform-entry-toolbar">
+<fieldset class="platform-entry-picker"><legend data-i18n="entry.legend">Choose a screen</legend><div class="platform-entry-options">
+<label><input type="radio" name="entry-scene" value="0" checked><span data-i18n="entry.demo">Demo</span></label>
+<label><input type="radio" name="entry-scene" value="1"><span data-i18n="entry.game">Games</span></label>
+<label><input type="radio" name="entry-scene" value="2"><span data-i18n="entry.host">Host locally</span></label>
+</div></fieldset>
+<button type="button" class="platform-entry-pause" data-motion-toggle hidden><span data-motion-pause data-i18n="motion.pause">Pause motion</span><span data-motion-play data-i18n="motion.play" hidden>Play motion</span></button>
+</div>
+<div class="platform-start-list" data-entry-stage>
+<article class="platform-start-option" data-entry-panel="0"><div class="platform-entry-scene"><a class="platform-entry-media" href="/portal-demo/?demo=1&amp;goto=start" aria-labelledby="entry-demo-title"><video data-ambient-video data-src="/assets/lp-motion/participant.mp4?v=e8d2438279" poster="./assets/lp-motion/participant.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></a><div class="platform-entry-copy"><p class="platform-option-meta" data-i18n="platform.demoStatus">Browser / no signup</p><h3 id="entry-demo-title" data-i18n="platform.demoTitle">Try the workflow</h3><p data-i18n="platform.demoBody">Open a problem. Submit an answer. See the score.</p><a href="/portal-demo/?demo=1&amp;goto=start" data-i18n="platform.demoLink">Open the walkthrough →</a></div></div></article>
+<article class="platform-start-option" data-entry-panel="1" id="security-minigames"><div class="platform-entry-scene"><a class="platform-entry-media" href="./portal-demo/?demo=1&goto=%2Fproblems%3Flang%3Den" data-i18n-href="mailGame.href" aria-labelledby="entry-game-title"><video data-ambient-video data-src="/assets/lp-motion/game.mp4?v=bd46212461" poster="./assets/lp-motion/game.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></a><div class="platform-entry-copy"><p class="platform-option-meta" data-i18n="platform.gameStatus">Browser / no AWS or signup</p><h3 id="entry-game-title" data-i18n="mailGame.h">Play a game</h3><p data-i18n="platform.gameBody">Security basics, in your browser.</p><a href="./portal-demo/?demo=1&goto=%2Fproblems%3Flang%3Den" data-i18n-href="mailGame.href" data-i18n="mailGame.cta">Browse games →</a></div></div></article>
+<article class="platform-start-option" data-entry-panel="2"><div class="platform-entry-scene"><a class="platform-entry-media" href="/docs/getting-started/index.en.html#local-start" data-i18n-href="hero.startHref" aria-labelledby="entry-host-title"><video data-ambient-video data-src="/assets/lp-motion/organizer.mp4?v=2500ab19ef" poster="./assets/lp-motion/organizer.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></a><div class="platform-entry-copy"><p class="platform-option-meta" data-i18n="platform.localStatus">Your PC / no AWS account</p><h3 id="entry-host-title" data-i18n="platform.localTitle">Host your own event</h3><p data-i18n="platform.localShort">Choose problems. Invite your team.</p><a href="/docs/getting-started/index.en.html#local-start" data-i18n-href="hero.startHref" data-i18n="hero.cta_demo" data-cta="local-start">Open the startup guide →</a></div></div></article>
 </div><details class="platform-entry-notes"><summary data-i18n="platform.entryNotes">Requirements and walkthrough scope</summary><p data-i18n="hero.quest_desc">This walkthrough shows how to open a problem, check its endpoint and submit an answer. It does not perform attacks or repairs in a real environment.</p><p data-i18n="platform.localBody">Local hosting needs no AWS account. See the startup guide for Docker problem requirements and cloud hosting.</p></details>
 <div class="platform-film"><div><p class="eyebrow" data-i18n="platform.filmEyebrow">Watch in one minute</p><h3 id="film-title" data-i18n="platform.filmTitle">From taking part to hosting, on screen.</h3></div><video controls playsinline preload="none" poster="./assets/lp-motion/film.jpg" aria-labelledby="film-title"><source src="/videos/lp/tenkacloud-60s.mp4?v=54d2534496" type="video/mp4"></video><p><a href="https://youtu.be/k3087kMJmgI" target="_blank" rel="noopener noreferrer" data-i18n="platform.youtube">Watch on YouTube ↗</a></p><p data-i18n="platform.filmNote">Recorded in a local environment. The video has Japanese titles, music and sound effects.</p></div>
 <p class="platform-fee-note" data-i18n="platform.feeNote">The OSS license is free. Environment costs, including AWS, are separate. Operated events are an optional paid service.</p>
@@ -414,7 +417,7 @@
 <h2  data-i18n="platform.hostTitle">On your own. With your team.</h2>
 <div class="platform-roles">
 <article class="platform-role"><img src="./assets/lp-motion/participant.jpg" alt="" width="1060" height="600" loading="lazy"><p class="eyebrow" data-i18n="platform.learnerLabel">For participants</p><h3 data-i18n="platform.learnerTitle">Learn through solving.</h3><p data-i18n="platform.learnerBody">Try it. Submit your answer. Check the result.</p><a href="./docs/manual/participant/index.en.html" data-i18n-href="mailGame.joinHref" data-i18n="platform.learnerLink">How to take part →</a></article>
-<article class="platform-role"><img src="./assets/lp-motion/organizer.jpg" alt="" width="1060" height="600" loading="lazy"><p class="eyebrow" data-i18n="platform.authorLabel">For authors and organizers</p><h3 data-i18n="platform.authorTitle">Turn what you teach into a problem.</h3><p data-i18n="platform.authorBody">Write the problem, hints and answers around what your team needs to learn.</p><ol class="platform-author-flow"><li data-i18n="platform.authorStep1">Choose a topic</li><li data-i18n="platform.authorStep2">Write the problem</li><li data-i18n="platform.authorStep3">Try it with your team</li></ol><a href="./docs/manual/problem-author/index.en.html" data-i18n-href="aud.c.moreHref" data-i18n="platform.authorLink">Create your own problems →</a> <a href="./docs/manual/organizer/index.en.html" data-i18n-href="hero.hostHref" data-i18n="hero.cta_host" data-cta="deploy-aws">Hosting guide</a></article>
+<article class="platform-role"><img src="./assets/lp-motion/organizer.jpg" alt="" width="1060" height="600" loading="lazy"><p class="eyebrow" data-i18n="platform.authorLabel">For authors and organizers</p><h3 data-i18n="platform.authorTitle">Create your own problems.</h3><p data-i18n="platform.authorBody">Build your service architecture and internal rules into the brief, hints and answers.</p><ol class="platform-author-flow"><li data-i18n="platform.authorStep1">Choose a topic</li><li data-i18n="platform.authorStep2">Write the problem</li><li data-i18n="platform.authorStep3">Try it with your team</li></ol><a href="./docs/manual/problem-author/index.en.html" data-i18n-href="aud.c.moreHref" data-i18n="platform.authorLink">Create your own problems →</a> <a href="./docs/manual/organizer/index.en.html" data-i18n-href="hero.hostHref" data-i18n="hero.cta_host" data-cta="deploy-aws">Hosting guide</a></article>
 </div>
 <a class="platform-usecase-link" href="#use-cases" data-i18n="nav.useCases">Use cases</a>
 <details class="platform-details">
@@ -707,10 +710,11 @@
   </div>
 </footer>
 
-<script src="./platform-motion.js?v=2701037cc6" defer></script>
+<script src="./platform-motion.js?v=634c658c2f" defer></script>
 <script src="./platform-page.js?v=b0701d9579" defer></script>
 <script src="./incident-story.js?v=ba1b4811ea" defer></script>
-<script src="./app.js?v=9dd7073d52" defer></script>
+<script defer src="./entry-scenes.js?v=996ba16de2"></script>
+<script src="./app.js?v=00a7cdce4e" defer></script>
 
 </body>
 </html>

@@ -112,7 +112,7 @@ describe("LP motion controls", () => {
     expect(page.playing.size).toBe(0);
     expect(page.videos[0]?.dataset.playback).toBe("poster");
     expect(
-      page.window.document.querySelector(".platform-entry-media")?.getAttribute("href"),
+      page.window.document.querySelector("#try .platform-entry-media")?.getAttribute("href"),
     ).toContain("portal-demo");
     page.dom.window.close();
   });
@@ -132,7 +132,7 @@ describe("visual entries and separate pricing", () => {
       const name = locale === "ja" ? "index.html" : "index.en.html";
       const doc = new JSDOM(read(name)).window.document;
       expect(
-        doc.querySelectorAll(".platform-entry-media video[muted][playsinline][poster]"),
+        doc.querySelectorAll("#try .platform-entry-media video[muted][playsinline][poster]"),
       ).toHaveLength(3);
       for (const media of doc.querySelectorAll(".platform-entry-media")) {
         expect(
@@ -168,11 +168,15 @@ describe("team-specific practice is visible before individual incident examples"
         sections.indexOf("practice-question"),
       );
       const section = doc.getElementById("custom-problems");
-      expect(section?.querySelector("h2")?.textContent).toMatch(/自分たちの課題|Your team/);
+      expect(section?.querySelector("h2")?.textContent).toMatch(/オリジナル問題|Create your own/);
       expect(section?.querySelector("figcaption")?.textContent).toMatch(
-        /自分で作る問題文の例|example problem you could write/,
+        /オリジナル問題の活用例|Ways to use your own problems/,
       );
       expect(section?.querySelectorAll("a")).toHaveLength(1);
+      expect(section?.textContent).toMatch(/インシデント訓練|Incident response training/);
+      expect(section?.textContent).toMatch(/オンボーディング|Onboarding new members/);
+      expect(section?.textContent).toMatch(/企業ポリシー|company policy/);
+      expect(section?.textContent).toMatch(/デプロイと撤収|deploy and tear down/);
       expect(section?.querySelector("a")?.getAttribute("href")).toBe(
         `./docs/manual/problem-author/${locale === "en" ? "index.en.html" : ""}`,
       );

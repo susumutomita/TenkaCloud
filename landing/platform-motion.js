@@ -4,7 +4,7 @@
   if (!(node instanceof HTMLElement)) return;
   const hero = node;
   const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
-  const toggle = document.querySelector("[data-motion-toggle]");
+  const toggles = [...document.querySelectorAll("[data-motion-toggle]")];
   const videos = [...document.querySelectorAll("video[data-ambient-video]")].filter(
     (video) => video instanceof HTMLVideoElement,
   );
@@ -43,8 +43,11 @@
   }
   function syncMedia() {
     for (const video of videos) {
-      const panel = video.closest("[data-scene-panel]");
-      const selected = !(panel instanceof HTMLElement) || !panel.hidden;
+      const panel = video.closest("[data-scene-panel], [data-entry-panel]");
+      const selected =
+        !(panel instanceof HTMLElement) ||
+        (!panel.hidden &&
+          (!panel.hasAttribute("data-entry-panel") || panel.hasAttribute("data-entry-current")));
       if (!running() || !visible.get(video) || !selected) {
         video.pause();
         continue;
@@ -65,12 +68,15 @@
   function reflect() {
     const active = running();
     document.documentElement.dataset.motion = active ? "running" : "paused";
-    if (toggle instanceof HTMLElement) {
+    for (const toggle of toggles) {
+      if (!(toggle instanceof HTMLElement)) continue;
+      toggle.hidden = false;
       const pause = toggle.querySelector("[data-motion-pause]");
       const play = toggle.querySelector("[data-motion-play]");
       if (pause instanceof HTMLElement) pause.hidden = !active;
       if (play instanceof HTMLElement) play.hidden = active;
     }
+    document.dispatchEvent(new Event("tenka:motion"));
     if (!active) cancelAnimations();
     syncMedia();
     schedule();
@@ -131,18 +137,19 @@
         { duration: 1500, easing: "cubic-bezier(.22,.7,.2,1)" },
       );
   }
-  toggle?.addEventListener(
-    "click",
-    () => {
-      if (running()) userPaused = true;
-      else {
-        userPaused = false;
-        explicitMotion = true;
-      }
-      reflect();
-    },
-    options,
-  );
+  for (const toggle of toggles)
+    toggle.addEventListener(
+      "click",
+      () => {
+        if (running()) userPaused = true;
+        else {
+          userPaused = false;
+          explicitMotion = true;
+        }
+        reflect();
+      },
+      options,
+    );
   document.addEventListener(
     "tenka:scene",
     (event) => {
@@ -152,6 +159,7 @@
     },
     options,
   );
+  document.addEventListener("tenka:entry", syncMedia, options);
   /** @param {IntersectionObserverEntry} entry */
   function observeEntry(entry) {
     if (entry.target === hero) {
