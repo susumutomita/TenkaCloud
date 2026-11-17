@@ -285,7 +285,7 @@ html[data-motion="paused"] .platform-landing .hero { transition: none; }
 /* Neutral tones follow the recorded interface; blue remains the brand accent. */
 .platform-landing .hero, .platform-landing .hero[data-hero-scene="1"] { background: #17212b; }
 .platform-landing .hero .platform-preview::after, .platform-landing .hero[data-hero-scene="1"] .platform-preview::after { z-index: 2; background: linear-gradient(90deg,rgba(16,24,32,.96),rgba(16,24,32,.82) 48%,rgba(16,24,32,.25) 88%); }
-.platform-scene { isolation: isolate; }
+.platform-scene-panels { isolation: isolate; }
 .platform-landing .hero-copy { padding-bottom: 60px; }
 @media(max-width:980px) { .platform-landing .hero-copy { padding-bottom: 128px; } .platform-landing .hero .platform-preview::after, .platform-landing .hero[data-hero-scene="1"] .platform-preview::after { background: linear-gradient(90deg,rgba(16,24,32,.95),rgba(16,24,32,.8) 62%,rgba(16,24,32,.6)); } }
 @media print { .platform-landing .hero, .platform-landing .hero[data-hero-scene="1"] { background: #fff; } }
