@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI built it. Is it safe to ship? | TenkaCloud proposal</title>
+<meta name="description" content="TenkaCloud’s proposal for organizations: hands-on drills where teams fix a broken internal system and are scored on the spot, building the judgment to decide what is safe to ship. Covers local hosting on one PC without an AWS account, how we run the event, and pricing." />
+<link rel="canonical" href="https://tenkacloud.com/proposal/index.en.html" />
+<link rel="alternate" hreflang="ja" href="https://tenkacloud.com/proposal/" />
+<link rel="alternate" hreflang="en" href="https://tenkacloud.com/proposal/index.en.html" />
+<meta property="og:title" content="AI built it. Is it safe to ship? | TenkaCloud proposal" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://tenkacloud.com/proposal/index.en.html" />
+<link rel="icon" href="../assets/favicon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&amp;family=JetBrains+Mono:wght@500&amp;display=swap" />
+<link rel="stylesheet" href="../jaws-yokohama-2026/talk.css" />
+<link rel="stylesheet" href="./proposal.css" />
+<script defer src="../tenkacloud-ug-1/talk.js"></script>
+</head>
+<body class="pp-en">
+<header class="topbar"><a href="../presentations/">← Presentations</a><span>Hands-on training proposal</span><a href="./" hreflang="ja" lang="ja">日本語</a></header>
+<nav class="controls" aria-label="Slide controls"><button id="previous" type="button" aria-label="Previous slide">← Previous</button><output id="position" aria-live="polite">1 / 11</output><button id="next" type="button" aria-label="Next slide">Next →</button></nav>
+<noscript><p class="noscript">All slides are shown in order.</p></noscript>
+<main id="deck">
+<section class="slide pp-slide pp-dark" id="slide-1" aria-labelledby="title-1">
+<p class="kicker">TENKACLOUD / HANDS-ON TRAINING PROPOSAL</p>
+<div class="pp-cover">
+<div><h1 id="title-1">AI built it.<br>Is it safe<br>to ship?</h1><p class="pp-lead">Build that judgment by fixing broken systems and getting scored on the spot. Runs in-house on a single PC.</p></div>
+<div class="pp-score" role="img" aria-label="Illustrative score feed: 800 points for fixing exposure, minus 100 when the site went down, 400 points for protecting secrets."><p class="pp-score-h">SCORE EVENTS (ILLUSTRATIVE)</p><div class="pp-score-row"><p class="pp-pts">+800</p><p class="pp-evt">Exposure fixed</p></div><div class="pp-score-row"><p class="pp-pts pp-pts-down">−100</p><p class="pp-evt">Site went down</p></div><div class="pp-score-row"><p class="pp-pts">+400</p><p class="pp-evt">Secrets protected</p></div></div>
+</div>
+<p class="pp-byline">BULL LLC / Builder and operator of TenkaCloud</p>
+<div class="slide-foot"><span>TenkaCloud / Hands-on training proposal</span><span>1 / 11</span></div>
+</section>
+
+<section class="slide pp-slide pp-accent" id="slide-2" aria-labelledby="title-2">
+<p class="kicker">WHAT TEAMS FACE TODAY</p>
+<h2 id="title-2">Building it and shipping it<br>are different skills.</h2>
+<div class="pp-cols3">
+<div class="pp-col"><p class="pp-k">Build</p><p>With AI, anyone can get a working app fast. Speed is no longer scarce.</p></div>
+<div class="pp-col"><p class="pp-k">Ship</p><p>Safe to publish only after checking auth, exposure, secrets, logs and recovery.</p></div>
+<div class="pp-col"><p class="pp-k">The gap</p><p>Few people can make that call, so reviews and releases stall there.</p></div>
+</div>
+<div class="slide-foot"><span>The problem</span><span>2 / 11</span></div>
+</section>
+
+<section class="slide pp-slide" id="slide-3" aria-labelledby="title-3">
+<p class="kicker">THE TRAINING PROBLEM</p>
+<h2 id="title-3">Lectures stop at knowing.<br>Judgment can’t be practiced in production.</h2>
+<div class="pp-table-wrap"><table class="pp-table">
+<thead><tr><th scope="col">Aspect</th><th scope="col">Lectures and videos</th><th scope="col">On-the-job learning</th><th scope="col" class="pp-us">TenkaCloud drills</th></tr></thead>
+<tbody>
+<tr><th scope="row">Hands-on</th><td data-label="Lectures and videos">Rarely</td><td data-label="On-the-job learning">Yes</td><td data-label="TenkaCloud drills" class="pp-us">Yes</td></tr>
+<tr><th scope="row">Room to fail</th><td data-label="Lectures and videos">No chance to fail</td><td data-label="On-the-job learning">Not allowed</td><td data-label="TenkaCloud drills" class="pp-us">Retry as often as needed</td></tr>
+<tr><th scope="row">Know if it worked</th><td data-label="Lectures and videos">Quiz scores</td><td data-label="On-the-job learning">Only when an incident hits</td><td data-label="TenkaCloud drills" class="pp-us">Scored the moment you submit</td></tr>
+<tr><th scope="row">Debrief</th><td data-label="Lectures and videos">Mostly impressions</td><td data-label="On-the-job learning">Stays with one person</td><td data-label="TenkaCloud drills" class="pp-us">Score timeline shows where teams got stuck</td></tr>
+</tbody>
+</table></div>
+<div class="slide-foot"><span>The problem</span><span>3 / 11</span></div>
+</section>
+
+<section class="slide pp-slide" id="slide-4" aria-labelledby="title-4">
+<p class="kicker">WHAT TENKACLOUD IS</p>
+<h2 id="title-4">Teams get a broken system, fix it,<br>and are scored on the spot.</h2>
+<div class="pp-cards3">
+<div class="pp-card"><p class="pp-num">01</p><h3>Receive</h3><p>A “working but risky” internal system left behind by a predecessor, prepared for each team.</p></div>
+<div class="pp-card"><p class="pp-num">02</p><h3>Investigate and fix</h3><p>Read logs, settings, exposure and permissions, decide as a team what to fix, then do it.</p></div>
+<div class="pp-card"><p class="pp-num">03</p><h3>Score and rank</h3><p>Submit an answer or the fixed state and it is scored at once. The scoreboard moves live.</p></div>
+</div>
+<p class="fine pp-push">An open-source (Apache-2.0) training and competition platform. One organizer console manages events, teams, problems, hints and scoring.</p>
+<div class="slide-foot"><span>The drills</span><span>4 / 11</span></div>
+</section>
+
+<section class="slide pp-slide pp-tint" id="slide-5" aria-labelledby="title-5">
+<p class="kicker">SAMPLE SCENARIO</p>
+<h2 id="title-5">You join a fictional company as a new SRE.</h2>
+<div>
+<div class="pp-step"><p class="pp-lv">Beginner</p><p class="pp-step-t"><b>Day one</b> — Take over an AI-built message board; run it and check its state.</p></div>
+<div class="pp-step"><p class="pp-lv">Beginner</p><p class="pp-step-t"><b>Leftovers</b> — A normal WordPress site still exposes something it shouldn’t.</p></div>
+<div class="pp-step"><p class="pp-lv">Intermediate</p><p class="pp-step-t"><b>Staff-only login</b> — Is it really staff-only? Check it as an attacker would.</p></div>
+<div class="pp-step"><p class="pp-lv pp-lv-hi">Advanced</p><p class="pp-step-t"><b>Going external</b> — The board opens to partners. Make it safe to publish.</p></div>
+<div class="pp-step"><p class="pp-lv pp-lv-hi">Advanced</p><p class="pp-step-t"><b>After a late deploy</b> — The board is down. Find the cause and restore it.</p></div>
+</div>
+<p class="fine pp-push">A sample from the public problem catalog. Problems tailored to your systems and policies can be built on request (quoted separately).</p>
+<div class="slide-foot"><span>The drills</span><span>5 / 11</span></div>
+</section>
+
+<section class="slide pp-slide" id="slide-6" aria-labelledby="title-6">
+<p class="kicker">USE CASES</p>
+<h2 id="title-6">Pick problems to match your audience.</h2>
+<div class="pp-cards3">
+<div class="pp-card"><h3>New engineers</h3><p>Start with short beginner problems, then move to hands-on tasks.</p></div>
+<div class="pp-card"><h3>Dev teams using AI</h3><p>Practice reviewing AI-built apps before they go live.</p></div>
+<div class="pp-card"><h3>SRE and operations</h3><p>Train outage and incident response in timed team rounds.</p></div>
+<div class="pp-card"><h3>Internal CTFs</h3><p>Run a cross-department contest with a scoreboard and awards.</p></div>
+<div class="pp-card"><h3>All employees</h3><p>Experience common scams through short browser games.</p></div>
+<div class="pp-card"><h3>CCoE programs</h3><p>Run four events a year as a beginner-to-advanced path.</p></div>
+</div>
+<div class="slide-foot"><span>The drills</span><span>6 / 11</span></div>
+</section>
+
+<section class="slide pp-slide pp-tint" id="slide-7" aria-labelledby="title-7">
+<p class="kicker">EASY TO ADOPT</p>
+<h2 id="title-7">No dedicated servers. No cloud contract.</h2>
+<div>
+<div class="pp-row"><h3>One PC hosts it</h3><p>Runs on the organizer’s PC, which also stores event and score data.</p></div>
+<div class="pp-row"><h3>No AWS account</h3><p>Local hosting incurs no cloud usage fees.</p></div>
+<div class="pp-row"><h3>URL and team key</h3><p>Participants join from their own devices over the LAN or Tailscale.</p></div>
+<div class="pp-row"><h3>Open source</h3><p>Apache-2.0. Inspect the source and keep running events on your own.</p></div>
+</div>
+<p class="fine pp-push">Joining Docker exercises from other devices needs a Linux host PC with isolation enabled; we check this in advance. Hosting on AWS is still being validated, so please ask us about it separately.</p>
+<div class="slide-foot"><span>Adoption</span><span>7 / 11</span></div>
+</section>
+
+<section class="slide pp-slide" id="slide-8" aria-labelledby="title-8">
+<p class="kicker">HOW WE RUN IT</p>
+<h2 id="title-8">We handle everything from prep to the debrief.</h2>
+<div class="pp-proc">
+<div class="pp-proc-i"><p class="pp-num">01</p><h3>Discovery</h3><p class="pp-proc-p">We learn your audience, headcount, goals and network constraints.</p></div>
+<div class="pp-proc-i"><p class="pp-num">02</p><h3>Selection</h3><p class="pp-proc-p">We pick problems from the public catalog to fit your goals and experience.</p></div>
+<div class="pp-proc-i"><p class="pp-num">03</p><h3>Rehearsal</h3><p class="pp-proc-p">We solve the full set on the host PC to verify access and scoring.</p></div>
+<div class="pp-proc-i"><p class="pp-num">04</p><h3>Event day</h3><p class="pp-proc-p">Kickoff, hint management, Q&amp;A and awards, all run by us.</p></div>
+<div class="pp-proc-i"><p class="pp-num">05</p><h3>Debrief</h3><p class="pp-proc-p">A report of scoring history and progress by team.</p></div>
+</div>
+<div class="pp-band"><p>Starter covers problem selection, environment setup and event-day support. Hosted and Annual Arena add the rehearsal and the debrief report.</p></div>
+<div class="slide-foot"><span>Adoption</span><span>8 / 11</span></div>
+</section>
+
+<section class="slide pp-slide" id="slide-9" aria-labelledby="title-9">
+<p class="kicker">PRICING (EXCLUDING TAX)</p>
+<h2 id="title-9">From a single event to a year-long program.</h2>
+<div class="pp-cards3">
+<div class="pp-plan"><div class="pp-plan-top"><p class="pp-pname">STARTER</p></div><div class="pp-price"><p class="pp-amt">¥500K</p><p class="pp-per">/ event</p></div><p class="pp-cond">Pilot, up to 2 teams</p><ul class="pp-plist"><li>Problems from the public catalog</li><li>Environment setup and event-day support</li></ul></div>
+<div class="pp-plan pp-plan-hi"><div class="pp-plan-top"><p class="pp-pname">HOSTED</p><p class="pp-pill">Standard</p></div><div class="pp-price"><p class="pp-amt">¥1.5M</p><p class="pp-per">/ event</p></div><p class="pp-cond">Up to 5 teams (about 20 people)</p><ul class="pp-plist"><li>Fully run, from setup to event day</li><li>Rehearsal before the event</li><li>Debrief report</li></ul></div>
+<div class="pp-plan"><div class="pp-plan-top"><p class="pp-pname">ANNUAL ARENA</p></div><div class="pp-price"><p class="pp-amt">¥6M+</p><p class="pp-per">/ year</p></div><p class="pp-cond">We run 4 events a year</p><ul class="pp-plist"><li>Beginner-to-advanced learning path</li><li>Facilitator playbook template</li><li>A debrief report for every event</li></ul></div>
+</div>
+<p class="fine pp-push">The open-source platform is free. Custom problems and CCoE advisory (monthly) are quoted separately. For AWS hosting, AWS usage is billed directly to your AWS account. See <a href="../pricing.en.html">pricing and scope</a> for details.</p>
+<div class="slide-foot"><span>Pricing</span><span>9 / 11</span></div>
+</section>
+
+<section class="slide pp-slide pp-tint" id="slide-10" aria-labelledby="title-10">
+<p class="kicker">TRACK RECORD</p>
+<h2 id="title-10">The platform and the problems are all public.</h2>
+<div class="pp-cards3">
+<div class="pp-card"><p class="pp-num">SOURCE</p><h3>Fully open source</h3><p>The platform and problem catalog are Apache-2.0 and the Simulator is MIT, all on <a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer">GitHub</a>. Inspect it before you buy.</p></div>
+<div class="pp-card"><p class="pp-num">BOOK</p><h3>Explained in a book</h3><p><a href="https://leanpub.com/build-your-own-cloud-competition" target="_blank" rel="noopener noreferrer">“Build Your Own Cloud Competition”</a> on Leanpub, with a Japanese edition on Zenn.</p></div>
+<div class="pp-card"><p class="pp-num">TALKS</p><h3>Talks and hands-on</h3><p>JAWS-UG Yokohama #103 × SRE and TenkaCloud UG #1 (both September 2026), CCoE Kansai LT and ACP2026. <a href="../presentations/">All presentations</a></p></div>
+</div>
+<div class="slide-foot"><span>Track record</span><span>10 / 11</span></div>
+</section>
+
+<section class="slide pp-slide pp-dark" id="slide-11" aria-labelledby="title-11">
+<p class="kicker">NEXT STEPS</p>
+<h2 id="title-11">Start with a 30-minute call about your goals.</h2>
+<div class="pp-cards3">
+<div class="pp-card"><p class="pp-num">01</p><h3>Online call</h3><p>30 minutes. We learn your audience, size and goals, and pick a plan together.</p></div>
+<div class="pp-card"><p class="pp-num">02</p><h3>Live demo</h3><p>60 minutes. Solve a problem on the host PC and watch it get scored.</p></div>
+<div class="pp-card"><p class="pp-num">03</p><h3>Your event</h3><p>Set the date and problems, rehearse, then run the day.</p></div>
+</div>
+<div class="pp-links"><a href="https://forms.gle/djVprYmq3hFgJA7P9" target="_blank" rel="noopener noreferrer">Contact form ↗</a><a href="../pricing.en.html">Pricing and scope →</a><a href="../index.en.html">TenkaCloud →</a></div>
+<p class="fine">TenkaCloud is an independent open-source project and is not provided, sponsored or endorsed by Amazon Web Services, Inc. AWS is a trademark of Amazon.com, Inc. or its affiliates.</p>
+<div class="slide-foot"><span>BULL LLC</span><span>11 / 11</span></div>
+</section>
+</main>
+<footer class="topbar"><span>TenkaCloud is an independent open-source project.</span><span>Apache-2.0</span></footer>
+</body>
+</html>

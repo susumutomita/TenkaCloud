@@ -61,4 +61,6 @@
   </url>
   <url><loc>https://tenkacloud.com/pricing.html</loc><xhtml:link rel="alternate" hreflang="en" href="https://tenkacloud.com/pricing.en.html" /></url>
   <url><loc>https://tenkacloud.com/pricing.en.html</loc><xhtml:link rel="alternate" hreflang="ja" href="https://tenkacloud.com/pricing.html" /></url>
+  <url><loc>https://tenkacloud.com/proposal/</loc><xhtml:link rel="alternate" hreflang="en" href="https://tenkacloud.com/proposal/index.en.html" /></url>
+  <url><loc>https://tenkacloud.com/proposal/index.en.html</loc><xhtml:link rel="alternate" hreflang="ja" href="https://tenkacloud.com/proposal/" /></url>
 </urlset>

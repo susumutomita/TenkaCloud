@@ -466,6 +466,45 @@ describe("presentations stay off the landing page body", () => {
 });
 
 /**
+ * 法人向け提案資料は日英の対で公開する。 片方だけ枚数や価格が変わる、 送付前の
+ * 未記入欄 ([担当者名] など) が公開ページに残る、 一覧から辿れなくなる、 を検出する。
+ */
+describe("enterprise proposal deck (ja / en)", () => {
+  const pages = {
+    ja: read("landing/proposal/index.html"),
+    en: read("landing/proposal/index.en.html"),
+  };
+
+  it("should publish the same slides, prices and contact route in both languages", () => {
+    for (const [lang, html] of Object.entries(pages)) {
+      const doc = new JSDOM(html).window.document;
+      expect(doc.documentElement.lang).toBe(lang);
+      expect(doc.querySelectorAll("section.slide")).toHaveLength(11);
+      expect(doc.querySelector('link[rel="alternate"][hreflang="ja"]')?.getAttribute("href")).toBe(
+        "https://tenkacloud.com/proposal/",
+      );
+      expect(doc.querySelector('link[rel="alternate"][hreflang="en"]')?.getAttribute("href")).toBe(
+        "https://tenkacloud.com/proposal/index.en.html",
+      );
+      const prices = [...doc.querySelectorAll(".pp-amt")].map((e) => e.textContent);
+      expect(prices).toEqual(
+        lang === "ja" ? ["50万円", "150万円", "600万円〜"] : ["¥500K", "¥1.5M", "¥6M+"],
+      );
+      expect(doc.querySelector('a[href="https://forms.gle/djVprYmq3hFgJA7P9"]')).not.toBeNull();
+      // Draft decks mark unfilled fields as [担当者名] / [Email]; the published copy has none.
+      expect(doc.body.textContent).not.toContain("[");
+    }
+  });
+
+  it("should be reachable from the presentations library and the sitemap", () => {
+    expect(read("landing/presentations/index.html")).toContain('href="../proposal/"');
+    const sitemap = read("landing/sitemap.xml");
+    expect(sitemap).toContain("<loc>https://tenkacloud.com/proposal/</loc>");
+    expect(sitemap).toContain("<loc>https://tenkacloud.com/proposal/index.en.html</loc>");
+  });
+});
+
+/**
  * LP 動画。 hero の secondary 行と両 README の CTA 付近から 1 分の紹介動画を参照する。
  * 以前の 30 秒版 (#2696 P1、 16:9 / 9:16) は README から引き続き辿れる。
  */
