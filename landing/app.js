@@ -412,7 +412,7 @@
       "aud.a.h": "研修イベントを、 年に複数回。",
       "aud.a.p":
         "新卒オンボーディング / 内製化推進 / 部門横断の AWS 演習を、 同じプラットフォームで 年に複数回 開催できる。 単発ハンズオンから 計画的な 年間プログラム へ。",
-      "aud.a.more": "お問い合わせフォーム（要Googleログイン）",
+      "aud.a.more": "お問い合わせフォーム",
       "aud.b.role": "Platform / SRE",
       "aud.b.h": "演習設計を、 1 画面で。",
       "aud.b.p":
@@ -529,7 +529,7 @@
       "offerings.a.role": "Hosted Event",
       "offerings.a.h": "単発イベントを、 丸ごと運営代行。",
       "offerings.a.p":
-        "1 日のクラウド演習を、 公開 OSS 問題カタログから選定して 弊社が end-to-end で運営。 設計 / お客様 AWS への deploy / 事前 dry-run / 当日の live 進行 / 事後レポート。 <strong>1 回 fixed price</strong>。",
+        "1 日のクラウド演習を、 公開 OSS 問題カタログから選定して 弊社が end-to-end で運営。 設計 / 開催環境の準備 (= ローカル開催 PC またはお客様 AWS への deploy) / 事前 dry-run / 当日の live 進行 / 事後レポート。 <strong>1 回 fixed price</strong>。",
       "offerings.b.role": "Annual Arena",
       "offerings.b.h": "年間プログラム。",
       "offerings.b.p":
@@ -551,22 +551,23 @@
       "pricing.starter.f1": "1 イベントあたり 2 チームまで",
       "pricing.starter.f2": "deploy / 当日進行サポート",
       "pricing.starter.f3": "公開問題セットから選定",
-      "pricing.starter.fineprint": "※ AWS account はお客様側でご用意ください。",
-      "pricing.starter.cta": "お問い合わせフォーム（要Googleログイン）",
+      "pricing.starter.fineprint":
+        "※ ローカル開催 (= PC 1 台) なら AWS account は不要です。 AWS で開催する場合はお客様側でご用意ください。",
+      "pricing.starter.cta": "お問い合わせフォーム",
       "pricing.hosted.tier": "Hosted",
       "pricing.hosted.price": "150万円",
       "pricing.hosted.unit": "/ 回",
       "pricing.hosted.scope": "1 回 5 チーム (〜 20 人) まで",
       "pricing.hosted.note": "構築から当日進行まで、 単発イベントを 丸ごと運営代行します。",
-      "pricing.hosted.f1": "AWS account 準備 / deploy 支援",
+      "pricing.hosted.f1": "開催環境の準備 (= ローカル開催 PC / AWS account) / deploy 支援",
       "pricing.hosted.f2": "当日の進行 + on-call / Red Team 役",
       "pricing.hosted.f3": "事後の振り返りレポート (= 採点履歴 / 攻撃可視化)",
       "pricing.hosted.f4": "問題セットの選定",
       "pricing.hosted.fineprint":
-        "※ AWS account はお客様側でご用意ください。 こちらでご用意する場合は別途お見積もり。",
-      "pricing.hosted.cta": "お問い合わせフォーム（要Googleログイン）",
+        "※ ローカル開催なら AWS account は不要です。 AWS で開催する場合はお客様側でご用意ください。 こちらでご用意する場合は別途お見積もり。",
+      "pricing.hosted.cta": "お問い合わせフォーム",
       "pricing.enterprise.tier": "Annual Arena",
-      "pricing.enterprise.price": "600万円",
+      "pricing.enterprise.price": "600万円〜",
       "pricing.enterprise.unit": "/ 年",
       "pricing.enterprise.scope": "年間契約 (= 年 4 回のイベント開催を代行)",
       "pricing.enterprise.note":
@@ -577,8 +578,8 @@
       "pricing.enterprise.f3":
         "事後レポート PDF (= portal の採点履歴 / チーム別進捗 / 攻撃可視化 を整理、 1 イベント 1 部)",
       "pricing.enterprise.fineprint":
-        "※ 規模 / 内容に応じて見積もり。 AWS account はお客様側でご用意ください。",
-      "pricing.enterprise.cta": "お問い合わせフォーム（要Googleログイン）",
+        "※ 規模 / 内容に応じて見積もり。 AWS で開催する場合は AWS account をお客様側でご用意ください。",
+      "pricing.enterprise.cta": "お問い合わせフォーム",
       "pricing.tail":
         '<strong>カスタム問題の追加開発</strong>は要件定義から実装まで通常の受託開発と同じスコープになるため、 別途お見積もりします。 それ以上の規模 / 特別要件も含めて、 <a href="#contact">お問い合わせ</a> ください。',
 
@@ -590,7 +591,7 @@
         "企業内での研修・演習・評価・独自教材の提供などで利用を検討される場合は、ぜひ一度お声がけください。TenkaCloud はオープンソースとして公開していますが、実際の現場で求められる題材、運用方法、閉じた環境での利用要件を伺いながら、プロダクトと教材の両方を改善していきたいと考えています。",
       "ent.cta1": "お問い合わせ",
       "ent.cta2": "GitHub を見る",
-      "contact.form": "お問い合わせフォーム（要Googleログイン）",
+      "contact.form": "お問い合わせフォーム",
 
       "footer.tag": "クラウドとセキュリティを実践で学ぶ、OSS の演習・競技基盤。 Apache 2.0。",
       "footer.disclaimer":
@@ -906,7 +907,7 @@
       "aud.a.h": "Run training events multiple times a year.",
       "aud.a.p":
         "New-grad onboarding, internalization programs, cross-team AWS drills — run them multiple times a year on the same platform. Move from one-off workshops to a planned annual program.",
-      "aud.a.more": "Contact form (Google sign-in required)",
+      "aud.a.more": "Contact form",
       "aud.b.role": "Platform / SRE",
       "aud.b.h": "Design drills from one screen.",
       "aud.b.p":
@@ -1024,7 +1025,7 @@
       "offerings.a.role": "Hosted Event",
       "offerings.a.h": "One operated drill, end to end.",
       "offerings.a.p":
-        "A 1-day cloud drill on the public OSS catalog, run by us. Event design, deploy into your AWS account, dry run, live facilitation, post-event report. <strong>Per-event fixed price</strong>.",
+        "A 1-day cloud drill on the public OSS catalog, run by us. Event design, environment setup (a local host PC or a deploy into your AWS account), dry run, live facilitation, post-event report. <strong>Per-event fixed price</strong>.",
       "offerings.b.role": "Annual Arena",
       "offerings.b.h": "A 12-month program.",
       "offerings.b.p":
@@ -1047,23 +1048,24 @@
       "pricing.starter.f1": "Up to 2 teams per pilot event",
       "pricing.starter.f2": "Deploy / day-of support",
       "pricing.starter.f3": "Selected from the public problem set",
-      "pricing.starter.fineprint": "* You bring your own AWS account.",
-      "pricing.starter.cta": "Contact form (Google sign-in required)",
+      "pricing.starter.fineprint":
+        "* No AWS account is needed for local hosting on one PC. For AWS hosting, you bring your own AWS account.",
+      "pricing.starter.cta": "Contact form",
       "pricing.hosted.tier": "Hosted Event",
       "pricing.hosted.price": "¥1.5M",
       "pricing.hosted.unit": "/ event",
       "pricing.hosted.scope": "Up to 5 teams / ~20 participants per event",
       "pricing.hosted.note":
         "We handle setup, run the day, and tear down — one full event, operated.",
-      "pricing.hosted.f1": "AWS account prep / deploy support",
+      "pricing.hosted.f1": "Event environment prep (local host PC / AWS account) / deploy support",
       "pricing.hosted.f2": "Live facilitation + on-call / Red Team role",
       "pricing.hosted.f3": "Post-event report (scoring history, attack timeline)",
       "pricing.hosted.f4": "Problem selection",
       "pricing.hosted.fineprint":
-        "* You bring your own AWS account. If we need to provide one, we'll quote separately.",
-      "pricing.hosted.cta": "Contact form (Google sign-in required)",
+        "* No AWS account is needed for local hosting. For AWS hosting, you bring your own AWS account; if we need to provide one, we'll quote separately.",
+      "pricing.hosted.cta": "Contact form",
       "pricing.enterprise.tier": "Annual Arena",
-      "pricing.enterprise.price": "¥6M",
+      "pricing.enterprise.price": "¥6M+",
       "pricing.enterprise.unit": "/ year",
       "pricing.enterprise.scope": "Annual contract — 4 operated events per year",
       "pricing.enterprise.note":
@@ -1074,8 +1076,8 @@
       "pricing.enterprise.f3":
         "Post-event PDF report (= scoring history, team progress, and attack timeline pulled from the portal — one PDF per event)",
       "pricing.enterprise.fineprint":
-        "* Quoted by scope and scale. You bring your own AWS account.",
-      "pricing.enterprise.cta": "Contact form (Google sign-in required)",
+        "* Quoted by scope and scale. For AWS hosting, you bring your own AWS account.",
+      "pricing.enterprise.cta": "Contact form",
       "pricing.tail":
         '<strong>Custom problem authoring</strong> follows the same scope as regular software development (requirements → implementation), so we quote it separately. <a href="#contact">Get in touch</a> for that and for anything beyond these tiers.',
 
@@ -1087,7 +1089,7 @@
         "If you are considering TenkaCloud for enterprise or internal training use, please feel free to contact us. TenkaCloud is open source, but we would love to learn more about real-world training needs, custom exercise requirements, and how organizations want to run hands-on operations/security drills.",
       "ent.cta1": "Get in touch",
       "ent.cta2": "View on GitHub",
-      "contact.form": "Contact form (Google sign-in required)",
+      "contact.form": "Contact form",
 
       "footer.tag":
         "An open-source platform for hands-on cloud and security exercises and competitions. Apache 2.0.",

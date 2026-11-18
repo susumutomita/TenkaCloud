@@ -89,6 +89,28 @@ it("keeps every primary English heading translated after copy changes", () => {
   }
 });
 
+// Local hosting needs no AWS account, so no plan may require one unconditionally, and the
+// Annual Arena price is quoted by scope like the legal disclosure ("600 万円 / 年〜").
+const LOCAL_HOSTING_TERMS = {
+  ja: { awsOnly: "AWS で開催する場合", localFree: "AWS account は不要", annual: "600万円〜" },
+  en: { awsOnly: "For AWS hosting", localFree: "No AWS account is needed", annual: "¥6M+" },
+};
+
+function expectLocalHostingTerms(
+  doc: Document,
+  terms: (typeof LOCAL_HOSTING_TERMS)[keyof typeof LOCAL_HOSTING_TERMS],
+) {
+  const fineprints = [...doc.querySelectorAll(".pricing-fineprint")].map(
+    (e) => e.textContent ?? "",
+  );
+  expect(fineprints).toHaveLength(3);
+  for (const text of fineprints) expect(text).toContain(terms.awsOnly);
+  expect(fineprints[0]).toContain(terms.localFree);
+  expect(doc.querySelector('[data-i18n="pricing.enterprise.price"]')?.textContent).toBe(
+    terms.annual,
+  );
+}
+
 describe("pricing redesign preserves service commitments", () => {
   for (const suffix of ["", ".en"]) {
     it(`pricing${suffix} retains all plans, terms, accessible links and current assets`, () => {
@@ -110,6 +132,7 @@ describe("pricing redesign preserves service commitments", () => {
           `./${asset}?v=${assetVersion(read(asset))}`,
         );
       }
+      expectLocalHostingTerms(doc, suffix ? LOCAL_HOSTING_TERMS.en : LOCAL_HOSTING_TERMS.ja);
       if (!suffix) {
         const copy = [
           ...doc.querySelectorAll(
@@ -119,7 +142,7 @@ describe("pricing redesign preserves service commitments", () => {
           .map((e) => [e.getAttribute("data-i18n"), e.innerHTML])
           .sort((a, b) => String(a[0]).localeCompare(String(b[0]), "en"));
         expect(createHash("sha256").update(JSON.stringify(copy)).digest("hex")).toBe(
-          "bebde6777062bd04c5cbf6197752381cfcd3ac07392003fb29e013401ffdd4fa",
+          "44e6f83a2fadd2c94377901d066a7a291c9c2e8db238ce62dfa1ff16148427a8",
         );
       }
     });
