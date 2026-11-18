@@ -585,9 +585,12 @@ describe("saved enterprise copy integrated onto the current LP", () => {
       const contact = new JSDOM(html).window.document.getElementById("contact")?.outerHTML;
       expect(contact).toContain('href="https://forms.gle/djVprYmq3hFgJA7P9"');
       expect(contact).not.toContain("/discussions");
+      // The inquiry form accepts responses without a Google sign-in, so the label must not
+      // claim one is required.
       expect(contact).toContain(
-        file.endsWith("index.en.html") ? "Google sign-in" : "Googleログイン",
+        file.endsWith("index.en.html") ? ">Contact form</a>" : ">お問い合わせフォーム</a>",
       );
+      expect(contact).not.toMatch(/Google sign-in|Googleログイン/);
       expect(html).toContain('href="/portal-demo/?demo=1&amp;goto=start"');
       expect(html).toContain('data-i18n="extend.idea"');
     }
