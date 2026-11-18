@@ -142,7 +142,7 @@ describe("pricing redesign preserves service commitments", () => {
           .map((e) => [e.getAttribute("data-i18n"), e.innerHTML])
           .sort((a, b) => String(a[0]).localeCompare(String(b[0]), "en"));
         expect(createHash("sha256").update(JSON.stringify(copy)).digest("hex")).toBe(
-          "44e6f83a2fadd2c94377901d066a7a291c9c2e8db238ce62dfa1ff16148427a8",
+          "6b822ef1916f0e77906f632f3fa76983895ec6e62c34acad5ca4eca1ba5b7a35",
         );
       }
     });
@@ -238,12 +238,12 @@ it("keeps the sample heading words intact when its phrase wraps", () => {
   expect(words.map((word) => word.textContent)).toEqual([
     "回答・",
     "ヒント・",
-    "採点を、",
+    "採点を",
     "6ステップで",
     "体験。",
   ]);
   for (const word of words) expect(dom.window.getComputedStyle(word).whiteSpace).toBe("nowrap");
-  expect(title?.textContent).toBe("回答・ヒント・採点を、6ステップで体験。");
+  expect(title?.textContent).toBe("回答・ヒント・採点を6ステップで体験。");
 });
 
 it("removes the unused workflow promotion in both locales", () => {
@@ -254,7 +254,13 @@ it("removes the unused workflow promotion in both locales", () => {
       "goto=%2Fproblems",
     );
     expect(doc.querySelector(".platform-final h2")?.textContent).toContain(
-      name === "index.html" ? "本番で試せないことを、" : "Practice what you can’t",
+      name === "index.html" ? "本番で試せないことを" : "Practice what you can’t",
     );
+  }
+});
+
+it("keeps Japanese landing copy free of a comma immediately after を", () => {
+  for (const name of ["index.html", "pricing.html", "app.js"]) {
+    expect(read(name)).not.toContain("を、");
   }
 });

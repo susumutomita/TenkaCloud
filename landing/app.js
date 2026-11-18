@@ -141,7 +141,7 @@
       "motion.play": "動きを再生",
       "platform.demoBody":
         "サンプル問題で、接続先の確認から回答の提出まで試せます。実AWSへの接続は不要です。",
-      "platform.gameBody": "セキュリティの基礎を、ブラウザーで。",
+      "platform.gameBody": "セキュリティの基礎をブラウザーで。",
       "platform.localShort": "問題を選んで、チームを招待。",
       "platform.entryNotes": "利用条件とデモの範囲",
       "platform.youtube": "YouTube で見る ↗",
@@ -157,7 +157,7 @@
       "platform.authorLabel": "問題を作り、開催する人",
       "platform.authorTitle":
         '<span class="copy-phrase">オリジナル問題で、</span><span class="copy-phrase">チームを育成。</span>',
-      "platform.authorBody": "自社のサービスや社内ルールを、問題文・ヒント・正解に反映。",
+      "platform.authorBody": "自社のサービスや社内ルールを問題文・ヒント・正解に反映。",
       "platform.authorStep1": "題材を決める",
       "platform.authorStep2": "問題を書く",
       "platform.authorStep3": "チームで試す",
@@ -169,7 +169,7 @@
       "flow.lead":
         "主催者が問題とチームを用意し、参加者は環境を操作して回答。採点結果を確認しながら演習を進められます。",
       "entry.gameTitle":
-        '<span class="copy-phrase">セキュリティの基礎を、</span><span class="copy-phrase">ゲームで学ぶ。</span>',
+        '<span class="copy-phrase">セキュリティの基礎を</span><span class="copy-phrase">ゲームで学ぶ。</span>',
       "platform.filmLead":
         '<span class="copy-phrase">参加者・主催者の画面と、</span><span class="copy-phrase">Simulatorの使い方を紹介します。</span>',
       "pricingPage.lead": "OSS本体は無料。演習の構築や当日運営を任せたい方へ。",
@@ -184,30 +184,30 @@
       "platform.customSituationLabel": "インシデント訓練",
       "platform.customSituation": "自社サービスの構成に合わせて、調査や対応を練習。",
       "platform.customGoalLabel": "新メンバーのオンボーディング",
-      "platform.customGoal": "サービスの構成や運用手順を、実際に操作して覚える。",
+      "platform.customGoal": "サービスの構成や運用手順を実際に操作して覚える。",
       "platform.customFirstLabel": "企業ポリシーに沿った演習",
-      "platform.customFirst": "社内ルールに沿った設定や判断を、問題を解きながら確認。",
+      "platform.customFirst": "社内ルールに沿った設定や判断を問題を解きながら確認。",
       "platform.customGuide": "問題の作り方を見る →",
       "platform.eyebrow": "TenkaCloud / OSS の演習・競技プラットフォーム",
       "platform.h1a":
-        '<span class="motion-line">クラウドと</span><span class="motion-line">セキュリティを、</span>',
+        '<span class="motion-line">クラウドと</span><span class="motion-line">セキュリティを</span>',
       "platform.h1b": "実践で学ぶ。",
       "platform.definition":
         "自分たちの問題で、環境を動かして学ぶ OSS 基盤。演習の開催から回答・採点まで、ひとつにつながります。",
       "platform.primary": "1分の紹介動画を見る ↓",
-      "platform.primaryNote": "参加・開催・Simulatorを、実際の画面で紹介",
+      "platform.primaryNote": "参加・開催・Simulatorを実際の画面で紹介",
       "platform.choose": "ゲームで基礎を学ぶ・演習を始める ↓",
       "platform.sceneQuests": "問題に挑む",
       "platform.sceneScores": "演習を開く",
       "platform.preview": "ローカル環境で収録した操作画面",
       "platform.questionEyebrow": "たとえば、情報漏えい。",
       "platform.questionLead":
-        "情報漏えいも、クラウドの構築・運用も。さまざまな課題を、手を動かして学べます。",
+        "情報漏えいも、クラウドの構築・運用も。さまざまな課題を手を動かして学べます。",
       "platform.whyEyebrow": "なぜ、実践なのか",
       "platform.whyTitle":
-        '<span class="copy-phrase">クラウドの設定変更を、</span><span class="copy-phrase">本番の前に練習する。</span>',
+        '<span class="copy-phrase">クラウドの設定変更を</span><span class="copy-phrase">本番の前に練習する。</span>',
       "platform.whyLead":
-        "セキュリティは必要。でも何から始めればいい？ 経験者は少なく、頼るには費用もかかる。教科書で学んだことを、安全な演習の中で試し、結果から学び直せる場所が必要です。",
+        "セキュリティは必要。でも何から始めればいい？ 経験者は少なく、頼るには費用もかかる。教科書で学んだことを安全な演習の中で試し、結果から学び直せる場所が必要です。",
       "platform.chooseStep": "問題に挑む",
       "platform.chooseStepBody":
         "主催者が、受講者と目的に合う問題を選びます。基礎ゲーム、Challenge、Battle で学び方を変えられます。",
@@ -227,7 +227,7 @@
       "flow.prepareBody":
         "既存の問題を選ぶ。チームの課題に合わせて作る。問題とチームを選び、演習を開きます。",
       "flow.prepareMeta": "主催者 / 演習を作成",
-      "flow.practiceTitle": "クラウドの操作を、<br>自分のPCで。",
+      "flow.practiceTitle": "クラウドの操作を<br>自分のPCで。",
       "flow.practiceBody":
         "TenkaCloud Simulatorなら、対応するAPIやコンソールを実AWSへ接続せずに操作できます。作る、試す、結果を確かめる。失敗しても、もう一度。",
       "flow.practiceMeta": "Simulator単体 / ローカル環境",
@@ -249,12 +249,12 @@
         '<span class="copy-phrase">ゲームで基礎を学ぶ。</span><span class="copy-phrase">チームで演習する。</span>',
       "platform.demoStatus": "登録不要 / 参加画面のサンプル",
       "platform.demoTitle":
-        '<span class="copy-phrase"><span class="copy-word">回答・</span><span class="copy-word">ヒント・</span><span class="copy-word">採点を、</span></span><span class="copy-phrase"><span class="copy-word">6ステップで</span><span class="copy-word">体験。</span></span>',
+        '<span class="copy-phrase"><span class="copy-word">回答・</span><span class="copy-word">ヒント・</span><span class="copy-word">採点を</span></span><span class="copy-phrase"><span class="copy-word">6ステップで</span><span class="copy-word">体験。</span></span>',
       "platform.demoLink": "サンプル問題に進む →",
       "platform.gameStatus": "ブラウザー / AWS・登録不要",
       "platform.localStatus": "自分のPC / AWS不要",
       "platform.localTitle":
-        '<span class="copy-phrase">チームの演習を、</span><span class="copy-phrase">自分のPCで開く。</span>',
+        '<span class="copy-phrase">チームの演習を</span><span class="copy-phrase">自分のPCで開く。</span>',
       "platform.localBody":
         "ローカル開催は AWS アカウント不要。Docker 問題の条件やクラウド開催は起動ガイドで確認できます。",
       "platform.feeNote":
@@ -279,7 +279,7 @@
       "platform.pricingLink": "料金と提供範囲を見る ↗",
       "platform.commercialSummary": "運営代行の提供範囲・料金・問い合わせ",
       "platform.finalTitle":
-        '<span class="copy-phrase">本番で試せないことを、</span><span class="copy-phrase">演習で学ぼう。</span>',
+        '<span class="copy-phrase">本番で試せないことを</span><span class="copy-phrase">演習で学ぼう。</span>',
       "platform.finalBody":
         "Simulatorや実環境で、クラウドの構築・設定・トラブル対応を練習。自社のサービスに合わせた演習も作れます。",
       "platform.finalLink": "ゲームで基礎から始める →",
@@ -311,9 +311,9 @@
       "incident.step3Title": "止めるのは漏えい。<br>サービスは止めない。",
       "incident.step3":
         "サーバー側で、ログインしたユーザーとデータの所有者を照合。自分の情報は 200、他人の情報は 403。全員を遮断するだけでは正解ではありません。左右の ID を切り替えて、両方を確かめてください。",
-      "incident.outroTitle": "「知っている」を、<br>「止められる」へ。",
+      "incident.outroTitle": "「知っている」を<br>「止められる」へ。",
       "incident.outro":
-        "セキュリティは必要。でも、何から始めればいい？ 経験者は少なく、頼むには費用もかかる。教科書だけでは埋まらない実践との距離を、安全で低コストなシミュレーターや実環境での体験で縮めます。",
+        "セキュリティは必要。でも、何から始めればいい？ 経験者は少なく、頼むには費用もかかる。教科書だけでは埋まらない実践との距離を安全で低コストなシミュレーターや実環境での体験で縮めます。",
       "incident.development":
         "この画面は仕組みを説明するためのデモです。架空のデータを使い、採点は行いません。",
       "incident.demo": "現在公開中の操作デモを見る ↗",
@@ -325,7 +325,7 @@
       "hero.quest_meta": "現在公開中 · ブラウザ操作デモ · 登録不要",
       "hero.quest_badge": "ブラウザ体験版",
       "hero.quest_diff": "インストール不要",
-      "hero.quest_title": "演習の流れを、試してみる。",
+      "hero.quest_title": "演習の流れを試してみる。",
       "hero.quest_desc":
         "問題を開いて接続先を確認し、回答を提出する操作デモです。実環境への攻撃・修復を行うものではありません。",
       "hero.quest_cta": "現在の操作デモを見る",
@@ -405,16 +405,16 @@
       "preview.quests.unsolved_status": "未解答",
       "preview.quests.cleared": "⌄ 解決済み (0)",
       "aud.eyebrow": "誰のための",
-      "aud.h2": "クラウド実戦力を、組織で育てる。",
+      "aud.h2": "クラウド実戦力を組織で育てる。",
       "aud.lead":
         "クラウド人材育成 (= CCoE) / Platform / SRE / Security 部門が、 イベント基盤を自前で作らずに ハンズオン AWS 演習 を開催 / 運営できます。 環境払い出し / ログイン / 採点 / 進捗管理 まで、 ひとつの画面で完結。",
       "aud.a.role": "CCoE / クラウド人材育成",
-      "aud.a.h": "研修イベントを、 年に複数回。",
+      "aud.a.h": "研修イベントを 年に複数回。",
       "aud.a.p":
-        "新卒オンボーディング / 内製化推進 / 部門横断の AWS 演習を、 同じプラットフォームで 年に複数回 開催できる。 単発ハンズオンから 計画的な 年間プログラム へ。",
+        "新卒オンボーディング / 内製化推進 / 部門横断の AWS 演習を 同じプラットフォームで 年に複数回 開催できる。 単発ハンズオンから 計画的な 年間プログラム へ。",
       "aud.a.more": "お問い合わせフォーム",
       "aud.b.role": "Platform / SRE",
-      "aud.b.h": "演習設計を、 1 画面で。",
+      "aud.b.h": "演習設計を 1 画面で。",
       "aud.b.p":
         "イベント、チーム、問題、得点を共通の画面で管理します。ローカルと AWS 開催では実行環境が異なります。問題ごとの接続条件と検証状況は運営ガイドで確認できます。",
       "aud.b.more": "運営ガイド",
@@ -427,12 +427,12 @@
       "aud.c.moreHref": "./docs/manual/problem-author/",
 
       "uc.eyebrow": "企業での活用",
-      "uc.h2": "セキュリティ研修を、ゲームにする。",
+      "uc.h2": "セキュリティ研修をゲームにする。",
       "uc.loop": "遊ぶ → 気づく → また挑む",
       "uc.lead":
         "得点や結果を振り返り、次の演習で試す。ゲームとして何度も挑みたくなる体験で、知識の定着につなげることを目指します。",
       "uc.a.role": "全社員 / 非エンジニア",
-      "uc.a.h": "だまされる場面を、体験で学ぶ。",
+      "uc.a.h": "だまされる場面を体験で学ぶ。",
       "uc.a.p":
         "フィッシングやソーシャルエンジニアリングなど、自社で起きそうな場面を問題にして、チームで解きながら気づきを共有します。参加者はブラウザで参加でき、TenkaCloud のインストールは不要です。",
       "uc.b.role": "新任エンジニア",
@@ -440,11 +440,11 @@
       "uc.b.p":
         "問題文とヒントを読み、答えを提出する短いChallengeから。調査や環境操作を伴う課題まで、主催者が受講者に合わせて問題を選べます。",
       "uc.c.role": "SRE / SOC",
-      "uc.c.h": "障害・インシデント対応を、訓練する。",
+      "uc.c.h": "障害・インシデント対応を訓練する。",
       "uc.c.p":
         "障害対応や攻防の Battle 問題で、チームで状況を判断して手を動かす訓練ができます。スコアの推移から、どこで詰まったかを振り返れます。",
       "uc.d.role": "社内イベント",
-      "uc.d.h": "部門横断の CTF を、社内で。",
+      "uc.d.h": "部門横断の CTF を社内で。",
       "uc.d.p":
         "大会・チーム・問題・得点を主催者画面で管理し、参加者にはチームごとのキーや招待リンクを渡します。スコアボードで順位を全員で共有します。",
       "uc.d.more": "運営ガイド",
@@ -515,7 +515,7 @@
       "extend.agent_tutorial": "ブラウザ体験版で進める →",
 
       "book.eyebrow": "本で読む",
-      "book.h2": "作り方を、一冊にまとめてあります。",
+      "book.h2": "作り方を一冊にまとめてあります。",
       "book.lead":
         "ローカル Challenge、AWS Challenge、AWS Battle を簡単な順に一から作り、 複数チームで遊べる競技として動かすまでを扱う本です。 TenkaCloud を題材にしていますが、 読むのに AWS アカウントも TenkaCloud の導入も要りません。 日本語版と英語版があります。",
       "book.jaTitle": "自分で作るクラウド競技",
@@ -527,9 +527,9 @@
       "offerings.lead":
         "OSS プラットフォーム本体は Apache 2.0 で 無料 のまま。 構築 / 当日運営 / 年間プログラム を任せたい組織向けに、 形 (スコープ / 成果物 / 除外 / 提供モデル) を明文化した 3 つのプロダクト化された提供形態 を用意しています。",
       "offerings.a.role": "Hosted Event",
-      "offerings.a.h": "単発イベントを、 丸ごと運営代行。",
+      "offerings.a.h": "単発イベントを 丸ごと運営代行。",
       "offerings.a.p":
-        "1 日のクラウド演習を、 公開 OSS 問題カタログから選定して 弊社が end-to-end で運営。 設計 / 開催環境の準備 (= ローカル開催 PC またはお客様 AWS への deploy) / 事前 dry-run / 当日の live 進行 / 事後レポート。 <strong>1 回 fixed price</strong>。",
+        "1 日のクラウド演習を 公開 OSS 問題カタログから選定して 弊社が end-to-end で運営。 設計 / 開催環境の準備 (= ローカル開催 PC またはお客様 AWS への deploy) / 事前 dry-run / 当日の live 進行 / 事後レポート。 <strong>1 回 fixed price</strong>。",
       "offerings.b.role": "Annual Arena",
       "offerings.b.h": "年間プログラム。",
       "offerings.b.p":
