@@ -194,7 +194,7 @@ describe("platform-first landing entry", () => {
   it("defines the platform and routes its primary action to the prominent introductory film", () => {
     const hero = heroSection(index);
     expect(hero).toContain(
-      '<span class="motion-line">クラウドと</span><span class="motion-line">セキュリティを、</span>',
+      '<span class="motion-line">クラウドと</span><span class="motion-line">セキュリティを</span>',
     );
     expect(hero).toContain("実践で学ぶ。");
     expect(hero).toContain("自分たちの問題で、環境を動かして学ぶ OSS 基盤");
