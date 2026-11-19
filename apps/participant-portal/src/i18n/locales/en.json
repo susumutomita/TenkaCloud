@@ -279,6 +279,8 @@
     "endpoint_effective_label": "Effective URL",
     "endpoint_not_yet_pre": "Not retrieved yet — once deploy completes, it will be auto-fetched from CFn Outputs.",
     "endpoint_not_yet_post": "If you want to register your own URL now, override it from \"Register new URL\" below.",
+    "endpoint_not_filled_pre": "Deploy has completed, but CFn Outputs.",
+    "endpoint_not_filled_post": "is empty, so this URL will not be filled in automatically. Register the URL as the problem description explains, using \"Register new URL\" below.",
     "endpoint_override_active_label": "Overridden (default:",
     "endpoint_override_input_label": "Register new URL",
     "endpoint_override_url_empty": "Please enter a URL",
