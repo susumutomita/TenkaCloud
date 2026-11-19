@@ -60,6 +60,43 @@ describe("managed native Simulator", () => {
     expect(existsSync(simulator.settings.tokenFile)).toBe(true);
     expect((await simulator.exited).code).toBe(0);
   });
+  test("a Battle bundle adds only the private runtime configuration argument", async () => {
+    const options = fixture(`printf '%s\n' "$@" > "$START_STATE.args"\n${ready}\n${hold}`);
+    const bundle = join(options.dataDirectory, "bundle");
+    mkdirSync(bundle);
+    writeFileSync(
+      join(bundle, "manifest.json"),
+      JSON.stringify({
+        os: process.platform,
+        arch: process.arch === "x64" ? "amd64" : process.arch,
+        archiveSha256: "a".repeat(64),
+        files: [
+          { path: "bin/qemu-system-x86_64", size: 1, sha256: "b".repeat(64), executable: true },
+          { path: "firmware/bios-256k.bin", size: 1, sha256: "c".repeat(64) },
+          { path: "images/al2023-battle.qcow2", size: 1, sha256: "d".repeat(64) },
+        ],
+      }),
+    );
+    writeFileSync(join(bundle, "guest-bundle.tar.gz"), "archive");
+    const simulator = await startManagedSimulator({ ...options, battleBundle: bundle });
+    stops.push(simulator.stop);
+    const state = join(options.dataDirectory, "simulator/practice.db");
+    const config = join(options.dataDirectory, "simulator/battle-runtime.json");
+    expect(readFileSync(`${state}.args`, "utf8").split("\n")).toEqual([
+      "--listen=127.0.0.1:0",
+      `--state=${state}`,
+      `--token-file=${simulator.settings.tokenFile}`,
+      `--battle-runtime-config=${config}`,
+      "",
+    ]);
+    const runtime = JSON.parse(readFileSync(config, "utf8")).runtimeDirectory as string;
+    expect(existsSync(runtime)).toBe(true);
+    await simulator.stop();
+    expect((await simulator.exited).code).toBe(0);
+    // A clean exit releases the guest files; nothing else in the data directory is removed.
+    expect(existsSync(runtime)).toBe(false);
+    expect(existsSync(config)).toBe(true);
+  });
   test("reuses retained state and token across starts without replacement", async () => {
     const options = fixture(`${ready}\n${hold}`);
     const first = await startManagedSimulator(options);

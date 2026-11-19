@@ -3,18 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TenkaCloudの構成図 | JAWS-UG横浜 2026</title>
-<meta name="description" content="SaaSの物理構成図、SBTとTenkaCloudの役割、問題のデプロイ経路、Liteの構成図。拡大・移動できるSVGと編集可能なDraw.io原本。">
+<title>発表時点のTenkaCloud構成図 | JAWS-UG横浜 2026</title>
+<meta name="description" content="JAWS-UG横浜 #103（2026年9月18日）発表時点の構成図。SaaSの物理構成図、SBTとTenkaCloudの役割、問題のデプロイ経路、Liteの構成図。現在の構成はドキュメントで確認できます。">
 <link rel="canonical" href="https://tenkacloud.com/jaws-yokohama-2026/architecture.html">
 <link rel="stylesheet" href="talk.css?v=23f670b86d">
 <link rel="icon" href="../assets/favicon.svg">
-<script src="architecture.js?v=b9a1d08e28" defer></script>
+<script src="architecture.js?v=27fb3fda9d" defer></script>
 </head>
 <body>
 <nav class="topbar" aria-label="関連資料"><a href="./#6">← 発表資料へ戻る</a><a href="../presentations/">プレゼン資料一覧</a><a href="../">TenkaCloud</a></nav>
 <main class="diagram-page">
-<p class="kicker">TenkaCloudの仕組み</p>
-<h1>TenkaCloudの構成図</h1>
+<p class="kicker">JAWS-UG横浜 #103 · 2026年9月18日の発表時点</p>
+<h1>発表時点のTenkaCloud構成図</h1>
+<p role="note"><strong>この図は発表時点の構成で、現在の構成とは異なります。</strong>発表後に、SaaS / SBTによる組織（テナント）の登録・環境構築を外しました。現在のTenkaCloudは、主催者のPCで動かすローカル開催（1つのBunプロセスとSQLite）と、SBTを使わない旧Liteの処理を再利用するクラウド開催（API Gateway・Lambda・Cognito・Step Functions・CodeBuildと、TursoまたはDynamoDB）です。現在の構成は<a href="../docs/concepts/architecture/">アーキテクチャのドキュメント</a>と、リポジトリの<a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/architecture/diagrams/system-architecture.drawio" target="_blank" rel="noopener">現在のDraw.io原本</a>で確認できます。</p>
 <p>画面内で拡大し、スクロールまたはマウスでドラッグして読めます。表示に外部ビューアやログインは必要ありません。</p>
 <div class="diagram-toolbar" aria-label="構成図の操作">
 <button type="button" data-view="saas" data-src="assets/architecture-saas.svg" data-source="assets/system-architecture.drawio" aria-pressed="true">SaaS物理構成図</button><button type="button" data-view="sbt" data-src="assets/architecture-sbt.svg" aria-pressed="false">SBTと追加した機能</button><button type="button" data-view="deploy" data-src="assets/architecture-deploy.svg?v=314d52713b" aria-pressed="false">問題をデプロイする流れ</button><button type="button" data-view="aws" data-src="assets/architecture-overview.svg?v=4865b58a9e" aria-pressed="false">Liteの詳細構成</button><button type="button" data-view="evolution" data-src="assets/architecture-evolution.svg?v=8e4202dd71" aria-pressed="false">設計転換</button>
@@ -22,8 +23,8 @@
 <a id="open-svg" href="assets/architecture-saas.svg" target="_blank" rel="noopener">SVGを開く ↗</a><a id="open-source" href="assets/system-architecture.drawio" download>Draw.io原本</a>
 </div>
 <p id="diagram-error" role="alert" hidden>構成図を読み込めませんでした。再読み込みするか、上の「SVGを開く」「Draw.io原本」を使用してください。</p>
-<div class="diagram-frame" id="diagram-frame" tabindex="0" aria-label="スクロール可能な構成図"><img id="diagram-image" src="assets/architecture-saas.svg" alt="既存Draw.io原本のSaaS物理構成図。AWSサービスとスタックの配置・配線。" draggable="false"></div>
-<div class="diagram-caption" data-caption="saas"><h2>既存Draw.ioのSaaS物理構成図</h2><p>左側にシステム管理者が使う組織の登録・管理とテナントの配置、中央に開催者向けアプリと更新パイプライン、右側に問題デプロイと参加者向けAPI、右端にチームのAWSアカウントと外部サービスを配置しています。全体で位置関係を確認してから、拡大して配線を読めます。</p><p>原本は <a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/architecture/diagrams/system-architecture.drawio" target="_blank" rel="noopener">system-architecture.drawio</a> の1ページ目です。図の配置と配線を保ち、Draw.ioで描画した結果を埋め込んでいます。発表時の図にあった、コードに無い部品（Amazon Bedrock）や誤った配線は、コードと突き合わせて直しました。コードから整理した構成図であり、実AWSリソースを取得した稼働証跡ではありません。</p></div>
+<div class="diagram-frame" id="diagram-frame" tabindex="0" aria-label="スクロール可能な構成図"><img id="diagram-image" src="assets/architecture-saas.svg" alt="発表時点のSaaS物理構成図。AWSサービスとスタックの配置・配線。" draggable="false"></div>
+<div class="diagram-caption" data-caption="saas"><h2>発表時点のSaaS物理構成図</h2><p>左側にシステム管理者が使う組織の登録・管理とテナントの配置、中央に開催者向けアプリと更新パイプライン、右側に問題デプロイと参加者向けAPI、右端にチームのAWSアカウントと外部サービスを配置しています。全体で位置関係を確認してから、拡大して配線を読めます。</p><p>原本は発表時に保存した <a href="assets/system-architecture.drawio" download>system-architecture.drawio</a> の1ページ目です。リポジトリにある同名のファイルは現在の構成に更新したため、この図とは一致しません。図の配置と配線を保ち、Draw.ioで描画した結果を埋め込んでいます。発表時の図にあった、コードに無い部品（Amazon Bedrock）や誤った配線は、コードと突き合わせて直しました。コードから整理した構成図であり、実AWSリソースを取得した稼働証跡ではありません。</p></div>
 <div class="diagram-caption" data-caption="sbt" hidden><h2>SaaS構成を3つの役割で読む</h2><p>Control Planeは利用する組織を管理し、Application Planeは組織ごとのアプリを提供します。TenkaCloudは開催者向けのイベント管理を実装し、問題デプロイエンジンと競技者コンソールを追加しています。</p><p>役割を整理した図です。SBTが競技機能を提供するわけではありません。物理構成ではApplication Planeのpooled / siloが分かれるため、3スタックという意味でもありません。<a href="../docs/concepts/architecture/">実装上の構成</a></p></div>
 <div class="diagram-caption" data-caption="deploy" hidden><h2>開催者の「デプロイ」から、参加者が問題を開くまで</h2><p>管理APIがデプロイ要求を受け付け、EventBridgeからStep FunctionsとLambdaへ処理を渡します。チームのAWSアカウントにAssumeRoleし、CloudFormationで問題環境を作ります。クロスアカウントのアクセスにはExternalIdを使います。</p><p>これはクラウド環境を必要とする問題の経路です。暗号バトルは共有の競技APIで操作を判定し、状態と得点を更新します。参加者向けAPIと競技APIの細かな配線は「Liteの詳細構成」で確認できます。</p></div>
 <div class="diagram-caption" data-caption="aws" hidden>

@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AIで作ったアプリ、本番に出していいですか？｜TenkaCloud 法人向け提案</title>
+<meta name="description" content="TenkaCloudの法人向け提案資料。壊れた社内システムを直し、その場で採点される演習で「公開してよいか」を判断する力を鍛えます。PC 1台・AWSアカウント不要のローカル開催、運営代行の流れ、料金をまとめています。" />
+<link rel="canonical" href="https://tenkacloud.com/proposal/" />
+<link rel="alternate" hreflang="ja" href="https://tenkacloud.com/proposal/" />
+<link rel="alternate" hreflang="en" href="https://tenkacloud.com/proposal/index.en.html" />
+<meta property="og:title" content="AIで作ったアプリ、本番に出していいですか？｜TenkaCloud 法人向け提案" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://tenkacloud.com/proposal/" />
+<link rel="icon" href="../assets/favicon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&amp;family=Noto+Sans+JP:wght@400;700;900&amp;family=JetBrains+Mono:wght@500&amp;display=swap" />
+<link rel="stylesheet" href="../jaws-yokohama-2026/talk.css" />
+<link rel="stylesheet" href="./proposal.css" />
+<script defer src="../tenkacloud-ug-1/talk.js"></script>
+</head>
+<body class="pp-ja">
+<header class="topbar"><a href="../presentations/">← 発表資料一覧</a><span>法人向け 実践演習のご提案</span><a href="./index.en.html" hreflang="en" lang="en">English</a></header>
+<nav class="controls" aria-label="スライドの操作"><button id="previous" type="button" aria-label="前のスライド">← 前へ</button><output id="position" aria-live="polite">1 / 11</output><button id="next" type="button" aria-label="次のスライド">次へ →</button></nav>
+<noscript><p class="noscript">すべてのスライドを順に表示しています。</p></noscript>
+<main id="deck">
+<section class="slide pp-slide pp-dark" id="slide-1" aria-labelledby="title-1">
+<p class="kicker">TENKACLOUD ／ 法人向け 実践演習のご提案</p>
+<div class="pp-cover">
+<div><h1 id="title-1">AIで作ったアプリ、<br>本番に出して<br>いいですか？</h1><p class="pp-lead">その判断を、壊れた環境を直す演習で鍛えます。<br>PC 1台から、社内で開催できます。</p></div>
+<div class="pp-score" role="img" aria-label="スコア変動の画面イメージ。公開範囲の修正で800点、サイト停止で100点減点、秘密情報の保護で400点。"><p class="pp-score-h">SCORE EVENTS（画面イメージ）</p><div class="pp-score-row"><p class="pp-pts">+800</p><p class="pp-evt">公開範囲を修正</p></div><div class="pp-score-row"><p class="pp-pts pp-pts-down">−100</p><p class="pp-evt">サイトが停止</p></div><div class="pp-score-row"><p class="pp-pts">+400</p><p class="pp-evt">秘密情報を保護</p></div></div>
+</div>
+<p class="pp-byline">合同会社BULL ／ TenkaCloud 開発・運営</p>
+<div class="slide-foot"><span>TenkaCloud ／ 法人向け 実践演習のご提案</span><span>1 / 11</span></div>
+</section>
+
+<section class="slide pp-slide pp-accent" id="slide-2" aria-labelledby="title-2">
+<p class="kicker">いま、開発の現場で</p>
+<h2 id="title-2">「作れる」と「出していい」は、<br>別の能力です。</h2>
+<div class="pp-cols3">
+<div class="pp-col"><p class="pp-k">作れる</p><p>AIを使えば、動くアプリはすぐにできる。速さは誰でも手に入る。</p></div>
+<div class="pp-col"><p class="pp-k">出していい</p><p>認証・公開範囲・秘密情報・ログ・復旧まで確かめて、初めて言える。</p></div>
+<div class="pp-col"><p class="pp-k">そのあいだ</p><p>判断できる人が足りず、レビューと公開がそこで詰まる。</p></div>
+</div>
+<div class="slide-foot"><span>課題</span><span>2 / 11</span></div>
+</section>
+
+<section class="slide pp-slide" id="slide-3" aria-labelledby="title-3">
+<p class="kicker">研修の課題</p>
+<h2 id="title-3">座学は「知っている」まで。<br>判断の練習は、本番ではできない。</h2>
+<div class="pp-table-wrap"><table class="pp-table">
+<thead><tr><th scope="col">観点</th><th scope="col">座学・動画研修</th><th scope="col">現場で覚える（OJT）</th><th scope="col" class="pp-us">TenkaCloud の演習</th></tr></thead>
+<tbody>
+<tr><th scope="row">手を動かす</th><td data-label="座学・動画研修">ほとんどない</td><td data-label="現場で覚える（OJT）">ある</td><td data-label="TenkaCloud の演習" class="pp-us">ある</td></tr>
+<tr><th scope="row">失敗できる</th><td data-label="座学・動画研修">失敗する場面がない</td><td data-label="現場で覚える（OJT）">許されない</td><td data-label="TenkaCloud の演習" class="pp-us">何度でもやり直せる</td></tr>
+<tr><th scope="row">できたか分かる</th><td data-label="座学・動画研修">理解度テスト</td><td data-label="現場で覚える（OJT）">事故で初めて分かる</td><td data-label="TenkaCloud の演習" class="pp-us">提出するとその場で採点</td></tr>
+<tr><th scope="row">振り返り</th><td data-label="座学・動画研修">感想が中心</td><td data-label="現場で覚える（OJT）">個人の経験に留まる</td><td data-label="TenkaCloud の演習" class="pp-us">スコアの推移で、詰まった所が分かる</td></tr>
+</tbody>
+</table></div>
+<div class="slide-foot"><span>課題</span><span>3 / 11</span></div>
+</section>
+
+<section class="slide pp-slide" id="slide-4" aria-labelledby="title-4">
+<p class="kicker">TENKACLOUD とは</p>
+<h2 id="title-4">壊れた環境を渡され、直すと、<br>その場で採点される演習です。</h2>
+<div class="pp-cards3">
+<div class="pp-card"><p class="pp-num">01</p><h3>受け取る</h3><p>「前任者が残した」、動くけれど危ない社内システム。チームごとに用意されます。</p></div>
+<div class="pp-card"><p class="pp-num">02</p><h3>調べて直す</h3><p>ログ・設定・公開範囲・権限を見て、何を直すかをチームで決めて手を動かします。</p></div>
+<div class="pp-card"><p class="pp-num">03</p><h3>採点と順位</h3><p>答えや直した状態を提出すると、その場で採点。スコアボードで順位が動きます。</p></div>
+</div>
+<p class="fine pp-push">OSS（Apache-2.0）の演習・競技基盤。主催者画面で、大会・チーム・問題・ヒント・採点をまとめて管理します。</p>
+<div class="slide-foot"><span>演習の中身</span><span>4 / 11</span></div>
+</section>
+
+<section class="slide pp-slide pp-tint" id="slide-5" aria-labelledby="title-5">
+<p class="kicker">演習シナリオの例</p>
+<h2 id="title-5">新任SREとして、架空の会社に入社する。</h2>
+<div>
+<div class="pp-step"><p class="pp-lv">入門</p><p class="pp-step-t"><b>入社初日</b> ── AIが作った社内掲示板を引き継ぎ、まず動かして状態を確かめる。</p></div>
+<div class="pp-step"><p class="pp-lv">入門</p><p class="pp-step-t"><b>前任者の置き土産</b> ── 普通に動くWordPressサイトに、外から見えてはいけない物が残っている。</p></div>
+<div class="pp-step"><p class="pp-lv">中級</p><p class="pp-step-t"><b>社員専用のログイン画面</b> ── 本当に社員だけが入れるのか、攻撃する側の目で確かめる。</p></div>
+<div class="pp-step"><p class="pp-lv pp-lv-hi">上級</p><p class="pp-step-t"><b>取引先への公開</b> ── 社内掲示板を外にも配る。公開してよい状態まで作り込む。</p></div>
+<div class="pp-step"><p class="pp-lv pp-lv-hi">上級</p><p class="pp-step-t"><b>深夜デプロイの翌朝</b> ── 掲示板が開かない。原因を突き止めて、サービスを戻す。</p></div>
+</div>
+<p class="fine pp-push">公開問題カタログの一部です。自社のシステム構成や社内ルールに合わせた問題も制作できます（別途お見積もり）。</p>
+<div class="slide-foot"><span>演習の中身</span><span>5 / 11</span></div>
+</section>
+
+<section class="slide pp-slide" id="slide-6" aria-labelledby="title-6">
+<p class="kicker">活用シーン</p>
+<h2 id="title-6">受講者に合わせて、問題を選べます。</h2>
+<div class="pp-cards3">
+<div class="pp-card"><h3>新任エンジニア研修</h3><p>短い入門問題から始め、環境を操作する課題へ進む。</p></div>
+<div class="pp-card"><h3>AIを使う開発チーム</h3><p>AIで作ったアプリを、公開前に点検する判断を練習する。</p></div>
+<div class="pp-card"><h3>SRE・運用チーム</h3><p>障害やインシデントへの対応を、時間制限つきのチーム戦で。</p></div>
+<div class="pp-card"><h3>社内CTF・競技会</h3><p>部門をまたいだ大会を、スコアボードと表彰つきで開く。</p></div>
+<div class="pp-card"><h3>全社員向け</h3><p>だまされやすい場面を、ブラウザのゲームで体験する。</p></div>
+<div class="pp-card"><h3>CCoE・人材育成</h3><p>年4回の定期開催で、入門→中級→上級の育成パスを回す。</p></div>
+</div>
+<div class="slide-foot"><span>演習の中身</span><span>6 / 11</span></div>
+</section>
+
+<section class="slide pp-slide pp-tint" id="slide-7" aria-labelledby="title-7">
+<p class="kicker">導入のしやすさ</p>
+<h2 id="title-7">専用サーバーもクラウド契約も、いりません。</h2>
+<div>
+<div class="pp-row"><h3>開催は PC 1台</h3><p>主催者のPCで起動し、大会と得点のデータもそのPCに保存します。</p></div>
+<div class="pp-row"><h3>AWS アカウント不要</h3><p>ローカル開催では、クラウドの利用料がかかりません。</p></div>
+<div class="pp-row"><h3>参加は URL とキー</h3><p>参加者は社内LANや Tailscale 経由で、自分の端末から参加します。</p></div>
+<div class="pp-row"><h3>OSS で続けられる</h3><p>Apache-2.0。ソースを確認でき、自社だけで開催を続けることもできます。</p></div>
+</div>
+<p class="fine pp-push">別の端末から Docker 演習に参加する構成は、Linux の開催PCと分離の設定が必要です（事前に確認します）。AWS 上での開催は現在検証中のため、個別にご相談ください。</p>
+<div class="slide-foot"><span>導入</span><span>7 / 11</span></div>
+</section>
+
+<section class="slide pp-slide" id="slide-8" aria-labelledby="title-8">
+<p class="kicker">運営代行の流れ</p>
+<h2 id="title-8">準備から振り返りまで、私たちが進めます。</h2>
+<div class="pp-proc">
+<div class="pp-proc-i"><p class="pp-num">01</p><h3>ヒアリング</h3><p class="pp-proc-p">対象者・人数・目的と、社内ネットワークの条件を伺います。</p></div>
+<div class="pp-proc-i"><p class="pp-num">02</p><h3>問題の選定</h3><p class="pp-proc-p">公開問題カタログから、目的と経験に合う問題を選びます。</p></div>
+<div class="pp-proc-i"><p class="pp-num">03</p><h3>リハーサル</h3><p class="pp-proc-p">開催PCで事前に通しで解き、接続と採点を確かめます。</p></div>
+<div class="pp-proc-i"><p class="pp-num">04</p><h3>当日の進行</h3><p class="pp-proc-p">開会の説明、ヒントの運用、質問への対応、表彰まで進行します。</p></div>
+<div class="pp-proc-i"><p class="pp-num">05</p><h3>振り返り</h3><p class="pp-proc-p">採点履歴とチーム別の進捗を、レポートにまとめてお渡しします。</p></div>
+</div>
+<div class="pp-band"><p>Starter は「問題の選定」「環境の準備」「当日の進行」を支援します。Hosted と Annual Arena は、リハーサルと振り返りレポートまで含みます。</p></div>
+<div class="slide-foot"><span>導入</span><span>8 / 11</span></div>
+</section>
+
+<section class="slide pp-slide" id="slide-9" aria-labelledby="title-9">
+<p class="kicker">料金（税別）</p>
+<h2 id="title-9">単発の開催から、年間の育成プログラムまで。</h2>
+<div class="pp-cards3">
+<div class="pp-plan"><div class="pp-plan-top"><p class="pp-pname">STARTER</p></div><div class="pp-price"><p class="pp-amt">50万円</p><p class="pp-per">/ 回</p></div><p class="pp-cond">お試し・2チームまで</p><ul class="pp-plist"><li>公開問題から選定</li><li>環境の準備と当日の進行を支援</li></ul></div>
+<div class="pp-plan pp-plan-hi"><div class="pp-plan-top"><p class="pp-pname">HOSTED</p><p class="pp-pill">標準</p></div><div class="pp-price"><p class="pp-amt">150万円</p><p class="pp-per">/ 回</p></div><p class="pp-cond">5チーム（〜20人）まで</p><ul class="pp-plist"><li>構築から当日の進行まで代行</li><li>事前のリハーサル</li><li>振り返りレポート</li></ul></div>
+<div class="pp-plan"><div class="pp-plan-top"><p class="pp-pname">ANNUAL ARENA</p></div><div class="pp-price"><p class="pp-amt">600万円〜</p><p class="pp-per">/ 年</p></div><p class="pp-cond">年4回の開催を代行</p><ul class="pp-plist"><li>入門→中級→上級の育成パス設計</li><li>運営手順書のテンプレート</li><li>各回の振り返りレポート</li></ul></div>
+</div>
+<p class="fine pp-push">OSS 本体の利用は無料です。カスタム問題の制作と CCoE 支援（月次アドバイザリ）は別途お見積もり。クラウドで開催する場合の AWS 利用料は、お客様のアカウントに直接課金されます。詳しくは<a href="../pricing.html">料金と提供範囲</a>をご覧ください。</p>
+<div class="slide-foot"><span>料金</span><span>9 / 11</span></div>
+</section>
+
+<section class="slide pp-slide pp-tint" id="slide-10" aria-labelledby="title-10">
+<p class="kicker">公開している実績</p>
+<h2 id="title-10">仕組みも問題も、すべて公開しています。</h2>
+<div class="pp-cards3">
+<div class="pp-card"><p class="pp-num">SOURCE</p><h3>全ソースを公開</h3><p>本体と問題カタログは Apache-2.0、Simulator は MIT で <a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer">GitHub</a> に公開。導入前に中身を確かめられます。</p></div>
+<div class="pp-card"><p class="pp-num">BOOK</p><h3>設計を本で解説</h3><p><a href="https://zenn.dev/bull/books/cloud-competition" target="_blank" rel="noopener noreferrer">『自分で作るクラウド競技』（Zenn）</a>と英語版 “Build Your Own Cloud Competition”（Leanpub）。</p></div>
+<div class="pp-card"><p class="pp-num">TALKS</p><h3>登壇とハンズオン</h3><p>JAWS-UG横浜 #103 × SRE支部、TenkaCloud UG #1（いずれも2026年9月）、CCoE Kansai LT、ACP2026。<a href="../presentations/">発表資料一覧</a></p></div>
+</div>
+<div class="slide-foot"><span>実績</span><span>10 / 11</span></div>
+</section>
+
+<section class="slide pp-slide pp-dark" id="slide-11" aria-labelledby="title-11">
+<p class="kicker">次のステップ</p>
+<h2 id="title-11">まず30分、目的を聞かせてください。</h2>
+<div class="pp-cards3">
+<div class="pp-card"><p class="pp-num">01</p><h3>オンライン相談</h3><p>30分。対象者・人数・目的を伺い、合うプランを一緒に決めます。</p></div>
+<div class="pp-card"><p class="pp-num">02</p><h3>実画面デモ</h3><p>60分。開催PCで実際に問題を解き、採点まで見ていただきます。</p></div>
+<div class="pp-card"><p class="pp-num">03</p><h3>開催</h3><p>日程と問題を決め、リハーサルを経て当日を迎えます。</p></div>
+</div>
+<div class="pp-links"><a href="https://forms.gle/djVprYmq3hFgJA7P9" target="_blank" rel="noopener noreferrer">お問い合わせフォーム ↗</a><a href="../pricing.html">料金と提供範囲 →</a><a href="../">TenkaCloud →</a></div>
+<p class="fine">TenkaCloud は独立した OSS プロジェクトであり、Amazon Web Services, Inc. による提供・後援・承認を受けたものではありません。AWS は Amazon.com, Inc. またはその関連会社の商標です。</p>
+<div class="slide-foot"><span>合同会社BULL</span><span>11 / 11</span></div>
+</section>
+</main>
+<footer class="topbar"><span>TenkaCloud is an independent open-source project.</span><span>Apache-2.0</span></footer>
+</body>
+</html>

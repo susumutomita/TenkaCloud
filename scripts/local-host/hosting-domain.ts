@@ -96,6 +96,12 @@ const SLOT_QUEUE = "runtime-slots";
 const NONTERMINAL_STATUSES: readonly Job["status"][] = ["PENDING", "IN_PROGRESS"];
 /** Organizer-intended states of one environment that do not make a ready event undeployed. */
 const INTENDED_IDLE_STATUSES: readonly Job["status"][] = ["STOPPED", "DELETED"];
+/** Participant AWS access routes: each issues only this team's viewer-role access. */
+const AWS_ACCESS_ROUTES = new Map<string, ParticipantAwsAccess["kind"]>([
+  ["/portal/me/console-signin-url", "console"],
+  ["/portal/me/cli-credentials", "cli"],
+  ["/portal/me/guest-terminal", "terminal"],
+]);
 const jobPattern = eventPattern;
 const usernamePattern = /^[a-z][a-z0-9._-]{2,63}$/u;
 
@@ -291,7 +297,7 @@ export class HostingDomain {
   readonly disruptions: LocalDisruptions;
   readonly internetAccess: LocalInternetAccess;
   private readonly tasks = new Set<Promise<void>>();
-  private readonly busyEvents = new Set<string>();
+  private readonly busyEvents = new Map<string, "prepare" | "delete">();
   /** jobId → eventId of single-environment operations still running. */
   private readonly busyJobs = new Map<string, string>();
   readonly uptime: LocalUptime;
@@ -370,7 +376,11 @@ export class HostingDomain {
       store,
       now,
       (eventId, action) => this.queue.run(eventId, action),
-      () => ({ progression: this.progression, disruptions: this.disruptions }),
+      () => ({
+        progression: this.progression,
+        disruptions: this.disruptions,
+        probeFor: (job) => this.engine.uptimeProbe?.(job),
+      }),
       uptimeProbe,
       log,
     );
@@ -1131,8 +1141,14 @@ export class HostingDomain {
     if (parts[0] === "internet-access") return this.internetAccess.route(event, parts, request);
     const disruption = this.disruptions.route(event, parts, request, principal);
     if (disruption) return disruption;
-    if (this.busyEvents.has(event.eventId))
-      throw new HostError(409, "An environment operation is already in progress.");
+    const running = this.busyEvents.get(event.eventId);
+    if (running)
+      throw new HostError(
+        409,
+        `An environment operation is already in progress: the event's environments are being ${
+          running === "prepare" ? "prepared" : "deleted"
+        }. Retry this action once it finishes.`,
+      );
     const body = () => object(request.body);
     const commands: Record<string, () => ApiResponse> = {
       "PUT progression-gate": () => ok(this.progression.configure(event, request.body)),
@@ -1760,7 +1776,7 @@ export class HostingDomain {
       });
       return planned;
     });
-    this.launch(event.eventId, async () => {
+    this.launch(event.eventId, "prepare", async () => {
       for (const original of targets) {
         if (onDemandContainer(event, original.definition)) continue;
         await this.startJob(original.jobId);
@@ -1852,7 +1868,7 @@ export class HostingDomain {
         this.store.putJob(job);
       }
     });
-    this.launch(event.eventId, async () => {
+    this.launch(event.eventId, "delete", async () => {
       for (const job of jobs) {
         if (job.status === "DELETED") continue;
         job.status = "DELETING";
@@ -1886,8 +1902,12 @@ export class HostingDomain {
       202,
     );
   }
-  private launch(eventId: string, operation: () => Promise<void>): void {
-    this.busyEvents.add(eventId);
+  private launch(
+    eventId: string,
+    kind: "prepare" | "delete",
+    operation: () => Promise<void>,
+  ): void {
+    this.busyEvents.set(eventId, kind);
     this.track(
       Promise.resolve()
         .then(operation)
@@ -2151,10 +2171,9 @@ export class HostingDomain {
     if (/^\/portal\/me\/problems\/[^/]+\/endpoints(?:\/[^/]+)?$/u.test(request.path)) {
       return this.queue.run(team.eventId, () => this.participantEndpoint(request));
     }
-    if (request.method === "GET" && request.path === "/portal/me/console-signin-url")
-      return this.awsAccess(request, "console");
-    if (request.method === "GET" && request.path === "/portal/me/cli-credentials")
-      return this.awsAccess(request, "cli");
+    const awsAccessKind =
+      request.method === "GET" ? AWS_ACCESS_ROUTES.get(request.path) : undefined;
+    if (awsAccessKind) return this.awsAccess(request, awsAccessKind);
     if (request.method === "GET")
       return this.queue.run(team.eventId, () => this.readParticipant(request));
     if (request.method === "PATCH" && request.path === "/portal/me")
@@ -2416,6 +2435,21 @@ export class HostingDomain {
       return { job, team };
     };
     const initial = resolve();
+    if (kind === "terminal") {
+      // A session opened before the guest's relay answers fails and keeps the guest busy. Issue
+      // codes only after this deployment's services have answered at least once.
+      const state = this.store.uptimeState(
+        initial.team.eventId,
+        initial.team.teamId,
+        initial.job.problemId,
+      );
+      if (state.generation !== uptimeGeneration(initial.job) || !state.readyAt)
+        throw new HostError(
+          409,
+          "The server is still starting. Register both endpoints, then open the terminal after scoring begins.",
+          "guest_not_ready",
+        );
+    }
     const assertCurrent = () => {
       const current = resolve();
       if (
@@ -2437,11 +2471,14 @@ export class HostingDomain {
         assertCurrent,
       });
       assertCurrent();
-      return ok(
-        result.kind === "console"
-          ? { loginUrl: result.loginUrl }
-          : { credentials: result.credentials },
-      );
+      if (result.kind === "console") return ok({ loginUrl: result.loginUrl });
+      if (result.kind === "terminal")
+        return ok({
+          code: result.code,
+          terminalUrl: result.terminalUrl,
+          expiresAt: result.expiresAt,
+        });
+      return ok({ credentials: result.credentials });
     } catch (error) {
       if (error instanceof ParticipantAssumeRoleError)
         return ok(

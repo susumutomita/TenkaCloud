@@ -279,6 +279,8 @@
     "endpoint_effective_label": "Effective URL",
     "endpoint_not_yet_pre": "Not retrieved yet — once deploy completes, it will be auto-fetched from CFn Outputs.",
     "endpoint_not_yet_post": "If you want to register your own URL now, override it from \"Register new URL\" below.",
+    "endpoint_not_filled_pre": "Deploy has completed, but CFn Outputs.",
+    "endpoint_not_filled_post": "is empty, so this URL will not be filled in automatically. Register the URL as the problem description explains, using \"Register new URL\" below.",
     "endpoint_override_active_label": "Overridden (default:",
     "endpoint_override_input_label": "Register new URL",
     "endpoint_override_url_empty": "Please enter a URL",
@@ -357,6 +359,18 @@
       "stage_competitor": "AssumeRole into the competitor account",
       "stage_participant_viewer": "AssumeRole into per-problem ParticipantViewerRole",
       "security_note": "* Credentials are never persisted off-screen. They disappear on reload / navigation. Be careful where you paste — leaks can't be revoked early."
+    },
+    "terminal": {
+      "section_header": "Get inside the server (guest terminal)",
+      "body": "A terminal that runs commands inside this problem's server. No SSH and no private key. Once both URLs are registered and scoring has begun, issue a one-use code and paste it into the terminal page.",
+      "issue_button": "Issue a terminal code",
+      "reissue_button": "Issue a new code",
+      "code_label": "One-use code (valid until {expiresAt})",
+      "copy_button": "Copy the code",
+      "open_button": "Open the terminal page",
+      "steps": "Paste the code into the page that \"Open the terminal page\" shows, then press \"Open terminal / 端末を開く\". Issue a new code if it expires.",
+      "error_header": "The terminal code could not be issued",
+      "mock_blocked": "Terminal codes cannot be issued in mock mode."
     }
   },
   "problem_panel": {

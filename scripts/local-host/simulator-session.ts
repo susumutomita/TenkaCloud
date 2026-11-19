@@ -1,3 +1,4 @@
+import { copyFileSync, lstatSync } from "node:fs";
 import { join } from "node:path";
 import { startManagedSimulator } from "./managed-simulator";
 import { assertSimulatorProxyDisabled, type SimulatorSettings } from "./simulator-hosting";
@@ -6,11 +7,44 @@ import { ensureOfficialSimulatorBinary } from "./simulator-release-lock";
 interface Options {
   readonly dataDirectory: string;
   readonly simulator?: SimulatorSettings;
-  readonly managedSimulator?: { readonly binary?: string; readonly update?: boolean };
+  readonly managedSimulator?: {
+    readonly binary?: string;
+    readonly update?: boolean;
+    readonly battleBundle?: string;
+  };
 }
 interface Dependencies {
   readonly start?: typeof startManagedSimulator;
   readonly install?: typeof ensureOfficialSimulatorBinary;
+}
+
+const BATTLE_BUNDLE_BUILD =
+  "python3 test/battle/image/build_bundle.py --out <path> in TenkaCloudSimulator (needs Go 1.26.11 and QEMU)";
+
+/** Copy the Simulator state before a new version opens it; SQLite downgrade is not guaranteed. */
+function backupSimulatorState(dataDirectory: string, from: string): void {
+  const state = join(dataDirectory, "simulator", "practice.db");
+  if (!lstatSync(state, { throwIfNoEntry: false })?.isFile()) return;
+  copyFileSync(state, `${state}.${from}.bak`);
+  console.log(`Simulator state copied to ${state}.${from}.bak before the update.`);
+}
+
+/** An explicit path must exist; otherwise the default directory is used only when present. */
+function resolveBattleBundle(
+  dataDirectory: string,
+  explicit: string | undefined,
+): string | undefined {
+  if (explicit !== undefined) {
+    if (!lstatSync(explicit, { throwIfNoEntry: false }))
+      throw new Error(`Battle bundle not found: ${explicit}`);
+    return explicit;
+  }
+  const fallback = join(dataDirectory, "battle-bundle");
+  if (lstatSync(fallback, { throwIfNoEntry: false })) return fallback;
+  console.log(
+    `Battle VM runtime: off. No bundle at ${fallback}; Battle problems stay unavailable. Build one with ${BATTLE_BUNDLE_BUILD}, or pass --battle-bundle <directory>.`,
+  );
+  return undefined;
 }
 
 /** Keep the native process alive until host operations drain, then stop only our child. */
@@ -23,11 +57,17 @@ export async function withSimulatorSession(
   if (signal.aborted) return;
   if (!options.managedSimulator) return run(options.simulator, signal);
   assertSimulatorProxyDisabled();
+  const battleBundle = resolveBattleBundle(
+    options.dataDirectory,
+    options.managedSimulator.battleBundle,
+  );
   const binary =
     options.managedSimulator.binary ??
     (await (dependencies.install ?? ensureOfficialSimulatorBinary)({
       cacheDirectory: join(options.dataDirectory, "simulator-binaries"),
       update: options.managedSimulator.update,
+      checkLatest: true,
+      beforeVersionChange: ({ from }) => backupSimulatorState(options.dataDirectory, from),
       signal,
     }));
   const startup = new AbortController();
@@ -40,7 +80,9 @@ export async function withSimulatorSession(
       binary,
       dataDirectory: options.dataDirectory,
       signal: startup.signal,
+      ...(battleBundle ? { battleBundle } : {}),
     });
+    if (battleBundle) console.log(`Battle VM runtime: ${battleBundle}`);
   } finally {
     signal.removeEventListener("abort", cancelStartup);
   }

@@ -79,6 +79,18 @@ function formatValidationError(err: unknown, t: TFn): string {
   return toErrorMessage(err);
 }
 
+/** URL がまだ無い slot の案内。 deploy 完了後に Output が空なら、自動では入らないことを伝える。 */
+function EndpointPendingNote({ endpoint }: { readonly endpoint: ParticipantEndpointView }) {
+  const t = useT();
+  const kind = endpoint.defaultOutputEmpty ? "filled" : "yet";
+  return (
+    <Box variant="small" color="text-status-info">
+      {t(`problem_detail.endpoint_not_${kind}_pre`)} <code>{endpoint.defaultKey}</code>{" "}
+      {t(`problem_detail.endpoint_not_${kind}_post`)}
+    </Box>
+  );
+}
+
 export function EndpointOverrideForm({
   apiBaseUrl,
   teamLoginKey,
@@ -169,10 +181,7 @@ export function EndpointOverrideForm({
                   {ep.effectiveUrl ? (
                     <Box variant="code">{ep.effectiveUrl}</Box>
                   ) : (
-                    <Box variant="small" color="text-status-info">
-                      {t("problem_detail.endpoint_not_yet_pre")} <code>{ep.defaultKey}</code>{" "}
-                      {t("problem_detail.endpoint_not_yet_post")}
-                    </Box>
+                    <EndpointPendingNote endpoint={ep} />
                   )}
                   {ep.overrideUrl && (
                     <Box variant="small" color="text-status-info">

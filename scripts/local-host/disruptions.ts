@@ -25,6 +25,7 @@ import { assertPlaying, HostError, type HostedEvent, type Job, type Team } from 
 import type { ApiRequest, ApiResponse, HostingService } from "./service";
 import type { OrganizerPrincipal } from "./store";
 import { digest } from "./store";
+import { uptimeGeneration } from "./uptime";
 
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
@@ -270,12 +271,14 @@ export class LocalDisruptions {
     const targets = teams.map((team) => {
       const jobId = this.host.store.jobId(event.eventId, team.teamId, problem.problemId);
       if (!jobId) throw new HostError(409, "A target has no deployment.", "no_deployment");
+      const job = this.host.store.job(jobId);
+      this.assertBattleReady(job);
       return pinDisruption({
         problem,
         declaration,
         parameters,
         team,
-        job: this.host.store.job(jobId),
+        job,
       });
     });
     const { interval, dueAt, count } = requestSchedule(input, this.host.now(), triggerDueAt);
@@ -309,6 +312,20 @@ export class LocalDisruptions {
         });
     return row;
   }
+  /** The terminal gate uses initial service readiness. Never disrupt a Simulator guest before it. */
+  private battleReady(job: Job): boolean {
+    if (!this.host.engine.requiresGuestReadiness?.(job)) return true;
+    const state = this.host.store.uptimeState(job.eventId, job.teamId, job.problemId);
+    return state.generation === uptimeGeneration(job) && Boolean(state.readyAt);
+  }
+  private assertBattleReady(job: Job): void {
+    if (!this.battleReady(job))
+      throw new HostError(
+        409,
+        "The Simulator guest must begin scoring before a disruption can be scheduled or injected.",
+        "guest_not_ready",
+      );
+  }
   private assertTarget(target: DisruptionTarget, requestId: string, injecting: boolean): void {
     const job = this.host.store.job(target.jobId);
     const team = this.host.store.team(target.teamId);
@@ -331,6 +348,7 @@ export class LocalDisruptions {
       if (!request || request.cancelled || job.status !== "COMPLETE")
         throw new HostError(409, "The disruption can no longer inject.", "cancelled");
       assertPlaying(this.host.store.event(target.eventId), this.host.now());
+      this.assertBattleReady(job);
     }
   }
   /** Called inside the same SQLite transaction as the score/phase transition that caused it. */
@@ -345,6 +363,7 @@ export class LocalDisruptions {
       if (job.status !== "COMPLETE" || job.operation || !job.deployedAt) continue;
       const problem = event.problems.find((each) => each.problemId === job.problemId);
       if (!problem || job.definition !== problem.definition) continue;
+      if (!this.battleReady(job)) continue;
       this.captureJobTriggers(event, job, declaredDisruptions(problem));
     }
   }
