@@ -279,6 +279,8 @@
     "endpoint_effective_label": "Effective URL",
     "endpoint_not_yet_pre": "まだ取得できていません — deploy 完了後に CFn Outputs.",
     "endpoint_not_yet_post": "から自動取得します。 今すぐ自前の URL を登録するなら 下の「新しい URL を登録」 から override してください。",
+    "endpoint_not_filled_pre": "deploy は完了しましたが、CFn Outputs.",
+    "endpoint_not_filled_post": "は空のため、この URL は自動では入りません。 問題の説明に従って、下の「新しい URL を登録」 から URL を登録してください。",
     "endpoint_override_active_label": "override 中 (default:",
     "endpoint_override_input_label": "新しい URL を登録",
     "endpoint_override_url_empty": "URL を入力してください",

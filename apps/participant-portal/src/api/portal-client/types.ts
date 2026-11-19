@@ -202,6 +202,8 @@ export interface ParticipantEndpointView {
    * 表示するために露出。 metadata.json 由来なので機密ではない。
    */
   readonly defaultKey: string;
+  /** deploy 完了後も `defaultKey` の Output が空文字のとき true (= 自動では URL が入らない)。 */
+  readonly defaultOutputEmpty?: true;
   readonly defaultUrl?: string;
   readonly overrideUrl?: string;
   readonly effectiveUrl?: string;

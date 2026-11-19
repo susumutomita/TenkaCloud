@@ -59,6 +59,17 @@ describe("resolveEndpoints", () => {
     expect(result).toEqual([{ slot: "api", overridable: false, defaultKey: "MissingKey" }]);
   });
 
+  it("should flag defaultOutputEmpty when the CFn output exists as an empty string", () => {
+    const result = resolveEndpoints({
+      slots: [slot("frontend", "FrontendUrl")],
+      stackOutputs: JSON.stringify([{ OutputKey: "FrontendUrl", OutputValue: "" }]),
+      overrides: [],
+    });
+    expect(result).toEqual([
+      { slot: "frontend", overridable: false, defaultKey: "FrontendUrl", defaultOutputEmpty: true },
+    ]);
+  });
+
   it("effectiveUrl should be populated by override for slots with an override", () => {
     const stackOutputs = JSON.stringify([
       { OutputKey: "FrontendUrl", OutputValue: "https://front.example.com/" },
