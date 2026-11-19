@@ -61,8 +61,8 @@ const manifestSchema = z.object({
     .min(3),
 });
 
-const BUNDLE_ERROR =
-  "The Battle bundle must be a directory holding manifest.json and guest-bundle.tar.gz from TenkaCloudSimulator test/battle/image/build_bundle.py, built on this machine.";
+const bundleError = (path: string) =>
+  `The Battle bundle at ${path} must be a directory holding manifest.json and guest-bundle.tar.gz from TenkaCloudSimulator test/battle/image/build_bundle.py, built on this machine.`;
 
 function hostPlatform(): { os: string; arch: string } {
   const arch = { x64: "amd64", arm64: "arm64" }[process.arch as "x64" | "arm64"];
@@ -73,16 +73,16 @@ function hostPlatform(): { os: string; arch: string } {
   return { os: process.platform, arch };
 }
 
-function regularFile(path: string): void {
+function regularFile(path: string, bundle: string): void {
   const stat = lstatSync(path, { throwIfNoEntry: false });
-  if (!stat?.isFile()) throw new Error(BUNDLE_ERROR);
+  if (!stat?.isFile()) throw new Error(bundleError(bundle));
 }
 
-function readBounded(path: string): Buffer {
+function readBounded(path: string, bundle: string): Buffer {
   const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const size = fstatSync(fd).size;
-    if (size > MAX_MANIFEST_BYTES) throw new Error(BUNDLE_ERROR);
+    if (size > MAX_MANIFEST_BYTES) throw new Error(bundleError(bundle));
     const buffer = Buffer.alloc(size);
     let offset = 0;
     while (offset < size) {
@@ -105,16 +105,18 @@ export function prepareBattleRuntime(
 ): BattleRuntime {
   const platform = hostPlatform();
   const bundle = resolve(bundleDirectory);
+  if (!lstatSync(bundle, { throwIfNoEntry: false }))
+    throw new Error(`Battle bundle not found: ${bundle}`);
   const manifestPath = join(bundle, "manifest.json");
   const archivePath = join(bundle, "guest-bundle.tar.gz");
-  regularFile(manifestPath);
-  regularFile(archivePath);
-  const raw = readBounded(manifestPath);
+  regularFile(manifestPath, bundle);
+  regularFile(archivePath, bundle);
+  const raw = readBounded(manifestPath, bundle);
   let manifest: z.infer<typeof manifestSchema>;
   try {
     manifest = manifestSchema.parse(JSON.parse(raw.toString("utf8")));
   } catch {
-    throw new Error(BUNDLE_ERROR);
+    throw new Error(bundleError(bundle));
   }
   if (manifest.os !== platform.os || manifest.arch !== platform.arch)
     throw new Error(
@@ -123,7 +125,7 @@ export function prepareBattleRuntime(
   const file = (path: string) => manifest.files.find((entry) => entry.path === path);
   const disk = file(BASE_DISK);
   if (!file(EMULATOR)?.executable || !file(FIRMWARE) || !disk || disk.executable)
-    throw new Error(BUNDLE_ERROR);
+    throw new Error(bundleError(bundle));
 
   // A short, private, non-symlinked directory (macOS /tmp is a symlink to /private/tmp).
   const runtimeDirectory = mkdtempSync(join(realpathSync(temporaryRoot), "tcb-"));

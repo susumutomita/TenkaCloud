@@ -115,3 +115,15 @@ test("guest files are removed only after the Simulator exits cleanly", () => {
   releaseBattleRuntime(removed, 0);
   expect(existsSync(removed.runtimeDirectory)).toBe(false);
 });
+
+test("a missing bundle directory is reported as not found with its path", () => {
+  const { state } = bundle();
+  const missing = join(state, "absent-bundle");
+  expect(() => prepareBattleRuntime(missing, state)).toThrow(`Battle bundle not found: ${missing}`);
+});
+
+test("a present but invalid bundle names its path", () => {
+  const { directory, state } = bundle();
+  rmSync(join(directory, "guest-bundle.tar.gz"));
+  expect(() => prepareBattleRuntime(directory, state)).toThrow(directory);
+});
