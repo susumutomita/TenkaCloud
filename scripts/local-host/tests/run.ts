@@ -1137,6 +1137,27 @@ const c = import.meta.glob("../../../../.tenkacloud/pack-store/snapshots/**/meta
   );
 });
 
+test("A rejected event action names the running environment operation and says to retry", () =>
+  fixture(async (f) => {
+    const event = await f.create();
+    f.engine.operationDelay = 300;
+    const preparing = await f.request("admin", `/api/events/${event.eventId}/deploy`, "POST", {});
+    assert.equal(preparing.status, 202);
+    const duringPrepare = await f.request("admin", `/api/events/${event.eventId}/end`, "POST", {});
+    assert.equal(duringPrepare.status, 409);
+    assert.match(String(duringPrepare.body.message), /being prepared/u);
+    assert.match(String(duringPrepare.body.message), /Retry this action once it finishes/u);
+    await f.service.drain();
+
+    const deleting = await f.request("admin", `/api/events/${event.eventId}`, "DELETE", {});
+    assert.equal(deleting.status, 202, JSON.stringify(deleting.body));
+    const duringDelete = await f.request("admin", `/api/events/${event.eventId}/end`, "POST", {});
+    assert.equal(duringDelete.status, 409);
+    assert.match(String(duringDelete.body.message), /being deleted/u);
+    assert.match(String(duringDelete.body.message), /Retry this action once it finishes/u);
+    await f.service.drain();
+    f.engine.operationDelay = 0;
+  }));
 test("Stopping, restarting and removing team A's environment leaves team B untouched", () =>
   fixture(async (f) => {
     const event = await f.create();

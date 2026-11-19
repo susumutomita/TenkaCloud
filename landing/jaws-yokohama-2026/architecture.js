@@ -19,7 +19,7 @@
     const button = buttons.find((item) => item.dataset.view === selected);
     image.src = button.dataset.src;
     const descriptions = {
-      saas: "既存Draw.io原本のSaaS物理構成図。AWSサービスとスタックの配置・配線",
+      saas: "発表時点のSaaS物理構成図。AWSサービスとスタックの配置・配線",
       sbt: "SBTの2層とTenkaCloudが追加した問題デプロイエンジン・競技者コンソール",
       deploy:
         "開催者のデプロイ操作からEventBridge、Step Functions、Lambda、チーム別AWSのCloudFormationへ進む流れ",

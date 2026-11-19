@@ -233,6 +233,7 @@ export async function connectSimulatorHosting(
         }),
       ),
       connection,
+      { battle: battle !== undefined },
     );
     await connection.verify("000000000000", SIMULATOR_DEPLOY_ROLE);
     if (battle) await connection.verify("000000000000", SIMULATOR_COMMAND_ROLE);
