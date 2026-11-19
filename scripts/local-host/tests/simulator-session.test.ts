@@ -1,12 +1,67 @@
 /* eslint-disable sonarjs/no-clear-text-protocols -- Numeric loopback is the simulator transport contract. */
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, spyOn, test } from "bun:test";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { parseOptions } from "../options";
 import { withSimulatorSession } from "../simulator-session";
 
 const saved = { ...process.env };
+const temporary: string[] = [];
 afterEach(() => {
   process.env = { ...saved };
+  for (const path of temporary.splice(0)) rmSync(path, { recursive: true, force: true });
+  for (const method of [console.log, console.warn] as unknown as { mockRestore?: () => void }[])
+    method.mockRestore?.();
 });
+function dataDirectory(): string {
+  const directory = mkdtempSync(join(tmpdir(), "tc-session-"));
+  temporary.push(directory);
+  return directory;
+}
+function logs(): string[] {
+  const lines: string[] = [];
+  spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+    lines.push(args.join(" "));
+  });
+  spyOn(console, "warn").mockImplementation((...args: unknown[]) => {
+    lines.push(args.join(" "));
+  });
+  return lines;
+}
+const running = {
+  settings: {
+    endpoint: "http://127.0.0.1:43210",
+    tokenFile: "/private/token",
+    region: "ap-northeast-1",
+    bootstrap: true,
+  },
+  exited: new Promise<never>(() => {
+    /* Intentionally remains alive. */
+  }),
+  stop: async () => undefined,
+};
+async function session(
+  data: string,
+  managedSimulator: { battleBundle?: string; update?: boolean; binary?: string },
+  install: (args: Record<string, unknown>) => Promise<string> = async () => "/private/native",
+) {
+  noProxy();
+  const started: { binary: string; battleBundle?: string }[] = [];
+  await withSimulatorSession(
+    { dataDirectory: data, managedSimulator },
+    new AbortController().signal,
+    async () => undefined,
+    {
+      start: async (actual) => {
+        started.push(actual);
+        return running;
+      },
+      install: install as never,
+    },
+  );
+  return started;
+}
 function noProxy() {
   process.env = Object.fromEntries(
     Object.entries(saved).filter(([key]) => !/^(http|https|all)_proxy$/iu.test(key)),
@@ -260,4 +315,125 @@ test("explicit release update is only available for automatic same-machine Simul
     expect(() => parseOptions(["--update-simulator", ...extra], "/fixture", {})).toThrow(
       "--update-simulator",
     );
+});
+
+test("managed startup always checks for a newer release, strict only with --update-simulator", async () => {
+  const requests: Record<string, unknown>[] = [];
+  const install = async (args: Record<string, unknown>) => {
+    requests.push(args);
+    return "/private/native";
+  };
+  await session(dataDirectory(), {}, install);
+  await session(dataDirectory(), { update: true }, install);
+  expect(requests.map((r) => [r.checkLatest, r.update])).toEqual([
+    [true, undefined],
+    [true, true],
+  ]);
+  expect(requests[0]?.cacheDirectory).toEndWith("simulator-binaries");
+});
+
+test("a version change copies practice.db before the new version opens it", async () => {
+  const data = dataDirectory();
+  mkdirSync(join(data, "simulator"));
+  writeFileSync(join(data, "simulator", "practice.db"), "state bytes");
+  const lines = logs();
+  await session(data, {}, async (args) => {
+    await (args.beforeVersionChange as (c: { from: string; to: string }) => Promise<void>)({
+      from: "v0.1.0",
+      to: "v0.2.0",
+    });
+    return "/private/native";
+  });
+  const backup = join(data, "simulator", "practice.db.v0.1.0.bak");
+  expect(readFileSync(backup, "utf8")).toBe("state bytes");
+  expect(lines.some((line) => line.includes(backup))).toBe(true);
+});
+
+test("a first update with no database yet has nothing to copy", async () => {
+  const data = dataDirectory();
+  await session(data, {}, async (args) => {
+    await (args.beforeVersionChange as (c: { from: string; to: string }) => Promise<void>)({
+      from: "v0.1.0",
+      to: "v0.2.0",
+    });
+    return "/private/native";
+  });
+  expect(existsSync(join(data, "simulator"))).toBe(false);
+});
+
+test("an installer failure stops startup before any Simulator or Battle runtime starts", async () => {
+  noProxy();
+  const data = dataDirectory();
+  await expect(
+    withSimulatorSession(
+      { dataDirectory: data, managedSimulator: {} },
+      new AbortController().signal,
+      async () => undefined,
+      {
+        install: async () => {
+          throw new Error("Simulator release rejected");
+        },
+        start: async () => {
+          throw new Error("must not start");
+        },
+      },
+    ),
+  ).rejects.toThrow("rejected");
+});
+
+test("the default Battle bundle is used when present and announced once", async () => {
+  const data = dataDirectory();
+  mkdirSync(join(data, "battle-bundle"));
+  const lines = logs();
+  const started = await session(data, {});
+  expect(started[0]?.battleBundle).toBe(join(data, "battle-bundle"));
+  expect(lines.filter((line) => line.startsWith("Battle VM runtime"))).toEqual([
+    `Battle VM runtime: ${join(data, "battle-bundle")}`,
+  ]);
+});
+
+test("without a bundle startup continues with one line saying where to put one", async () => {
+  const data = dataDirectory();
+  const lines = logs();
+  const started = await session(data, {});
+  expect(started[0]).not.toHaveProperty("battleBundle");
+  const status = lines.filter((line) => line.startsWith("Battle VM runtime"));
+  expect(status).toHaveLength(1);
+  expect(status[0]).toContain(join(data, "battle-bundle"));
+  expect(status[0]).toContain("build_bundle.py");
+});
+
+test("an explicit bundle wins over the default and a missing one stops before any download", async () => {
+  const data = dataDirectory();
+  mkdirSync(join(data, "battle-bundle"));
+  const explicit = dataDirectory();
+  const lines = logs();
+  const started = await session(data, { battleBundle: explicit });
+  expect(started[0]?.battleBundle).toBe(explicit);
+  expect(lines).toContain(`Battle VM runtime: ${explicit}`);
+  const missing = join(data, "nope");
+  await expect(
+    session(data, { battleBundle: missing }, async () => {
+      throw new Error("must not download");
+    }),
+  ).rejects.toThrow(`Battle bundle not found: ${missing}`);
+});
+
+test("a binary override still reads the default bundle, and options never touch the filesystem", async () => {
+  const data = dataDirectory();
+  mkdirSync(join(data, "battle-bundle"));
+  const started = await session(data, { binary: "/private/native" });
+  expect(started[0]?.battleBundle).toBe(join(data, "battle-bundle"));
+  const parsed = parseOptions(["--data", "/fixture/does-not-exist"], "/fixture", {});
+  expect(parsed.managedSimulator).toEqual({});
+});
+
+test("integration scripts and managed startup tests never reach GitHub for a release", () => {
+  // Scripts that run make local or parse managed options must name a binary, an external
+  // endpoint or --no-simulator, otherwise the real installer would contact GitHub.
+  const directory = new URL("../integration/", import.meta.url).pathname;
+  for (const name of ["simulator-battle.ts", "simulator-fixture.ts", "simulator-hello.ts"]) {
+    const source = readFileSync(join(directory, name), "utf8");
+    expect(source).toMatch(/--no-simulator|--simulator-endpoint|simulator-binary/u);
+  }
 });
