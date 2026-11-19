@@ -12,7 +12,7 @@
  *   - lifecycle.ts    — `startProblem` / `stopProblem` (local-play on-demand container, #2392)
  *   - leaderboard.ts  — `getLeaderboard` / `getLeaderboardScoreEvents`
  *   - notifications.ts— `getNotifications`
- *   - sso.ts          — `getConsoleSigninUrl` / `getCliCredentials`
+ *   - sso.ts          — `getConsoleSigninUrl` / `getCliCredentials` / `getGuestTerminal`
  *   - endpoints.ts    — endpoint override CRUD (3 fns)
  *   - problems.ts     — `getDeployLogs` / `getBattleAttacks`
  *   - terminal.ts     — `issueProblemTerminalHandoff` / `problemTerminalUrl` (local-play

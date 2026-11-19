@@ -307,6 +307,10 @@ export interface RuntimeEngine {
   readonly supportsOnDemand?: boolean;
   containerCost?(definition: string): import("./container-budget").ContainerCost;
   disruptionAdapter?(): import("./disruption-model").DisruptionAdapter | undefined;
+  /** Whether disruptions must wait for this deployment's initial guest readiness. */
+  requiresGuestReadiness?(job: Job): boolean;
+  /** A job-specific uptime probe; undefined keeps the public HTTP probe. */
+  uptimeProbe?(job: Job): import("../lib/http-probe-client").ProbeFn | undefined;
   readonly hasAws?: boolean;
   participantAwsAccess?(args: {
     kind: import("./participant-aws-contract").ParticipantAwsAccess["kind"];

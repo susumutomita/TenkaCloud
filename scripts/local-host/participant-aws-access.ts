@@ -7,6 +7,7 @@ import {
   type ParticipantSessionCredentials,
   type SimulatorConsoleIssuer,
 } from "./participant-aws-contract";
+import type { SimulatorBattle } from "./simulator-battle";
 
 const FEDERATION_ENDPOINT = "https://signin.aws.amazon.com/federation";
 const SESSION_SECONDS = 3600;
@@ -18,6 +19,7 @@ const unitSchema = z.object({
   outputs: z.object({
     ParticipantViewerRoleArn: z.string().regex(/^arn:aws:iam::\d{12}:role\/[A-Za-z0-9+=,.@_/-]+$/u),
     ParameterName: z.string().optional(),
+    InstanceId: z.string().optional(),
   }),
 });
 const credentialsSchema = z.object({
@@ -35,6 +37,7 @@ interface ConsoleTarget {
   readonly deployRoleArn: string;
   readonly viewerRoleArn: string;
   readonly parameterName?: string;
+  readonly instanceId?: string;
 }
 
 type SessionCredentials = ParticipantSessionCredentials;
@@ -50,6 +53,7 @@ export interface ParticipantAwsClients {
   readonly sts: AccessStsClient;
   readonly federationFetch?: (url: string, init: RequestInit) => Promise<Response>;
   readonly simulatorConsole?: SimulatorConsoleIssuer;
+  readonly simulatorBattle?: Pick<SimulatorBattle, "terminal">;
 }
 
 export type { ParticipantAwsAccess } from "./participant-aws-contract";
@@ -88,6 +92,7 @@ function consoleTarget(job: Job, team: Team): ConsoleTarget {
     deployRoleArn,
     viewerRoleArn,
     parameterName: unit.outputs.ParameterName,
+    instanceId: unit.outputs.InstanceId,
   };
 }
 
@@ -229,6 +234,16 @@ export async function participantAwsAccess(args: {
         awsAccountId: target.accountId,
       },
     };
+  }
+  if (args.kind === "terminal") {
+    if (!args.endpointUrl || !target.instanceId || !args.clients.simulatorBattle)
+      throw new HostError(409, "This environment has no guest terminal.", "not_ready");
+    const terminal = await args.clients.simulatorBattle.terminal(
+      { credentials: viewer, instanceId: target.instanceId, region: target.region },
+      args.assertCurrent,
+    );
+    args.assertCurrent();
+    return { kind: "terminal", ...terminal };
   }
   if (args.endpointUrl) {
     if (!target.parameterName || !args.clients.simulatorConsole)

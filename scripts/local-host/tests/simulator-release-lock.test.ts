@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, spyOn, test } from "bun:test";
 import { createHash } from "node:crypto";
 import {
   chmod,
@@ -14,7 +14,14 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ensureOfficialSimulatorBinary } from "../simulator-release-lock";
+import {
+  ensureOfficialSimulatorBinary,
+  FIRST_RESOLVE_TIMEOUT_MS,
+  LOCKED_CHECK_TIMEOUT_MS,
+  SimulatorReleaseCancelled,
+  SimulatorReleaseRejected,
+  SimulatorReleaseUnavailable,
+} from "../simulator-release-lock";
 
 const releaseListUrl =
   "https://api.github.com/repos/susumutomita/TenkaCloudSimulator/releases?per_page=100";
@@ -605,4 +612,257 @@ test("binary API recovery updates lock only after verified bytes; failures prese
     }
     expect(await readFile(oldBinary, "utf8")).toBe(fixture().binary);
   }
+});
+
+// Automatic update check on every same-machine start (`checkLatest`).
+interface Capture {
+  logs: string[];
+  warnings: string[];
+}
+function capture(): Capture {
+  const seen: Capture = { logs: [], warnings: [] };
+  spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+    seen.logs.push(args.join(" "));
+  });
+  spyOn(console, "warn").mockImplementation((...args: unknown[]) => {
+    seen.warnings.push(args.join(" "));
+  });
+  return seen;
+}
+afterEach(() => {
+  (console.log as unknown as { mockRestore?: () => void }).mockRestore?.();
+  (console.warn as unknown as { mockRestore?: () => void }).mockRestore?.();
+});
+async function locked(version = "v0.1.0") {
+  const options = await setup();
+  await ensureOfficialSimulatorBinary(options, transport([fixture(version)]));
+  return options;
+}
+const lockPath = (options: { cacheDirectory: string }) =>
+  join(options.cacheDirectory, "release-lock.json");
+const check = { checkLatest: true } as const;
+/** A listing request that fails the way the network or GitHub would. */
+function failing(response: () => Promise<Response> | Response) {
+  const deps = transport();
+  return {
+    ...deps,
+    fetch: async (url: string, init: RequestInit) =>
+      url === releaseListUrl ? response() : deps.fetch(url, init),
+  };
+}
+
+test("a newer compatible release is locked, announced and reported before it replaces the lock", async () => {
+  const options = await locked("v0.1.0");
+  const seen = capture();
+  const changes: { from: string; to: string }[] = [];
+  const binary = await ensureOfficialSimulatorBinary(
+    {
+      ...options,
+      ...check,
+      beforeVersionChange: async (change) => {
+        changes.push(change);
+        // The old lock must still be in place while state is being copied.
+        expect(JSON.parse(await readFile(lockPath(options), "utf8")).version).toBe("v0.1.0");
+      },
+    },
+    transport([fixture("v0.2.0")]),
+  );
+  expect(await readFile(binary, "utf8")).toBe(fixture("v0.2.0").binary);
+  expect(changes).toEqual([{ from: "v0.1.0", to: "v0.2.0" }]);
+  expect(JSON.parse(await readFile(lockPath(options), "utf8")).version).toBe("v0.2.0");
+  expect(seen.logs).toContain("Simulator updated from v0.1.0 to v0.2.0.");
+});
+
+test("an unchanged release is reported up to date and the lock is not rewritten", async () => {
+  const options = await locked("v0.1.0");
+  const before = await stat(lockPath(options));
+  const seen = capture();
+  let changed = false;
+  await ensureOfficialSimulatorBinary(
+    {
+      ...options,
+      ...check,
+      beforeVersionChange: () => {
+        changed = true;
+      },
+    },
+    transport([fixture("v0.1.0")]),
+  );
+  const after = await stat(lockPath(options));
+  expect([after.ino, after.mtimeMs]).toEqual([before.ino, before.mtimeMs]);
+  expect(changed).toBe(false);
+  expect(seen.logs).toContain("Simulator v0.1.0: up to date.");
+});
+
+test("a withdrawn newest release keeps the lock with a one-line notice", async () => {
+  const options = await locked("v0.2.0");
+  const seen = capture();
+  const binary = await ensureOfficialSimulatorBinary(
+    { ...options, ...check },
+    transport([fixture("v0.1.0")]),
+  );
+  expect(await readFile(binary, "utf8")).toBe(fixture("v0.2.0").binary);
+  expect(JSON.parse(await readFile(lockPath(options), "utf8")).version).toBe("v0.2.0");
+  expect(seen.warnings).toHaveLength(1);
+  expect(seen.warnings[0]).toContain("older than the locked v0.2.0");
+});
+
+const transientCases: [string, () => Promise<Response> | Response, string][] = [
+  [
+    "unreachable",
+    () => {
+      throw new TypeError("fetch failed");
+    },
+    "GitHub is unreachable",
+  ],
+  ["HTTP 403", () => new Response(null, { status: 403 }), "HTTP 403"],
+  ["HTTP 429", () => new Response(null, { status: 429 }), "HTTP 429"],
+  ["HTTP 500", () => new Response(null, { status: 500 }), "HTTP 500"],
+  ["HTTP 503", () => new Response(null, { status: 503 }), "HTTP 503"],
+];
+for (const [name, response, reason] of transientCases)
+  test(`check failure (${name}) starts the locked release and says so`, async () => {
+    const options = await locked("v0.1.0");
+    const before = await stat(lockPath(options));
+    const seen = capture();
+    const binary = await ensureOfficialSimulatorBinary({ ...options, ...check }, failing(response));
+    expect(await readFile(binary, "utf8")).toBe(fixture("v0.1.0").binary);
+    expect((await stat(lockPath(options))).mtimeMs).toBe(before.mtimeMs);
+    expect(seen.warnings).toEqual([`Simulator update check failed (${reason}); using v0.1.0.`]);
+  });
+
+test("a check that outlives its short deadline is a timeout and uses the lock", async () => {
+  const options = await locked("v0.1.0");
+  const seen = capture();
+  const deps = failing(
+    () => undefined as unknown as Response, // replaced below
+  );
+  const binary = await ensureOfficialSimulatorBinary(
+    { ...options, ...check },
+    {
+      ...deps,
+      checkTimeoutMs: 20,
+      fetch: (url, init) =>
+        url === releaseListUrl
+          ? new Promise<Response>((_resolve, reject) =>
+              init.signal?.addEventListener("abort", () => reject(new Error("aborted"))),
+            )
+          : deps.fetch(url, init),
+    },
+  );
+  expect(await readFile(binary, "utf8")).toBe(fixture("v0.1.0").binary);
+  expect(seen.warnings).toEqual([
+    "Simulator update check failed (the check timed out); using v0.1.0.",
+  ]);
+});
+
+test("a lock gets the short deadline and a first start keeps the long one", async () => {
+  const timeouts: number[] = [];
+  const spy = spyOn(AbortSignal, "timeout").mockImplementation((ms: number) => {
+    timeouts.push(ms);
+    return new AbortController().signal;
+  });
+  try {
+    const first = await setup();
+    await ensureOfficialSimulatorBinary({ ...first, ...check }, transport());
+    await ensureOfficialSimulatorBinary({ ...first, ...check }, transport());
+    await ensureOfficialSimulatorBinary({ ...first, update: true }, transport());
+  } finally {
+    spy.mockRestore();
+  }
+  expect(FIRST_RESOLVE_TIMEOUT_MS).toBe(120_000);
+  expect(LOCKED_CHECK_TIMEOUT_MS).toBe(15_000);
+  expect(timeouts.slice(0, 3)).toEqual([120_000, 15_000, 120_000]);
+});
+
+test("Ctrl+C during the check stops with a cancellation, not the lock", async () => {
+  const options = await locked("v0.1.0");
+  const controller = new AbortController();
+  const deps = transport();
+  const pending = ensureOfficialSimulatorBinary(
+    { ...options, ...check, signal: controller.signal },
+    {
+      ...deps,
+      fetch: (url, init) =>
+        url === releaseListUrl
+          ? new Promise<Response>((_resolve, reject) => {
+              init.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+              controller.abort();
+            })
+          : deps.fetch(url, init),
+    },
+  );
+  await expect(pending).rejects.toBeInstanceOf(SimulatorReleaseCancelled);
+});
+
+test("verification failures and non-transient statuses stop instead of using the lock", async () => {
+  const bad = fixture("v0.2.0");
+  const broken = { ...bad, manifest: bad.manifest.replace("v0.2.0", "v0.2.1") };
+  const sameVersionChanged = fixture("v0.1.0");
+  sameVersionChanged.sums = sameVersionChanged.sums.replace(
+    hash(sameVersionChanged.binary),
+    hash("other bytes"),
+  );
+  const cases: [string, unknown, new (...args: never[]) => Error][] = [
+    ["BUILDINFO mismatch", transport([broken]), SimulatorReleaseRejected],
+    ["same version, new contents", transport([sameVersionChanged]), SimulatorReleaseRejected],
+    ["HTTP 404", failing(() => new Response(null, { status: 404 })), SimulatorReleaseUnavailable],
+    ["HTTP 401", failing(() => new Response(null, { status: 401 })), SimulatorReleaseUnavailable],
+  ];
+  for (const [, deps, type] of cases) {
+    const options = await locked("v0.1.0");
+    const seen = capture();
+    await expect(
+      ensureOfficialSimulatorBinary({ ...options, ...check }, deps as ReturnType<typeof transport>),
+    ).rejects.toBeInstanceOf(type);
+    expect(seen.warnings).toEqual([]);
+    expect(JSON.parse(await readFile(lockPath(options), "utf8")).version).toBe("v0.1.0");
+  }
+});
+
+test("no compatible release among the listing is not a transient failure", async () => {
+  const options = await locked("v0.1.0");
+  await expect(
+    ensureOfficialSimulatorBinary({ ...options, ...check }, transport([fixture("v0.3.0", 2)])),
+  ).rejects.toThrow("No compatible official Simulator release");
+});
+
+test("a first start has no lock to fall back to and stops with a typed failure", async () => {
+  const options = await setup();
+  const error = await ensureOfficialSimulatorBinary(
+    { ...options, ...check },
+    failing(() => new Response(null, { status: 503 })),
+  ).catch((caught: unknown) => caught);
+  expect(error).toBeInstanceOf(SimulatorReleaseUnavailable);
+  expect((error as SimulatorReleaseUnavailable).status).toBe(503);
+  expect(await readdir(options.cacheDirectory)).toEqual([]);
+});
+
+test("strict --update-simulator stops on every check failure and rejects an older release", async () => {
+  const options = await locked("v0.2.0");
+  for (const response of [
+    () => new Response(null, { status: 503 }),
+    () => {
+      throw new TypeError("fetch failed");
+    },
+  ])
+    await expect(
+      ensureOfficialSimulatorBinary({ ...options, ...check, update: true }, failing(response)),
+    ).rejects.toBeInstanceOf(SimulatorReleaseUnavailable);
+  await expect(
+    ensureOfficialSimulatorBinary(
+      { ...options, ...check, update: true },
+      transport([fixture("v0.1.0")]),
+    ),
+  ).rejects.toBeInstanceOf(SimulatorReleaseRejected);
+  const seen = capture();
+  await ensureOfficialSimulatorBinary({ ...options, update: true }, transport([fixture("v0.2.0")]));
+  expect(seen.logs).toContain("Simulator v0.2.0: up to date.");
+});
+
+test("without checkLatest or update a lock never contacts GitHub", async () => {
+  const options = await locked("v0.1.0");
+  const deps = transport([fixture("v0.2.0")]);
+  await ensureOfficialSimulatorBinary(options, deps);
+  expect(deps.requests).toEqual([]);
 });

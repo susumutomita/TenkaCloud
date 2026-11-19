@@ -5,6 +5,50 @@ const REPOSITORY = "https://github.com/susumutomita/TenkaCloudSimulator";
 const RELEASE_API = "https://api.github.com/repos/susumutomita/TenkaCloudSimulator/releases";
 type Fetcher = (url: string, init: RequestInit) => Promise<Response>;
 
+/** Why GitHub could not answer; only some reasons let a locked release start anyway. */
+export type SimulatorReleaseUnavailableKind = "unreachable" | "timeout" | "http";
+
+/** The release metadata could not be fetched. Nothing was verified, rejected or changed. */
+export class SimulatorReleaseUnavailable extends Error {
+  constructor(
+    message: string,
+    readonly kind: SimulatorReleaseUnavailableKind,
+    readonly status?: number,
+  ) {
+    super(message);
+    this.name = "SimulatorReleaseUnavailable";
+  }
+
+  /** Unreachable, timeout, HTTP 403, 429 and 5xx are transient; other statuses are not. */
+  get transient(): boolean {
+    if (this.kind !== "http") return true;
+    const status = this.status ?? 0;
+    return status === 403 || status === 429 || (status >= 500 && status <= 599);
+  }
+
+  get reason(): string {
+    if (this.kind === "unreachable") return "GitHub is unreachable";
+    if (this.kind === "timeout") return "the check timed out";
+    return `HTTP ${this.status}`;
+  }
+}
+
+/** Fetched bytes or metadata failed verification. Never replaced by a locked release. */
+export class SimulatorReleaseRejected extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SimulatorReleaseRejected";
+  }
+}
+
+/** The operator stopped the host (Ctrl+C) while the release was being checked. */
+export class SimulatorReleaseCancelled extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SimulatorReleaseCancelled";
+  }
+}
+
 export async function simulatorReleaseResponse(
   url: string,
   fetcher: (url: string, init: RequestInit) => Promise<Response>,
@@ -117,8 +161,10 @@ export async function metadata(
     void response.body?.cancel().catch(() => {
       /* Intentionally ignore cancellation settlement. */
     });
-    throw new Error(
+    throw new SimulatorReleaseUnavailable(
       `Simulator release metadata unavailable (HTTP ${response.status}); check connectivity or GitHub rate limits. The existing lock was retained.`,
+      "http",
+      response.status,
     );
   }
   const chunks: Uint8Array[] = [];

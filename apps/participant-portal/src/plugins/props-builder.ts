@@ -78,7 +78,9 @@ export function buildPortalEndpointsFromOutputs(
 export function buildPortalEndpointsFromRegistry(
   endpoints: readonly ParticipantEndpointView[],
 ): readonly PortalEndpoint[] {
-  return endpoints.map(({ defaultKey: _defaultKey, ...endpoint }) => endpoint);
+  return endpoints.map(
+    ({ defaultKey: _defaultKey, defaultOutputEmpty: _defaultOutputEmpty, ...endpoint }) => endpoint,
+  );
 }
 
 /**
