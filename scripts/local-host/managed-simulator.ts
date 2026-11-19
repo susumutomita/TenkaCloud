@@ -1,11 +1,18 @@
 import { spawn } from "node:child_process";
 import { accessSync, closeSync, constants, lstatSync, mkdirSync, openSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import {
+  type BattleRuntime,
+  prepareBattleRuntime,
+  releaseBattleRuntime,
+} from "./simulator-battle-runtime";
 import type { SimulatorSettings } from "./simulator-hosting";
 
 interface ManagedSimulatorOptions {
   readonly binary: string;
   readonly dataDirectory: string;
+  /** A Battle bundle directory from build_bundle.py; enables the Simulator's VM runtime. */
+  readonly battleBundle?: string;
   readonly signal?: AbortSignal;
   readonly startupTimeoutMs?: number;
 }
@@ -106,9 +113,16 @@ export async function startManagedSimulator(options: ManagedSimulatorOptions): P
   }
   const state = join(directory, "practice.db");
   const tokenFile = join(directory, "simulator-token");
+  let battle: BattleRuntime | undefined;
+  if (options.battleBundle) battle = prepareBattleRuntime(options.battleBundle, directory);
   const child = spawn(
     launch,
-    ["--listen=127.0.0.1:0", `--state=${state}`, `--token-file=${tokenFile}`],
+    [
+      "--listen=127.0.0.1:0",
+      `--state=${state}`,
+      `--token-file=${tokenFile}`,
+      ...(battle ? [`--battle-runtime-config=${battle.configPath}`] : []),
+    ],
     {
       detached: true,
       stdio: ["ignore", "pipe", "ignore"],
@@ -132,6 +146,7 @@ export async function startManagedSimulator(options: ManagedSimulatorOptions): P
     rejectReady = reject;
   });
   child.once("exit", (code, signal) => {
+    if (battle) releaseBattleRuntime(battle, code);
     resolveExit({ code, signal });
     rejectReady(new Error(startupFailure));
   });
@@ -161,12 +176,17 @@ export async function startManagedSimulator(options: ManagedSimulatorOptions): P
     stopping ??= (async () => {
       options.signal?.removeEventListener("abort", abort);
       signalGroup("SIGTERM");
-      for (let i = 0; i < 20 && groupExists(); i++)
+      // A Battle runtime stops and reaps its guests before exiting; give it time to confirm.
+      const graceSteps = battle ? 1200 : 20;
+      for (let i = 0; i < graceSteps && groupExists(); i++)
         await new Promise((resolve) => setTimeout(resolve, 25));
       if (groupExists()) signalGroup("SIGKILL");
       // Descendants can retain stdout even after the direct child exits.
       child.stdout.destroy();
-      await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 500))]);
+      await Promise.race([
+        exited,
+        new Promise((resolve) => setTimeout(resolve, battle ? 5_000 : 500)),
+      ]);
     })();
     return stopping;
   };
@@ -185,7 +205,8 @@ export async function startManagedSimulator(options: ManagedSimulatorOptions): P
           "Managed Simulator startup timed out. Check the native Simulator executable and local resources, then retry. The owned child is stopped; retained state and token remain.",
         ),
       ),
-    options.startupTimeoutMs ?? 120_000,
+    // Battle startup first verifies and extracts the pinned guest bundle.
+    options.startupTimeoutMs ?? (battle ? 600_000 : 120_000),
   );
   try {
     const endpoint = await ready;
