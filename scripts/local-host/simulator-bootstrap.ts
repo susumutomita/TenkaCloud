@@ -111,7 +111,9 @@ export function legacyHelloWorldBootstrapTemplate(
 
 /**
  * The second released template (Hello World and Lambda settings viewer), kept byte-for-byte so an
- * installation that still owns it can be recognised and replaced. Do not change it.
+ * installation that owns it is recognised. It is also the template for a Simulator without a
+ * Battle runtime: released Simulators before Battle support reject policy conditions. Do not
+ * change it.
  */
 export function reviewedProblemBootstrapTemplateV2(
   operatorAccountId: string,
@@ -258,8 +260,9 @@ function battleCommandStatements(region: string): Record<string, unknown>[] {
 }
 
 /**
- * Simulator-only bootstrap: preserve normal competitor bootstrap, without its AdministratorAccess.
- * A separate command role carries the Battle disruption command; it cannot deploy.
+ * Simulator-only bootstrap with Battle support: preserve normal competitor bootstrap, without its
+ * AdministratorAccess. A separate command role carries the Battle disruption command; it cannot
+ * deploy. Only a Simulator that reports a Battle runtime gets this template.
  */
 export function simulatorBootstrapTemplate(
   operatorAccountId: string,
@@ -379,28 +382,27 @@ function ownedBy(stack: Stack | undefined, ownership: string): stack is Stack {
 }
 
 /**
- * Retained Simulator state may hold the first template this installation created. Only that exact
- * owned, completed stack is deleted; the caller then creates the current one.
+ * Retained Simulator state may hold an earlier template this installation created, or the one for
+ * the other Battle runtime setting. Only that exact owned, completed stack is deleted; the caller
+ * then creates the current one.
  */
-async function deleteOwnedLegacyBootstrap(
-  client: BootstrapClient,
-  legacyOwnership: string,
-): Promise<void> {
+async function deleteOwnedBootstrap(client: BootstrapClient, ownership: string): Promise<void> {
   await client.send(new DeleteStackCommand({ StackName: STACK_NAME }));
   for (let attempts = 0; attempts < 30; attempts++) {
     const stack = await describe(client);
     if (!stack || stack.StackStatus === "DELETE_COMPLETE") return;
-    if (stack.StackStatus !== "DELETE_IN_PROGRESS" || !ownedBy(stack, legacyOwnership))
-      throw new Error("legacy bootstrap did not delete");
+    if (stack.StackStatus !== "DELETE_IN_PROGRESS" || !ownedBy(stack, ownership))
+      throw new Error("earlier bootstrap did not delete");
     await sleep(1000);
   }
-  throw new Error("legacy bootstrap deletion timed out");
+  throw new Error("earlier bootstrap deletion timed out");
 }
 
 async function awaitOwnedBootstrap(
   client: BootstrapClient,
   initial: Stack | undefined,
   ownership: string,
+  battle: boolean,
 ): Promise<void> {
   let stack = initial;
   for (let attempts = 0; attempts < 30; attempts++) {
@@ -411,7 +413,9 @@ async function awaitOwnedBootstrap(
       );
       if (
         outputs.get("RoleArn") !== `arn:aws:iam::${ACCOUNT}:role/${SIMULATOR_DEPLOY_ROLE}` ||
-        outputs.get("CommandRoleArn") !== `arn:aws:iam::${ACCOUNT}:role/${SIMULATOR_COMMAND_ROLE}`
+        (battle &&
+          outputs.get("CommandRoleArn") !==
+            `arn:aws:iam::${ACCOUNT}:role/${SIMULATOR_COMMAND_ROLE}`)
       )
         throw new Error("role mismatch");
       return;
@@ -423,6 +427,11 @@ async function awaitOwnedBootstrap(
   throw new Error("bootstrap timed out");
 }
 
+/**
+ * Create or reuse this installation's bootstrap for the Simulator's runtime. `battle` is whether
+ * the Simulator reports a Battle runtime; without one the Battle roles and statements are omitted.
+ * A completed stack this installation created from another known template is replaced.
+ */
 export async function bootstrapSimulatorRole(
   client: BootstrapClient,
   settings: {
@@ -430,21 +439,29 @@ export async function bootstrapSimulatorRole(
     readonly externalId: string;
     readonly region: string;
   },
+  { battle }: { readonly battle: boolean },
 ): Promise<void> {
   if (settings.operatorAccountId !== "999999999999")
     throw new Error("Simulator bootstrap requires the native simulator operator identity.");
   const { operatorAccountId, externalId, region } = settings;
-  const template = simulatorBootstrapTemplate(operatorAccountId, externalId, region);
+  const template = (battle ? simulatorBootstrapTemplate : reviewedProblemBootstrapTemplateV2)(
+    operatorAccountId,
+    externalId,
+    region,
+  );
   const ownership = sha256(template);
-  const legacyOwnerships = [
+  const replaceableOwnerships = [
     legacyHelloWorldBootstrapTemplate(operatorAccountId, externalId, region),
     reviewedProblemBootstrapTemplateV2(operatorAccountId, externalId, region),
-  ].map(sha256);
+    simulatorBootstrapTemplate(operatorAccountId, externalId, region),
+  ]
+    .map(sha256)
+    .filter((known) => known !== ownership);
   try {
     let stack = await describe(client);
-    const legacyOwnership = legacyOwnerships.find((legacy) => ownedBy(stack, legacy));
-    if (legacyOwnership && stack?.StackStatus === "CREATE_COMPLETE") {
-      await deleteOwnedLegacyBootstrap(client, legacyOwnership);
+    const replaceable = replaceableOwnerships.find((known) => ownedBy(stack, known));
+    if (replaceable && stack?.StackStatus === "CREATE_COMPLETE") {
+      await deleteOwnedBootstrap(client, replaceable);
       stack = undefined;
     }
     if (!stack) {
@@ -458,7 +475,7 @@ export async function bootstrapSimulatorRole(
       );
       stack = await describe(client);
     }
-    await awaitOwnedBootstrap(client, stack, ownership);
+    await awaitOwnedBootstrap(client, stack, ownership, battle);
   } catch {
     throw new Error(
       "Simulator bootstrap failed or conflicts with existing resources. Only this installation's own earlier bootstrap is replaced; inspect the local simulator bootstrap stack and role.",

@@ -183,11 +183,14 @@ const ownershipOf = (template: string) => [
   },
 ];
 
+const battle = { battle: true };
+const withoutBattle = { battle: false };
+
 test.each([
   ["Hello World", legacyHelloWorldBootstrapTemplate],
   ["reviewed-problem", reviewedProblemBootstrapTemplateV2],
 ])(
-  "bootstrap replaces only the exact completed %s stack this installation created",
+  "Battle bootstrap replaces only the exact completed %s stack this installation created",
   async (_, released) => {
     const legacy = released(settings.operatorAccountId, settings.externalId, settings.region);
     const { state, client } = retainedStateClient({
@@ -195,7 +198,7 @@ test.each([
       StackStatus: "CREATE_COMPLETE",
       Tags: ownershipOf(legacy),
     });
-    await bootstrapSimulatorRole(client as never, settings);
+    await bootstrapSimulatorRole(client as never, settings, battle);
     expect(state).toMatchObject({ deletes: 1, creates: 1 });
     expect(state.stack?.Tags).toEqual(
       ownershipOf(
@@ -206,10 +209,55 @@ test.each([
         ),
       ),
     );
-    await bootstrapSimulatorRole(client as never, settings);
+    await bootstrapSimulatorRole(client as never, settings, battle);
     expect(state).toMatchObject({ deletes: 1, creates: 1 });
   },
 );
+
+test("without a Battle runtime, bootstrap creates the reviewed-problem template that released Simulators accept", async () => {
+  const reviewed = reviewedProblemBootstrapTemplateV2(
+    settings.operatorAccountId,
+    settings.externalId,
+    settings.region,
+  );
+  // Released Simulators before Battle support reject an inline policy statement with a Condition.
+  const resources = JSON.parse(reviewed).Resources;
+  expect(Object.keys(resources)).toEqual(["CompetitorDeployRole"]);
+  for (const policy of resources.CompetitorDeployRole.Properties.Policies)
+    for (const statement of policy.PolicyDocument.Statement)
+      expect(statement.Condition).toBeUndefined();
+  const { state, client } = retainedStateClient(undefined);
+  await bootstrapSimulatorRole(client as never, settings, withoutBattle);
+  expect(state).toMatchObject({ deletes: 0, creates: 1 });
+  expect(state.stack?.Tags).toEqual(ownershipOf(reviewed));
+});
+
+test("without a Battle runtime, an owned reviewed-problem stack is reused and other owned stacks are replaced", async () => {
+  const reviewed = reviewedProblemBootstrapTemplateV2(
+    settings.operatorAccountId,
+    settings.externalId,
+    settings.region,
+  );
+  const reused = retainedStateClient({
+    StackName: "tc-simulator-bootstrap",
+    StackStatus: "CREATE_COMPLETE",
+    Tags: ownershipOf(reviewed),
+    Outputs: ownedOutputs.slice(0, 1),
+  });
+  await bootstrapSimulatorRole(reused.client as never, settings, withoutBattle);
+  await bootstrapSimulatorRole(reused.client as never, settings, withoutBattle);
+  expect(reused.state).toMatchObject({ deletes: 0, creates: 0 });
+  for (const earlier of [legacyHelloWorldBootstrapTemplate, simulatorBootstrapTemplate]) {
+    const { state, client } = retainedStateClient({
+      StackName: "tc-simulator-bootstrap",
+      StackStatus: "CREATE_COMPLETE",
+      Tags: ownershipOf(earlier(settings.operatorAccountId, settings.externalId, settings.region)),
+    });
+    await bootstrapSimulatorRole(client as never, settings, withoutBattle);
+    expect(state).toMatchObject({ deletes: 1, creates: 1 });
+    expect(state.stack?.Tags).toEqual(ownershipOf(reviewed));
+  }
+});
 
 test("bootstrap never deletes a legacy-looking stack from another installation or an unfinished one", async () => {
   const otherInstallation = legacyHelloWorldBootstrapTemplate(
@@ -232,7 +280,9 @@ test("bootstrap never deletes a legacy-looking stack from another installation o
     { StackName: "tc-simulator-bootstrap", StackStatus: "CREATE_COMPLETE" },
   ]) {
     const { state, client } = retainedStateClient(stack);
-    await expect(bootstrapSimulatorRole(client as never, settings)).rejects.toThrow("conflicts");
+    await expect(bootstrapSimulatorRole(client as never, settings, battle)).rejects.toThrow(
+      "conflicts",
+    );
     expect(state).toMatchObject({ deletes: 0, creates: 0 });
   }
 });
@@ -256,14 +306,15 @@ test("bootstrap creates once and only reuses an exact owned stack; conflicting r
       throw new Error("Unexpected write");
     },
   };
-  await bootstrapSimulatorRole(client as never, settings);
-  await bootstrapSimulatorRole(client as never, settings);
+  await bootstrapSimulatorRole(client as never, settings, battle);
+  await bootstrapSimulatorRole(client as never, settings, battle);
   expect(creates).toBe(1);
   await expect(
-    bootstrapSimulatorRole(client as never, {
-      ...settings,
-      externalId: "different-installation-secret",
-    }),
+    bootstrapSimulatorRole(
+      client as never,
+      { ...settings, externalId: "different-installation-secret" },
+      battle,
+    ),
   ).rejects.toThrow("conflicts");
   expect(creates).toBe(1);
 });
@@ -277,12 +328,16 @@ test("bootstrap refuses unexpected identity and hides native diagnostics on coll
     },
   };
   await expect(
-    bootstrapSimulatorRole(client as never, { ...settings, operatorAccountId: "123456789012" }),
+    bootstrapSimulatorRole(
+      client as never,
+      { ...settings, operatorAccountId: "123456789012" },
+      withoutBattle,
+    ),
   ).rejects.toThrow("native simulator");
   expect(calls).toBe(0);
   let failure: unknown;
   try {
-    await bootstrapSimulatorRole(client as never, settings);
+    await bootstrapSimulatorRole(client as never, settings, withoutBattle);
   } catch (error) {
     failure = error;
   }
@@ -303,5 +358,7 @@ test("bootstrap rejects an owned stack without the Battle command role output", 
     Tags: ownershipOf(template),
     Outputs: ownedOutputs.slice(0, 1),
   });
-  await expect(bootstrapSimulatorRole(client as never, settings)).rejects.toThrow("conflicts");
+  await expect(bootstrapSimulatorRole(client as never, settings, battle)).rejects.toThrow(
+    "conflicts",
+  );
 });

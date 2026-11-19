@@ -105,6 +105,46 @@ describe("EndpointOverrideForm (Issue #607 / #2661)", () => {
     expect(screen.queryByRole("button", { name: "登録" })).not.toBeInTheDocument();
   });
 
+  it("should say the URL is not auto-filled when deploy completed with an empty output (ja / en)", () => {
+    const view = render(
+      withI18n(
+        <EndpointOverrideForm
+          {...baseProps}
+          endpoints={[endpoint({ defaultKey: "FrontendUrl", defaultOutputEmpty: true })]}
+        />,
+      ),
+    );
+    expect(view.container.textContent).toContain("自動では入りません");
+    expect(view.container.textContent).toContain("FrontendUrl");
+    expect(view.container.textContent).not.toContain("から自動取得します");
+    view.unmount();
+
+    window.localStorage.setItem("tenkacloud.portal.locale", "en");
+    const en = render(
+      withI18n(
+        <EndpointOverrideForm
+          {...baseProps}
+          endpoints={[endpoint({ defaultKey: "FrontendUrl", defaultOutputEmpty: true })]}
+        />,
+      ),
+    );
+    expect(en.container.textContent).toContain("will not be filled in automatically");
+    expect(en.container.textContent).not.toContain("will be auto-fetched");
+  });
+
+  it("should keep the wait-for-deploy text before deploy completes", () => {
+    const view = render(
+      withI18n(
+        <EndpointOverrideForm
+          {...baseProps}
+          endpoints={[endpoint({ defaultKey: "FrontendUrl" })]}
+        />,
+      ),
+    );
+    expect(view.container.textContent).toContain("から自動取得します");
+    expect(view.container.textContent).not.toContain("自動では入りません");
+  });
+
   it("should publish the server response after saving an override", async () => {
     const user = userEvent.setup();
     const next = [

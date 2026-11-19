@@ -297,7 +297,7 @@ export class HostingDomain {
   readonly disruptions: LocalDisruptions;
   readonly internetAccess: LocalInternetAccess;
   private readonly tasks = new Set<Promise<void>>();
-  private readonly busyEvents = new Set<string>();
+  private readonly busyEvents = new Map<string, "prepare" | "delete">();
   /** jobId → eventId of single-environment operations still running. */
   private readonly busyJobs = new Map<string, string>();
   readonly uptime: LocalUptime;
@@ -1141,8 +1141,14 @@ export class HostingDomain {
     if (parts[0] === "internet-access") return this.internetAccess.route(event, parts, request);
     const disruption = this.disruptions.route(event, parts, request, principal);
     if (disruption) return disruption;
-    if (this.busyEvents.has(event.eventId))
-      throw new HostError(409, "An environment operation is already in progress.");
+    const running = this.busyEvents.get(event.eventId);
+    if (running)
+      throw new HostError(
+        409,
+        `An environment operation is already in progress: the event's environments are being ${
+          running === "prepare" ? "prepared" : "deleted"
+        }. Retry this action once it finishes.`,
+      );
     const body = () => object(request.body);
     const commands: Record<string, () => ApiResponse> = {
       "PUT progression-gate": () => ok(this.progression.configure(event, request.body)),
@@ -1770,7 +1776,7 @@ export class HostingDomain {
       });
       return planned;
     });
-    this.launch(event.eventId, async () => {
+    this.launch(event.eventId, "prepare", async () => {
       for (const original of targets) {
         if (onDemandContainer(event, original.definition)) continue;
         await this.startJob(original.jobId);
@@ -1862,7 +1868,7 @@ export class HostingDomain {
         this.store.putJob(job);
       }
     });
-    this.launch(event.eventId, async () => {
+    this.launch(event.eventId, "delete", async () => {
       for (const job of jobs) {
         if (job.status === "DELETED") continue;
         job.status = "DELETING";
@@ -1896,8 +1902,12 @@ export class HostingDomain {
       202,
     );
   }
-  private launch(eventId: string, operation: () => Promise<void>): void {
-    this.busyEvents.add(eventId);
+  private launch(
+    eventId: string,
+    kind: "prepare" | "delete",
+    operation: () => Promise<void>,
+  ): void {
+    this.busyEvents.set(eventId, kind);
     this.track(
       Promise.resolve()
         .then(operation)

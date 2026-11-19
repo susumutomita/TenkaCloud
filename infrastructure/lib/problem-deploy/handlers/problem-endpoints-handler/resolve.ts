@@ -23,9 +23,19 @@ export interface ResolvedEndpoint {
    * key 自体は metadata.json に既に公開済 (= 機密情報ではない)。
    */
   readonly defaultKey: string;
+  /**
+   * deploy が完了し、`defaultKey` の Output が空文字で出力された slot で true。
+   * 問題が URL を自動では埋めず、競技者の登録に任せる設計であることを UI が判別するために使う。
+   */
+  readonly defaultOutputEmpty?: true;
   readonly defaultUrl?: string;
   readonly overrideUrl?: string;
   readonly effectiveUrl?: string;
+}
+
+/** deploy 完了後に Output が空文字で出力された slot だけ `defaultOutputEmpty` を付ける。 */
+function emptyOutputFlag(output: unknown): { defaultOutputEmpty?: true } {
+  return output === "" ? { defaultOutputEmpty: true } : {};
 }
 
 /**
@@ -64,6 +74,7 @@ export function resolveEndpoints(args: {
       ...(slot.description !== undefined ? { description: slot.description } : {}),
       overridable: slot.overridable,
       defaultKey: slot.default.key,
+      ...emptyOutputFlag(baseOutput),
       ...(defaultUrl !== undefined ? { defaultUrl } : {}),
       ...(overrideUrl !== undefined ? { overrideUrl } : {}),
       ...(effectiveUrl !== undefined ? { effectiveUrl } : {}),
