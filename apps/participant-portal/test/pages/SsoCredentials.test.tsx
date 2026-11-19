@@ -400,7 +400,7 @@ describe("SsoCredentialsPage open-console flow", () => {
     mockTeamView.mockReturnValue(oneProblem);
     renderPage();
     await user.click(openButton());
-    expect(await screen.findByText(/sso_credentials\.validation_error/)).toBeInTheDocument();
+    expect(await screen.findByText("sso_credentials.error_generic")).toBeInTheDocument();
   });
 
   it("should surface a generic error message and allow dismissing it", async () => {

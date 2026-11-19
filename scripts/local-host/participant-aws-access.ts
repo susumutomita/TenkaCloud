@@ -53,6 +53,7 @@ export interface ParticipantAwsClients {
   readonly sts: AccessStsClient;
   readonly federationFetch?: (url: string, init: RequestInit) => Promise<Response>;
   readonly simulatorConsole?: SimulatorConsoleIssuer;
+  readonly simulatorInstanceConsole?: boolean;
   readonly simulatorBattle?: Pick<SimulatorBattle, "terminal">;
 }
 
@@ -187,6 +188,13 @@ async function consoleUrl(
   return loginUrl.href;
 }
 
+function simulatorConsoleTarget(target: ConsoleTarget, clients: ParticipantAwsClients) {
+  if (target.parameterName) return { parameterName: target.parameterName };
+  return target.instanceId && clients.simulatorInstanceConsole
+    ? { instanceId: target.instanceId }
+    : undefined;
+}
+
 /** Both entry points issue only the job's viewer credentials; deploy credentials stay here. */
 export async function participantAwsAccess(args: {
   readonly kind: ParticipantAwsAccess["kind"];
@@ -246,10 +254,11 @@ export async function participantAwsAccess(args: {
     return { kind: "terminal", ...terminal };
   }
   if (args.endpointUrl) {
-    if (!target.parameterName || !args.clients.simulatorConsole)
+    const consoleTargetInput = simulatorConsoleTarget(target, args.clients);
+    if (!consoleTargetInput || !args.clients.simulatorConsole)
       throw new HostError(409, "This environment has no Simulator Console target.", "not_ready");
     const loginUrl = await args.clients.simulatorConsole(
-      { credentials: viewer, parameterName: target.parameterName, region: target.region },
+      { credentials: viewer, ...consoleTargetInput, region: target.region },
       args.assertCurrent,
     );
     args.assertCurrent();

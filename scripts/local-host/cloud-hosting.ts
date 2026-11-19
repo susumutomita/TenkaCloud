@@ -28,6 +28,7 @@ type AwsClients = Pick<
   | "simulatorEndpoint"
   | "simulatorConsole"
   | "simulatorServices"
+  | "simulatorInstanceConsole"
   | "simulatorBattle"
 >;
 

@@ -89,6 +89,8 @@ export interface CloudFormationEngineOptions extends ParticipantAwsClients {
   readonly simulatorEndpoint?: string;
   /** Signing services the connected Simulator's native SDK sessions accept (its capability document). */
   readonly simulatorServices?: readonly string[];
+  /** The Simulator Console opens a server (EC2 instance) for Session Manager. */
+  readonly simulatorInstanceConsole?: boolean;
   /** Present only when the connected Simulator reports a configured Battle VM runtime. */
   readonly simulatorBattle?: SimulatorBattle;
   readonly ssm?: AwsDisruptionClients["ssm"];
@@ -170,8 +172,12 @@ function simulatorAccessCapabilities(
   services: readonly string[],
   consoleReady: boolean,
   battle: boolean,
+  instanceConsoleReady = false,
 ): readonly TargetAccessCapability[] {
   if (!simulatorProblemSupported(problemId, services, battle)) return [];
+  // The Console's own page says whether the server is still starting, so this entry does not
+  // wait for endpoint registration or scoring; it replaces the guest terminal code.
+  if (instanceConsoleReady) return ["console", "cli-credentials"] as const;
   if (battle && isSimulatorBattleProblem(problemId))
     return ["guest-terminal", "cli-credentials"] as const;
   if (consoleReady) return ["console", "cli-credentials"] as const;
@@ -623,6 +629,11 @@ export class CloudFormationEngine implements RuntimeEngine {
               this.options.simulatorServices ?? [],
               Boolean(this.options.simulatorConsole && unit?.outputs?.ParameterName),
               Boolean(this.options.simulatorBattle),
+              Boolean(
+                this.options.simulatorConsole &&
+                  this.options.simulatorInstanceConsole &&
+                  unit?.outputs?.InstanceId,
+              ),
             ),
           }
         : {}),

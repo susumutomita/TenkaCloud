@@ -15,13 +15,13 @@ const input = {
   region: "ap-northeast-1",
 };
 
-function fixture(reply?: () => Response) {
+function fixture(reply?: () => Response, services: string[] = ["ssm-parameter"]) {
   const calls: { url: string; init: RequestInit }[] = [];
   const guard = mock(() => undefined);
   const http = mock(async (url: string | URL | Request, init: RequestInit = {}) => {
     calls.push({ url: String(url), init });
     if (String(url).endsWith("/capabilities"))
-      return Response.json({ consoleHandoff: { version: 1, services: ["ssm-parameter"] } });
+      return Response.json({ consoleHandoff: { version: 1, services } });
     return (
       reply?.() ??
       Response.json({ Code: code, ExpiresAt: new Date(Date.now() + 30_000).toISOString() })
@@ -153,3 +153,56 @@ test.each([
     expect(http).toHaveBeenCalledTimes(1);
   },
 );
+
+const instanceInput = {
+  credentials: input.credentials,
+  instanceId: "i-0abc1234def56789a",
+  region: input.region,
+};
+
+test("a Simulator that advertises ec2-instance signs the InstanceId handoff with viewer credentials", async () => {
+  const f = fixture(undefined, ["ssm-parameter", "ec2-instance"]);
+  const capabilities = await connectSimulatorCapabilities(endpoint, "synthetic", f.guard, f.http);
+  expect(capabilities.instanceConsole).toBe(true);
+  expect(await capabilities.console?.(instanceInput, () => undefined)).toBe(
+    `${endpoint}/_simulator/login#handoff=${code}`,
+  );
+  const handoff = f.calls[1];
+  expect(handoff?.init.body).toBe(
+    JSON.stringify({ InstanceId: instanceInput.instanceId, Region: input.region }),
+  );
+  const headers = new Headers(handoff?.init.headers);
+  expect(headers.get("authorization")).toContain("Credential=TCSIMASIA-synthetic-viewer/");
+  expect(headers.get("x-amz-security-token")).toBe(input.credentials.sessionToken);
+});
+
+test("an older Simulator refuses an InstanceId handoff without calling it", async () => {
+  const f = fixture();
+  const capabilities = await connectSimulatorCapabilities(endpoint, "synthetic", f.guard, f.http);
+  expect(capabilities.instanceConsole).toBe(false);
+  await expect(capabilities.console?.(instanceInput, () => undefined)).rejects.toMatchObject({
+    status: 409,
+    kind: "not_ready",
+  });
+  expect(f.calls).toHaveLength(1);
+});
+
+test.each(["i-xyz", "i-ABC12345", "i-1234567", `i-${"a".repeat(33)}`, "/tc/param"])(
+  "a malformed InstanceId is refused before any request: %s",
+  async (instanceId) => {
+    const f = fixture(undefined, ["ec2-instance"]);
+    const capabilities = await connectSimulatorCapabilities(endpoint, "synthetic", f.guard, f.http);
+    await expect(
+      capabilities.console?.({ ...instanceInput, instanceId }, () => undefined),
+    ).rejects.toMatchObject({ kind: "not_ready" });
+    expect(f.calls).toHaveLength(1);
+  },
+);
+
+test("a Simulator advertising only ec2-instance refuses a parameter handoff", async () => {
+  const f = fixture(undefined, ["ec2-instance"]);
+  const capabilities = await connectSimulatorCapabilities(endpoint, "synthetic", f.guard, f.http);
+  await expect(capabilities.console?.(input, () => undefined)).rejects.toMatchObject({
+    kind: "not_ready",
+  });
+});

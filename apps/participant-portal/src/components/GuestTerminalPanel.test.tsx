@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   PortalAssumeRoleError,
   PortalAuthError,
+  PortalNetworkError,
   PortalValidationError,
 } from "../api/portal-client";
 
@@ -61,10 +62,11 @@ describe("GuestTerminalPanel", () => {
   });
 
   it("shows the host's refusal, such as a server that is still starting", async () => {
-    mockGet.mockRejectedValue(new Error("The server is still starting."));
+    mockGet.mockRejectedValue(new PortalNetworkError(409, '{"error":"guest_not_ready"}'));
     render(<GuestTerminalPanel {...props} />);
     fireEvent.click(screen.getByText("sso_credentials.terminal.issue_button"));
-    await waitFor(() => expect(screen.getByText("The server is still starting.")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("sso_credentials.error_not_ready")).toBeTruthy());
+    expect(screen.queryByText(/guest_not_ready|Portal API/)).toBeNull();
     expect(screen.getByText("sso_credentials.terminal.error_header")).toBeTruthy();
   });
 
@@ -75,9 +77,7 @@ describe("GuestTerminalPanel", () => {
     expect(await screen.findByText(/sso_credentials\.cli\.assume_role_failed/)).toBeTruthy();
     mockGet.mockRejectedValueOnce(new PortalValidationError("guest_not_ready"));
     fireEvent.click(screen.getByText("sso_credentials.terminal.issue_button"));
-    expect(
-      await screen.findByText(/sso_credentials\.validation_error.*guest_not_ready/),
-    ).toBeTruthy();
+    expect(await screen.findByText("sso_credentials.error_not_ready")).toBeTruthy();
     const dismiss = document.querySelector<HTMLButtonElement>('button[class*="dismiss-button"]');
     fireEvent.click(dismiss as HTMLButtonElement);
     await waitFor(() =>

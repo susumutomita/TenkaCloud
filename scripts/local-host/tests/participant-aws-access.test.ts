@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, mock, test } from "bun:test";
 import { z } from "zod";
 import { createParticipantAwsFixture } from "./participant-aws-fixture";
 
@@ -319,4 +319,84 @@ test("ending the event during Simulator handoff withholds its one-time URL", asy
   expect(response.status).toBe(409);
   expect(response.body.error).toBe("scoring_ended");
   expect(JSON.stringify(response.body)).not.toContain("must-not-escape");
+});
+
+const instanceView = (body: unknown) =>
+  z
+    .array(z.object({ consoleKind: z.string(), accessCapabilities: z.array(z.string()) }))
+    .parse((body as { problems: unknown }).problems)[0];
+
+test("a Simulator that opens servers issues the console from the team's own InstanceId", async () => {
+  const issued: unknown[] = [];
+  const f = await createParticipantAwsFixture({
+    simulatorEndpoint: "http://127.0.0.1:4566",
+    simulatorInstanceConsole: true,
+    instanceTarget: true,
+    simulatorConsole: async (input, assertCurrent) => {
+      assertCurrent();
+      issued.push(input);
+      return "http://127.0.0.1:4566/_simulator/login#handoff=synthetic";
+    },
+  });
+  cleanups.push(f.close);
+  expect(instanceView((await f.get("/api/portal/me")).body)).toMatchObject({
+    consoleKind: "simulator",
+    accessCapabilities: ["console", "cli-credentials"],
+  });
+  expect((await f.access("console")).status).toBe(200);
+  expect(issued).toMatchObject([{ instanceId: "i-0abc0000def", region: "ap-northeast-1" }]);
+  expect(issued[0]).not.toHaveProperty("parameterName");
+  expect((await f.access("console", f.beta.job.jobId)).status).toBe(403);
+  expect(issued).toHaveLength(1);
+});
+
+for (const status of ["PENDING", "FAILED", "STOPPED", "DELETING", "DELETED"] as const) {
+  test(`a ${status} environment issues no server console`, async () => {
+    const issue = mock(async () => "http://127.0.0.1:4566/_simulator/login#handoff=x");
+    const f = await createParticipantAwsFixture({
+      simulatorEndpoint: "http://127.0.0.1:4566",
+      simulatorInstanceConsole: true,
+      instanceTarget: true,
+      simulatorConsole: issue,
+    });
+    cleanups.push(f.close);
+    f.store.putJob({ ...f.alpha.job, status });
+    expect((await f.access("console")).status).toBe(409);
+    expect(issue).not.toHaveBeenCalled();
+  });
+}
+
+test("a Simulator that cannot open servers offers and issues no console for a server", async () => {
+  const issue = mock(async () => "http://127.0.0.1:4566/_simulator/login#handoff=x");
+  const f = await createParticipantAwsFixture({
+    simulatorEndpoint: "http://127.0.0.1:4566",
+    simulatorInstanceConsole: false,
+    instanceTarget: true,
+    simulatorConsole: issue,
+  });
+  cleanups.push(f.close);
+  expect(instanceView((await f.get("/api/portal/me")).body)?.accessCapabilities).toEqual([
+    "cli-credentials",
+  ]);
+  const response = await f.access("console");
+  expect(response.status).toBe(409);
+  expect(issue).not.toHaveBeenCalled();
+});
+
+test("a job with neither InstanceId nor ParameterName issues no console", async () => {
+  const issue = mock(async () => "http://127.0.0.1:4566/_simulator/login#handoff=x");
+  const f = await createParticipantAwsFixture({
+    simulatorEndpoint: "http://127.0.0.1:4566",
+    simulatorInstanceConsole: true,
+    simulatorConsole: issue,
+  });
+  cleanups.push(f.close);
+  const unit = JSON.parse(f.alpha.job.unit ?? "{}") as { outputs: Record<string, string> };
+  delete unit.outputs.ParameterName;
+  f.store.putJob({ ...f.alpha.job, unit: JSON.stringify(unit) });
+  expect(instanceView((await f.get("/api/portal/me")).body)?.accessCapabilities).toEqual([
+    "cli-credentials",
+  ]);
+  expect((await f.access("console")).status).toBe(409);
+  expect(issue).not.toHaveBeenCalled();
 });

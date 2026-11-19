@@ -5,18 +5,12 @@ import ExpandableSection from "@cloudscape-design/components/expandable-section"
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import { normalizeSimulatorEndpointUrl } from "@tenkacloud/portal-contracts";
-import { toErrorMessage, useNowMs } from "@tenkacloud/web-kit";
+import { useNowMs } from "@tenkacloud/web-kit";
 import { useState } from "react";
-import {
-  type CliCredentialsView,
-  getCliCredentials,
-  PortalAssumeRoleError,
-  PortalAuthError,
-  PortalValidationError,
-} from "../api/portal-client";
+import { type CliCredentialsView, getCliCredentials, PortalAuthError } from "../api/portal-client";
 import { useT } from "../i18n";
 import { buildShellExport } from "./cli-credentials-export";
-import { describeAwsAccessError } from "./describeAwsAccessError";
+import { describeAccessError } from "./describeAwsAccessError";
 
 export { buildShellExport } from "./cli-credentials-export";
 
@@ -66,15 +60,7 @@ export function CliCredentialsPanel({
         onAuthError();
         return;
       }
-      if (err instanceof PortalAssumeRoleError) {
-        setError(describeAwsAccessError(err, t));
-        return;
-      }
-      if (err instanceof PortalValidationError) {
-        setError(t("sso_credentials.validation_error", { errorCode: err.errorCode }));
-        return;
-      }
-      setError(toErrorMessage(err));
+      setError(describeAccessError(err, t));
     } finally {
       setLoading(false);
     }

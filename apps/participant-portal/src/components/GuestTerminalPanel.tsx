@@ -3,17 +3,10 @@ import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-import { toErrorMessage } from "@tenkacloud/web-kit";
 import { useState } from "react";
-import {
-  type GuestTerminalHandoff,
-  getGuestTerminal,
-  PortalAssumeRoleError,
-  PortalAuthError,
-  PortalValidationError,
-} from "../api/portal-client";
+import { type GuestTerminalHandoff, getGuestTerminal, PortalAuthError } from "../api/portal-client";
 import { useT } from "../i18n";
-import { describeAwsAccessError } from "./describeAwsAccessError";
+import { describeAccessError } from "./describeAwsAccessError";
 
 /**
  * Simulator Battle: a shell inside the team's guest server, through the Simulator's own
@@ -48,15 +41,7 @@ export function GuestTerminalPanel({
         onAuthError();
         return;
       }
-      if (err instanceof PortalAssumeRoleError) {
-        setError(describeAwsAccessError(err, t));
-        return;
-      }
-      if (err instanceof PortalValidationError) {
-        setError(t("sso_credentials.validation_error", { errorCode: err.errorCode }));
-        return;
-      }
-      setError(toErrorMessage(err));
+      setError(describeAccessError(err, t));
     } finally {
       setLoading(false);
     }

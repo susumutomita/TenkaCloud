@@ -211,7 +211,7 @@ describe("CliCredentialsPanel fetch flow", () => {
     mockGet.mockRejectedValue(new PortalValidationError("bad_input"));
     renderPanel();
     fireEvent.click(issueButton());
-    expect(await screen.findByText(/sso_credentials\.validation_error/)).toBeInTheDocument();
+    expect(await screen.findByText("sso_credentials.error_generic")).toBeInTheDocument();
   });
 
   it("should surface a generic error and allow dismissing it", async () => {

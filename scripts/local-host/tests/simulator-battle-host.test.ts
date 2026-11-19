@@ -50,7 +50,13 @@ function fakeBattle() {
   return { battle, calls };
 }
 
-function host(battle?: SimulatorBattle) {
+function host(
+  battle?: SimulatorBattle,
+  console?: Pick<
+    ConstructorParameters<typeof CloudFormationEngine>[1],
+    "simulatorConsole" | "simulatorInstanceConsole"
+  >,
+) {
   const directory = mkdtempSync(join(tmpdir(), "tenka-simulator-battle-"));
   const store = new HostStore(new Database(":memory:"));
   cleanup.push(() => {
@@ -63,6 +69,7 @@ function host(battle?: SimulatorBattle) {
     simulatorEndpoint: "http://127.0.0.1:4566",
     simulatorServices: ["sts", "iam", "cloudformation", "ssm", "lambda"],
     ...(battle ? { simulatorBattle: battle } : {}),
+    ...console,
     region: "ap-northeast-1",
     externalId: "fixture-external-id-0123456789",
     operatorAccountId: async () => "999999999999",
@@ -404,3 +411,100 @@ test("tearing down one team's Battle seals only its job and keeps the other acce
   await f.beta.terminal();
   expect(f.calls.at(-1)).toStartWith(`terminal:${f.beta.instanceId}:`);
 });
+
+test.each([
+  { instanceConsole: true, capabilities: ["console", "cli-credentials"] },
+  { instanceConsole: false, capabilities: ["guest-terminal", "cli-credentials"] },
+])(
+  "Battle console entry follows the Simulator's server console support: $instanceConsole",
+  async ({ instanceConsole, capabilities }) => {
+    const issued: unknown[] = [];
+    const { battle } = fakeBattle();
+    const fixture = host(battle, {
+      simulatorInstanceConsole: instanceConsole,
+      simulatorConsole: async (input) => {
+        issued.push(input);
+        return "http://127.0.0.1:4566/_simulator/login#handoff=synthetic";
+      },
+    });
+    const problem = fixture.cloud
+      .catalog()
+      .find((entry) => entry.problemId === "hello-world-battle");
+    if (!problem) throw new Error("Battle missing from the simulator catalog");
+    const now = Date.now();
+    const eventId = id();
+    const teamId = id();
+    fixture.store.putEvent({
+      eventId,
+      name: "Battle",
+      status: "READY",
+      createdAt: new Date(now).toISOString(),
+      updatedAt: new Date(now).toISOString(),
+      startsAt: new Date(now - 1000).toISOString(),
+      expiresAt: Math.floor(now / 1000) + 3600,
+      scoringLocked: false,
+      scoreboardFreezeMinutes: 0,
+      problems: [problem],
+    });
+    fixture.store.putTeam({
+      teamId,
+      eventId,
+      internalSlug: "alpha",
+      displayName: "Alpha",
+      loginKey: "battle-team-key",
+      snapshot: null,
+      score: 0,
+      completedProblems: 0,
+      scoreEvents: [],
+      aws: { accountId: "000000000000", roleName: "TenkaCloud-SimulatorDeploy-Role" },
+    });
+    const jobId = id();
+    fixture.store.putJob({
+      jobId,
+      eventId,
+      teamId,
+      problemId: problem.problemId,
+      definition: problem.definition,
+      offset: 0,
+      status: "COMPLETE",
+      deployedAt: now - 1000,
+      unit: JSON.stringify({
+        kind: "cloudformation",
+        accountId: "000000000000",
+        roleArn: "arn:aws:iam::000000000000:role/TenkaCloud-SimulatorDeploy-Role",
+        region: "ap-northeast-1",
+        stackName: "tc-hello-world-battle-alpha",
+        stackId: fixture.aws.seedStack("tc-hello-world-battle-alpha", [
+          { Key: "tenkacloud:job", Value: jobId },
+        ]).stackId,
+        outputs: {
+          ParticipantViewerRoleArn: "arn:aws:iam::000000000000:role/tc-hello-world-battle-viewer",
+          InstanceId: "i-0123456789abcdef0",
+        },
+      }),
+    });
+    const view = await fixture.service.participant(
+      apiRequest({ method: "GET", path: "/portal/me", token: "battle-team-key" }),
+    );
+    const listed = (view.body as { problems: { accessCapabilities?: string[] }[] }).problems[0];
+    expect(listed?.accessCapabilities).toEqual([...capabilities]);
+    // Neither endpoint is registered and scoring has not succeeded, yet the console is issued.
+    const response = fixture.service.participant(
+      apiRequest({
+        method: "GET",
+        path: "/portal/me/console-signin-url",
+        token: "battle-team-key",
+        query: new URLSearchParams({ jobId }),
+      }),
+    );
+    if (instanceConsole) {
+      expect((await response).body).toEqual({
+        loginUrl: "http://127.0.0.1:4566/_simulator/login#handoff=synthetic",
+      });
+      expect(issued).toMatchObject([{ instanceId: "i-0123456789abcdef0" }]);
+    } else {
+      await expect(response).rejects.toMatchObject({ status: 409 });
+      expect(issued).toHaveLength(0);
+    }
+  },
+);

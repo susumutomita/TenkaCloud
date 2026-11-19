@@ -1,18 +1,12 @@
-import { toErrorMessage } from "@tenkacloud/web-kit";
 import { useCallback, useState } from "react";
-import {
-  getConsoleSigninUrl,
-  PortalAssumeRoleError,
-  PortalAuthError,
-  PortalValidationError,
-} from "../api/portal-client";
+import { getConsoleSigninUrl, PortalAuthError } from "../api/portal-client";
 import { useAuth } from "../auth/AuthProvider";
 import { useTeamView } from "../auth/TeamViewProvider";
 import type { AppConfig } from "../config";
 import { useIsMock } from "../config-context";
 import { hasAwsAccessCapability } from "../data/providers";
 import { useT } from "../i18n";
-import { describeAwsAccessError } from "./describeAwsAccessError";
+import { describeAccessError } from "./describeAwsAccessError";
 
 type TranslateFn = (key: string, vars?: Record<string, string>) => string;
 
@@ -23,13 +17,9 @@ type TranslateFn = (key: string, vars?: Record<string, string>) => string;
  */
 export function describeOpenConsoleError(err: unknown, t: TranslateFn): string {
   if (err instanceof PortalAuthError) return "auth_logout";
-  if (err instanceof PortalAssumeRoleError) {
-    return describeAwsAccessError(err, t);
-  }
-  if (err instanceof PortalValidationError) {
-    return t("sso_credentials.validation_error", { errorCode: err.errorCode });
-  }
-  return toErrorMessage(err);
+  if (err instanceof Error && err.message === t("sso_credentials.console_popup_blocked"))
+    return err.message;
+  return describeAccessError(err, t);
 }
 
 export interface ConsoleAccessError {

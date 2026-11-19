@@ -30,6 +30,9 @@ export async function createParticipantAwsFixture(
     staticRoot?: string;
     simulatorEndpoint?: string;
     simulatorConsole?: SimulatorConsoleIssuer;
+    simulatorInstanceConsole?: boolean;
+    /** Retained outputs name a server instead of a parameter. */
+    instanceTarget?: boolean;
   } = {},
 ) {
   const directory = createTemporaryDirectory(root, "tenka-console-");
@@ -78,6 +81,7 @@ export async function createParticipantAwsFixture(
   const cloud = new CloudFormationEngine(root, {
     simulatorEndpoint: options.simulatorEndpoint,
     simulatorConsole: options.simulatorConsole,
+    simulatorInstanceConsole: options.simulatorInstanceConsole,
     region: "ap-northeast-1",
     externalId: "host-external-id-0123456789",
     operatorAccountId: async () => "999999999999",
@@ -202,7 +206,9 @@ export async function createParticipantAwsFixture(
         stackName: `team-${index}`,
         outputs: {
           ParticipantViewerRoleArn: `arn:aws:iam::${accountId}:role/hello-world-viewer-${index}`,
-          ParameterName: `/tc-hello-world-team-${index}/hello`,
+          ...(options.instanceTarget
+            ? { InstanceId: `i-0abc${String(index).padStart(4, "0")}def` }
+            : { ParameterName: `/tc-hello-world-team-${index}/hello` }),
           ParameterValue: "private-flag",
         },
       }),
