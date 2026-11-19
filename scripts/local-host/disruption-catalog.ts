@@ -11,6 +11,12 @@ import {
 import { compareCodePoints } from "../lib/code-point-order";
 import type { DisruptionTarget } from "./disruption-model";
 import { HostError, type Job, type Problem, type Team } from "./model";
+import {
+  authorityBinding,
+  authorityUnavailable,
+  sameAuthority,
+  simulatorAuthoritySchema,
+} from "./simulator-authority";
 import { digest } from "./store";
 
 const definitionSchema = z.object({
@@ -18,6 +24,7 @@ const definitionSchema = z.object({
   phases: z.array(z.unknown()).default([]),
 });
 const unitSchema = z.object({
+  simulatorAuthority: simulatorAuthoritySchema.optional(),
   kind: z.literal("cloudformation"),
   accountId: z.string().regex(/^\d{12}$/u),
   roleArn: z.string(),
@@ -110,6 +117,8 @@ export function pinDisruption(args: {
   )
     throw new HostError(409, "The team's pinned cloud environment is not ready.", "no_deployment");
   const unit = parsed.data;
+  if (!sameAuthority(unit.simulatorAuthority, authorityBinding(team.aws?.simulatorAuthority)))
+    throw authorityUnavailable();
   if (
     unit.accountId !== team.aws?.accountId ||
     unit.roleArn !== `arn:aws:iam::${unit.accountId}:role/${team.aws?.roleName}` ||
@@ -134,6 +143,7 @@ export function pinDisruption(args: {
       "invalid_target",
     );
   return {
+    ...(unit.simulatorAuthority ? { simulatorAuthority: unit.simulatorAuthority } : {}),
     jobId: job.jobId,
     eventId: job.eventId,
     teamId: job.teamId,

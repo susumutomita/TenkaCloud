@@ -1,5 +1,6 @@
 import type { DisruptionAdapter, DisruptionExecution, DisruptionTarget } from "./disruption-model";
 import type { DisruptionStore } from "./disruption-store";
+import { sameAuthority } from "./simulator-authority";
 
 export class DisruptionRunner {
   private work?: Promise<void>;
@@ -144,6 +145,7 @@ export class DisruptionRunner {
       .active()
       .some(
         (other) =>
+          sameAuthority(other.target.simulatorAuthority, row.target.simulatorAuthority) &&
           other.id !== row.id &&
           other.status !== "queued" &&
           other.target.resources.some((resource) => row.target.resources.includes(resource)),

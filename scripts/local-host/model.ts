@@ -148,6 +148,8 @@ export interface Team {
 
 /** A competitor account prepared with `competitor-bootstrap.yaml`. */
 export interface AwsTarget {
+  /** Explicit internal binding; participant requests cannot choose a transport. */
+  simulatorAuthority?: import("./simulator-authority").SimulatorAuthority;
   accountId: string;
   roleName: string;
 }

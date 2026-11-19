@@ -44,11 +44,13 @@ import {
 import { AwsDisruptionAdapter, type AwsDisruptionClients } from "./aws-disruption-adapter";
 import { publicCatalogEntry } from "./catalog-projection";
 import {
+  type DeploymentLogPage,
   type DeploymentLogPageOptions,
   deploymentLogCursor,
   deploymentLogPage,
   deploymentLogView,
 } from "./deployment-logs";
+import type { DisruptionAdapter, DisruptionTarget } from "./disruption-model";
 import {
   type AwsTarget,
   type Context,
@@ -68,6 +70,13 @@ import {
   participantAwsAccess,
 } from "./participant-aws-access";
 import { projectedScore } from "./score";
+import {
+  authorityBinding,
+  authorityUnavailable,
+  guardAuthorityClient,
+  type SimulatorAuthority,
+  sameAuthority,
+} from "./simulator-authority";
 import type { SimulatorBattle } from "./simulator-battle";
 import { SIMULATOR_COMMAND_ROLE } from "./simulator-bootstrap";
 import { skillCatalog } from "./skill-catalog";
@@ -85,6 +94,11 @@ function isFlagStackDefinition(definition: StackDefinition): definition is FlagS
 }
 
 export interface CloudFormationEngineOptions extends ParticipantAwsClients {
+  readonly simulatorAuthority?: SimulatorAuthority;
+  /** Every routed engine must share this exact resolver function object; returns whole connections. */
+  readonly simulatorAuthorityEngine?: (
+    binding: SimulatorAuthority,
+  ) => CloudFormationEngine | undefined;
   readonly region: string;
   readonly simulatorEndpoint?: string;
   /** Signing services the connected Simulator's native SDK sessions accept (its capability document). */
@@ -316,14 +330,63 @@ export function cloudFormationCatalog(
 export class CloudFormationEngine implements RuntimeEngine {
   readonly hasAws = true;
 
-  participantAwsAccess(args: {
+  private authorityEngine(binding: SimulatorAuthority | undefined): CloudFormationEngine {
+    if (
+      sameAuthority(binding, this.options.simulatorAuthority) &&
+      !this.options.simulatorAuthorityEngine
+    )
+      return this;
+    const engine = binding && this.options.simulatorAuthorityEngine?.(binding);
+    if (
+      !engine?.options.simulatorEndpoint ||
+      engine.options.simulatorAuthorityEngine !== this.options.simulatorAuthorityEngine ||
+      !sameAuthority(binding, engine.options.simulatorAuthority)
+    )
+      throw authorityUnavailable();
+    return engine;
+  }
+
+  private jobEngine(job: Job): CloudFormationEngine {
+    const team = this.options.team(job);
+    if (team.teamId !== job.teamId || team.eventId !== job.eventId) throw authorityUnavailable();
+    const selected = authorityBinding(team.aws?.simulatorAuthority);
+    let retained = selected;
+    if (job.unit) {
+      try {
+        retained = authorityBinding(unitOf(job)?.simulatorAuthority);
+      } catch (error) {
+        if (error instanceof SyntaxError) throw authorityUnavailable();
+        throw error;
+      }
+    }
+    if (!sameAuthority(selected, retained)) throw authorityUnavailable();
+    return this.authorityEngine(retained);
+  }
+
+  private targetAdapter(target: DisruptionTarget): AwsDisruptionAdapter | undefined {
+    try {
+      const engine = this.authorityEngine(authorityBinding(target.simulatorAuthority));
+      return engine.directDisruptionAdapter();
+    } catch (error) {
+      if (error instanceof HostError) return undefined;
+      throw error;
+    }
+  }
+
+  async participantAwsAccess(args: {
     kind: ParticipantAwsAccess["kind"];
     job: Job;
     assertCurrent: () => void;
   }): Promise<ParticipantAwsAccess> {
+    const engine = this.jobEngine(args.job);
+    if (engine !== this) return engine.participantAwsAccess(args);
     this.assertSimulatorSupport(args.job);
     return participantAwsAccess({
       ...args,
+      assertCurrent: () => {
+        args.assertCurrent();
+        if (this.jobEngine(args.job) !== this) throw authorityUnavailable();
+      },
       team: this.options.team(args.job),
       externalId: this.options.externalId,
       clients: this.options,
@@ -337,6 +400,13 @@ export class CloudFormationEngine implements RuntimeEngine {
     repositoryRoot: string,
     private readonly options: CloudFormationEngineOptions,
   ) {
+    const binding = authorityBinding(options.simulatorAuthority);
+    if ((binding || options.simulatorAuthorityEngine) && !options.simulatorEndpoint)
+      throw authorityUnavailable();
+    this.options = {
+      ...options,
+      ...(binding ? { simulatorAuthority: Object.freeze(binding) } : {}),
+    };
     if (!EXTERNAL_ID_PATTERN.test(options.externalId))
       throw new Error("The host ExternalId must be 16–128 characters of [A-Za-z0-9_=,.@:/-].");
     this.problems = cloudFormationCatalog(repositoryRoot, {
@@ -364,7 +434,32 @@ export class CloudFormationEngine implements RuntimeEngine {
       );
   }
 
-  disruptionAdapter(): AwsDisruptionAdapter {
+  disruptionAdapter(): DisruptionAdapter {
+    // Legacy capability refusal still happens at adapter construction.
+    this.directDisruptionAdapter();
+    return {
+      submit: async (args) => {
+        const adapter = this.targetAdapter(args.target);
+        return adapter
+          ? adapter.submit(args)
+          : { kind: "rejected", reason: authorityUnavailable().message };
+      },
+      observe: async (args) => {
+        const adapter = this.targetAdapter(args.target);
+        return adapter
+          ? adapter.observe(args)
+          : { kind: "unknown", reason: authorityUnavailable().message };
+      },
+      discover: async (args) => {
+        const adapter = this.targetAdapter(args.target);
+        return adapter
+          ? adapter.discover(args)
+          : { kind: "unknown", reason: authorityUnavailable().message };
+      },
+    };
+  }
+
+  private directDisruptionAdapter(): AwsDisruptionAdapter {
     if (this.options.simulatorEndpoint && !this.options.ssm)
       throw new HostError(409, "Simulator SSM transport is unavailable.", "not_ready");
     // A Simulator Battle runtime runs the catalog's SSM command through the bootstrap's separate
@@ -379,6 +474,11 @@ export class CloudFormationEngine implements RuntimeEngine {
         ? "AWS disruptions are unavailable in simulator mode. Retained operations require recovery in their original supported hosting mode."
         : undefined,
       commandRole,
+      this.options.simulatorAuthority,
+      () => {
+        if (this.authorityEngine(this.options.simulatorAuthority) !== this)
+          throw authorityUnavailable();
+      },
     );
   }
 
@@ -395,6 +495,8 @@ export class CloudFormationEngine implements RuntimeEngine {
   }
 
   async start(job: Job, retain: (unit: string | null) => void): Promise<void> {
+    const engine = this.jobEngine(job);
+    if (engine !== this) return engine.start(job, retain);
     this.assertSimulatorSupport(job);
     const definition = JSON.parse(job.definition) as StackDefinition;
     const team = this.options.team(job);
@@ -403,6 +505,9 @@ export class CloudFormationEngine implements RuntimeEngine {
     const namePrefix = `tc-${definition.problemId}-${team.internalSlug}-${job.jobId.slice(-12).toLowerCase()}`;
     const unit: StackUnit = {
       kind: "cloudformation",
+      ...(this.options.simulatorAuthority
+        ? { simulatorAuthority: this.options.simulatorAuthority }
+        : {}),
       accountId: aws.accountId,
       roleArn: `arn:aws:iam::${aws.accountId}:role/${aws.roleName}`,
       region: this.options.region,
@@ -443,6 +548,8 @@ export class CloudFormationEngine implements RuntimeEngine {
   }
 
   async recover(job: Job): Promise<void> {
+    const engine = this.jobEngine(job);
+    if (engine !== this) return engine.recover(job);
     const unit = unitOf(job);
     const stack = await this.describe(this.client(unit, job), unit, job.jobId);
     if (stack?.StackStatus !== "CREATE_COMPLETE")
@@ -468,18 +575,39 @@ export class CloudFormationEngine implements RuntimeEngine {
   }
 
   requiresGuestReadiness(job: Job): boolean {
+    const engine = this.jobEngine(job);
+    if (engine !== this) return engine.requiresGuestReadiness(job);
     return Boolean(this.battleRuntime(job));
   }
 
   uptimeProbe(job: Job): ProbeFn | undefined {
-    return this.battleRuntime(job)?.probe(job);
+    const engine = this.jobEngine(job);
+    if (engine !== this) return engine.uptimeProbe(job);
+    const assertCurrent = () => {
+      if (this.jobEngine(job) !== this) throw authorityUnavailable();
+    };
+    const probe = this.battleRuntime(job)?.probe(job, assertCurrent);
+    return (
+      probe &&
+      (async (url, options) => {
+        assertCurrent();
+        const result = await probe(url, options);
+        assertCurrent();
+        return result;
+      })
+    );
   }
 
   async stop(job: Job): Promise<void> {
+    const engine = this.jobEngine(job);
+    if (engine !== this) return engine.stop(job);
     const unit = unitOf(job);
     const client = this.client(unit, job);
     const stack = await this.describe(client, unit, job.jobId);
     if (!stack) return;
+    // Describe may await while the retained authority is removed or replaced. Seal is a new
+    // operator request, so admit it only after rechecking the current binding.
+    if (this.jobEngine(job) !== this) throw authorityUnavailable();
     const battle = this.battleRuntime(job);
     if (battle) {
       // Stop new probe admissions first. A failed seal is reported; deletion still releases the
@@ -506,6 +634,8 @@ export class CloudFormationEngine implements RuntimeEngine {
 
   /** The stack's console page, in the team's own account. */
   surface(job: Job): string {
+    const engine = this.jobEngine(job);
+    if (engine !== this) return engine.surface(job);
     if (this.options.simulatorEndpoint)
       throw new HostError(
         409,
@@ -542,7 +672,11 @@ export class CloudFormationEngine implements RuntimeEngine {
     };
   }
 
-  async deploymentLogs(context: Context, jobId: string, options: DeploymentLogPageOptions = {}) {
+  async deploymentLogs(
+    context: Context,
+    jobId: string,
+    options: DeploymentLogPageOptions = {},
+  ): Promise<DeploymentLogPage> {
     const job = context.jobs.find((candidate) => candidate.jobId === jobId);
     if (!job || job.teamId !== context.team.teamId || job.eventId !== context.event.eventId)
       throw new HostError(403, "This environment does not belong to your team.", "unauthorized");
@@ -552,6 +686,8 @@ export class CloudFormationEngine implements RuntimeEngine {
       )
     )
       throw new HostError(409, "This environment changed.", "not_ready");
+    const engine = this.jobEngine(job);
+    if (engine !== this) return engine.deploymentLogs(context, jobId, options);
     const limit = options.limit ?? 100;
     if (!Number.isInteger(limit) || limit < 1 || limit > 100)
       throw new HostError(400, "Limit must be from 1 to 100.", "invalid_limit");
@@ -602,6 +738,8 @@ export class CloudFormationEngine implements RuntimeEngine {
   ): Omit<ParticipantProblemView, "jobId" | "status" | "provider" | "expiresAt"> {
     const definition = JSON.parse(problem.definition) as StackDefinition;
     const job = context.jobs.find((candidate) => candidate.problemId === problem.problemId);
+    const engine = job ? this.jobEngine(job) : this;
+    if (engine !== this) return engine.problemView(context, problem);
     const unit = job?.unit ? unitOf(job) : undefined;
     const events = context.team.scoreEvents.filter(
       (event) => event.problemId === problem.problemId,
@@ -758,6 +896,7 @@ export class CloudFormationEngine implements RuntimeEngine {
     // Saved jobs bypass the current catalog, including cleanup before a deployment retry.
     this.assertSimulatorSupport(job);
     const credentials: CredentialsProvider = async () => {
+      if (this.jobEngine(job) !== this) throw authorityUnavailable();
       const assumed = await assumeRoleWithExternalId(
         { sts: this.options.sts },
         {
@@ -767,6 +906,7 @@ export class CloudFormationEngine implements RuntimeEngine {
           sessionNamePrefix: "tenkacloud-host-",
         },
       );
+      if (this.jobEngine(job) !== this) throw authorityUnavailable();
       return {
         accessKeyId: assumed.AccessKeyId as string,
         secretAccessKey: assumed.SecretAccessKey as string,
@@ -774,7 +914,9 @@ export class CloudFormationEngine implements RuntimeEngine {
         expiration: assumed.Expiration,
       };
     };
-    return this.options.cloudFormation(credentials, unit.region);
+    return guardAuthorityClient(this.options.cloudFormation(credentials, unit.region), () => {
+      if (this.jobEngine(job) !== this) throw authorityUnavailable();
+    });
   }
 
   private async describe(

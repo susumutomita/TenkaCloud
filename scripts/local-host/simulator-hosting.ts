@@ -5,6 +5,7 @@ import { SSMClient } from "@aws-sdk/client-ssm";
 import { STSClient } from "@aws-sdk/client-sts";
 import { normalizeSimulatorEndpointUrl } from "@tenkacloud/portal-contracts";
 import { connectCloudHosting } from "./cloud-hosting";
+import { authorityBinding, type SimulatorAuthority } from "./simulator-authority";
 import { connectSimulatorBattle } from "./simulator-battle";
 import {
   bootstrapSimulatorRole,
@@ -15,6 +16,8 @@ import { connectSimulatorCapabilities } from "./simulator-console";
 
 export type SimulatorSettings = {
   readonly endpoint: string;
+  /** Internal explicit binding, not inferred from token, endpoint or account IDs. */
+  readonly authority?: SimulatorAuthority;
   readonly region: string;
   readonly bootstrap?: boolean;
 } & ({ readonly tokenFile: string } | { readonly readToken: () => string });
@@ -167,6 +170,7 @@ export async function connectSimulatorHosting(
   settings?: SimulatorSettings,
 ) {
   if (!settings) return undefined;
+  const simulatorAuthority = authorityBinding(settings.authority);
   assertSimulatorProxyDisabled();
   if ("readToken" in settings)
     console.warn(
@@ -188,6 +192,7 @@ export async function connectSimulatorHosting(
   );
   const connection = await connectCloudHosting(root, directory, region, {
     simulatorEndpoint: endpoint,
+    ...(simulatorAuthority ? { simulatorAuthority } : {}),
     simulatorConsole: capabilities.console,
     simulatorServices: capabilities.nativeSdkServices,
     ...(battle ? { simulatorBattle: battle } : {}),
