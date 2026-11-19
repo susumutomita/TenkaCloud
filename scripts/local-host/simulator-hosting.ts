@@ -190,6 +190,7 @@ export async function connectSimulatorHosting(
     simulatorEndpoint: endpoint,
     simulatorConsole: capabilities.console,
     simulatorServices: capabilities.nativeSdkServices,
+    simulatorInstanceConsole: capabilities.instanceConsole,
     ...(battle ? { simulatorBattle: battle } : {}),
     sts: guardedSimulatorClient(
       new STSClient({

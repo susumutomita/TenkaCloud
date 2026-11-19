@@ -20,6 +20,8 @@ const capabilitySchema = z.object({
 export interface SimulatorCapabilities {
   /** Present only when the Simulator issues participant Console handoffs. */
   readonly console?: SimulatorConsoleIssuer;
+  /** True when the Console also opens a server (EC2 instance) for Session Manager. */
+  readonly instanceConsole: boolean;
   /** Signing services its native SDK sessions accept; empty on Simulators that do not say. */
   readonly nativeSdkServices: readonly string[];
 }
@@ -47,6 +49,22 @@ async function boundedJson(response: Response, limit: number): Promise<unknown> 
   }
 }
 
+/** The one retained target a handoff may name, or nothing when the Simulator or value is refused. */
+function handoffTarget(
+  input: Parameters<SimulatorConsoleIssuer>[0],
+  supported: { readonly parameterConsole: boolean; readonly instanceConsole: boolean },
+): { InstanceId: string } | { ParameterName: string } | undefined {
+  if (input.instanceId !== undefined)
+    return supported.instanceConsole && /^i-[a-f0-9]{8,32}$/u.test(input.instanceId)
+      ? { InstanceId: input.instanceId }
+      : undefined;
+  return supported.parameterConsole &&
+    input.parameterName !== undefined &&
+    /^\/[A-Za-z0-9_.\-/]{1,1010}$/u.test(input.parameterName)
+    ? { ParameterName: input.parameterName }
+    : undefined;
+}
+
 /** Only the native authority receives a participant's signed short-lived credentials. */
 export async function connectSimulatorCapabilities(
   endpoint: string,
@@ -71,23 +89,24 @@ export async function connectSimulatorCapabilities(
     );
   }
   const nativeSdkServices = capabilities.nativeSdk?.services ?? [];
-  if (!capabilities.consoleHandoff?.services.includes("ssm-parameter"))
-    return { nativeSdkServices };
-  const issue: SimulatorConsoleIssuer = async (
-    { credentials, parameterName, region },
-    assertCurrent,
-  ) => {
+  const handoffServices = capabilities.consoleHandoff?.services ?? [];
+  const parameterConsole = handoffServices.includes("ssm-parameter");
+  const instanceConsole = handoffServices.includes("ec2-instance");
+  if (!parameterConsole && !instanceConsole) return { nativeSdkServices, instanceConsole };
+  const issue: SimulatorConsoleIssuer = async (input, assertCurrent) => {
+    const { credentials, region } = input;
     assertCurrent();
     guard();
+    const target = handoffTarget(input, { parameterConsole, instanceConsole });
     if (
-      !/^\/[A-Za-z0-9_.\-/]{1,1010}$/u.test(parameterName) ||
+      !target ||
       !/^(?:af|ap|ca|eu|il|me|mx|sa|us)-[a-z]+-\d{1,2}$/u.test(region) ||
       credentials.expiration.getTime() <= Date.now()
     )
       throw new HostError(409, "This Simulator Console target is not ready.", "not_ready");
     try {
       const url = new URL("/_simulator/v1/console-handoffs", origin);
-      const body = JSON.stringify({ ParameterName: parameterName, Region: region });
+      const body = JSON.stringify({ ...target, Region: region });
       const signer = new SignatureV4({
         credentials,
         region,
@@ -130,5 +149,5 @@ export async function connectSimulatorCapabilities(
       );
     }
   };
-  return { console: issue, nativeSdkServices };
+  return { console: issue, nativeSdkServices, instanceConsole };
 }

@@ -11,8 +11,10 @@ export interface ParticipantSessionCredentials {
 export type SimulatorConsoleIssuer = (
   input: {
     readonly credentials: ParticipantSessionCredentials;
-    readonly parameterName: string;
     readonly region: string;
+    /** Exactly one of the two names the target. */
+    readonly parameterName?: string;
+    readonly instanceId?: string;
   },
   assertCurrent: () => void,
 ) => Promise<string>;

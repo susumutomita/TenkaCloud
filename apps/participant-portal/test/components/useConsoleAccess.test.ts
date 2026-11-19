@@ -69,10 +69,10 @@ describe("describeOpenConsoleError", () => {
     expect(message).toContain("sso_credentials.cli.stage_competitor");
   });
 
-  it("should render a validation message with the error code", () => {
+  it("should render a next-step message without the raw error code", () => {
     const message = describeOpenConsoleError(new PortalValidationError("bad_input"), t);
-    expect(message).toContain("sso_credentials.validation_error");
-    expect(message).toContain("bad_input");
+    expect(message).toContain("sso_credentials.error_generic");
+    expect(message).not.toContain("bad_input");
   });
 
   it("should stringify a generic Error", () => {
