@@ -5,9 +5,10 @@
 
 # TenkaCloud
 
-**クラウド競技を開き、再利用できる問題カタログを育てる。**
+**社員のクラウド研修を、実践型に。**<br>
+手を動かして、成果は点数で見える。
 
-TenkaCloud は、ハンズオン形式のクラウド競技会を開くための、セルフホスト可能な Apache-2.0 ライセンスのプラットフォームです。開催者は 1 つのコンソールで大会・チーム・問題環境・採点・ヒントを管理し、参加者はチームキーを使ってローカルの演習や AWS の問題に挑戦します。
+TenkaCloud は、社内研修や勉強会で使える、ハンズオン形式のクラウド競技会を開くための、セルフホスト可能な Apache-2.0 ライセンスのプラットフォームです。開催者は 1 つのコンソールで大会・チーム・問題環境・採点・ヒントを管理し、参加者はチームキーを使ってローカルの演習や AWS の問題に挑戦します。
 
 参加者は[ローカル stdio／クラウド HTTP の MCP](./docs/mcp.md)を通じて、手元の AI エージェントから問題の探索、準備済み Docker 演習の開始、提出・採点、進捗確認も行えます。
 
@@ -34,7 +35,7 @@ TenkaCloud は、ハンズオン形式のクラウド競技会を開くための
   <img src="./docs/assets/lp-60s/tenkacloud-60s-preview.gif" alt="1 分でわかる TenkaCloud: 参加者ポータルで解いて得点する → PC 1 台で大会を開く → 同じ問題をローカルの Simulator で解く" width="800">
 </a>
 <br>
-<sub>1 分でわかる TenkaCloud (61 秒・音楽あり・ナレーションなし)。画面はすべてローカルで起動して撮影した実物です。Simulator の場面で動かしているのは、連携を検証済みの Hello World です。<a href="./docs/assets/lp-60s/README.md">収録条件</a>。現在の起動手順は以下を参照してください。以前の 30 秒版 (音声なし): <a href="./landing/videos/lp/tenkacloud-30s.mp4">16:9 MP4</a> · <a href="./landing/videos/lp/tenkacloud-30s-vertical.mp4">9:16 MP4</a></sub>
+<sub>1 分でわかる TenkaCloud (61 秒・音楽あり・ナレーションなし)。画面はすべてローカルで起動して撮影した実物です。Simulator の場面で動かしているのは Hello World です。<a href="./docs/assets/lp-60s/README.md">収録条件</a>。現在の起動手順は以下を参照してください。以前の 30 秒版 (音声なし): <a href="./landing/videos/lp/tenkacloud-30s.mp4">16:9 MP4</a> · <a href="./landing/videos/lp/tenkacloud-30s-vertical.mp4">9:16 MP4</a></sub>
 
 [ランディングページ](https://tenkacloud.com) · [役割別マニュアル](https://tenkacloud.com/docs/manual/) · [デモポータル](https://tenkacloud.com/portal-demo/?demo=1) · [クイックスタート](#クイックスタート) · [自分の問題を追加する](#自分の問題を追加する)
 
@@ -194,6 +195,7 @@ Cloud は有効化済みの AWS/CloudFormation Pack を次の配置で読み込�
 | --- | --- |
 | 大会を開く | [計画と運用](./apps/developer-portal/src/app/developers/docs/operate/run-an-event/page.ja.mdx) |
 | AWS 基盤の配置・撤収 | [配置ガイド](./DEPLOYMENT_GUIDE.md) |
+| 主催者用 Terraform CLI を試す | [Terraform 演習の実行基盤（実験段階、host・採点は未接続）](./docs/terraform-exercises.md) |
 | 競技者アカウントの準備 | [アカウント導入手順](./infrastructure/templates/README.md) |
 | LLM に作業を依頼する | [LLM の入口](./landing/llms.txt) · [タスク別ガイドとコードマップ](./landing/llms-full.txt) |
 | 設計を理解する | [アーキテクチャ](./docs/architecture/README.md) · [編集可能な AWS 構成図](./docs/architecture/diagrams/system-architecture.drawio) |

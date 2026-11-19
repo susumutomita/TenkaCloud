@@ -237,6 +237,8 @@ export type TargetAccessCapability =
   | "console"
   | "cli-credentials"
   | "external-portal"
+  /** Simulator Battle guest shell: a one-use code for the Simulator's participant terminal. */
+  | "guest-terminal"
   | "unsupported";
 
 /** Local-play runtime family; absent on legacy/AWS participant views. */

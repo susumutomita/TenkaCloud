@@ -1,0 +1,455 @@
+/*
+ * Enterprise proposal deck (ja / en). Layered on the shared talk deck base
+ * (../jaws-yokohama-2026/talk.css + ../tenkacloud-ug-1/talk.js), which owns the
+ * 1440x810 stage, keyboard controls, phone layout and print. This file only adds
+ * the proposal's look: the LP palette (ink #07111f, blue #0969da) and its layouts.
+ */
+.pp-slide {
+  padding: 52px 72px 36px;
+  gap: 0;
+  background: #f5f7fb;
+  color: #07111f;
+  font-family: "Noto Sans JP", "Inter", system-ui, sans-serif;
+}
+.pp-en .pp-slide {
+  font-family: "Inter", system-ui, sans-serif;
+}
+.pp-slide p {
+  margin: 0;
+  font-size: 21px;
+  line-height: 1.65;
+  color: #3a4656;
+}
+.pp-slide h2 {
+  margin-bottom: 28px;
+}
+.pp-slide h3 {
+  margin: 0;
+  font-size: 26px;
+  line-height: 1.4;
+}
+.pp-slide .kicker {
+  margin-bottom: 14px;
+  font-family: "JetBrains Mono", "Noto Sans JP", monospace;
+  font-size: 16px;
+  letter-spacing: 0.12em;
+  color: #0969da;
+}
+.pp-slide .fine {
+  font-size: 17px;
+  color: #4a5668;
+}
+.pp-slide .slide-foot {
+  margin-top: auto;
+  border-color: #c9d4e3;
+  color: #5d6877;
+}
+/* Footnote pinned above the footer; needs .pp-slide to outrank `.slide p { margin-top: 0 }`. */
+.pp-slide .pp-push {
+  margin-top: auto;
+  padding-top: 20px;
+}
+.pp-slide .pp-push + .slide-foot {
+  margin-top: 16px;
+}
+
+/* Backgrounds */
+.pp-tint {
+  background: #e6edf7;
+}
+.pp-dark {
+  background: #07111f;
+  color: #f5f7fb;
+}
+.pp-dark p,
+.pp-dark .fine {
+  color: #c9d4e3;
+}
+.pp-dark .kicker,
+.pp-dark a {
+  color: #58a6ff;
+}
+.pp-dark .slide-foot {
+  border-color: #26364d;
+  color: #8a9bb3;
+}
+.pp-accent {
+  background: #0969da;
+  color: #f5f7fb;
+}
+.pp-accent p {
+  color: #e3ecf8;
+}
+.pp-accent .kicker {
+  color: #f5f7fb;
+}
+.pp-accent .slide-foot {
+  border-color: rgba(245, 247, 251, 0.45);
+  color: #dce8f7;
+}
+
+/* Cover */
+.pp-cover {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  gap: 48px;
+  align-items: center;
+}
+.pp-cover h1 {
+  margin: 8px 0 28px;
+}
+.pp-dark .pp-lead {
+  font-size: 26px;
+  line-height: 1.6;
+  color: #d3deec;
+}
+.pp-dark .pp-byline {
+  margin-top: 36px;
+  font-size: 20px;
+  color: #f5f7fb;
+}
+.pp-score {
+  padding: 24px 28px;
+  border: 1px solid #26364d;
+  border-radius: 14px;
+  background: #0f1d30;
+}
+.pp-dark .pp-score-h {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 15px;
+  letter-spacing: 0.1em;
+  color: #8a9bb3;
+}
+.pp-score-row {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 16px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #26364d;
+}
+.pp-dark .pp-pts {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 20px;
+  color: #58a6ff;
+}
+.pp-dark .pp-pts-down {
+  color: #f0a35e;
+}
+.pp-dark .pp-evt {
+  font-size: 20px;
+  color: #f5f7fb;
+}
+
+/* Statement columns */
+.pp-cols3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 36px;
+  margin-top: auto;
+}
+.pp-col {
+  padding-top: 20px;
+  border-top: 3px solid #f5f7fb;
+}
+.pp-accent .pp-k {
+  margin-bottom: 8px;
+  font-size: 28px;
+  font-weight: 700;
+  color: #f5f7fb;
+}
+
+/* Comparison table */
+.pp-table-wrap {
+  overflow-x: auto;
+}
+.pp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 19px;
+  line-height: 1.55;
+  color: #3a4656;
+}
+.pp-table th,
+.pp-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #d9dee8;
+  text-align: left;
+  vertical-align: top;
+}
+.pp-table thead th {
+  background: #e6edf7;
+  color: #07111f;
+}
+.pp-table .pp-us {
+  color: #07111f;
+  font-weight: 600;
+}
+.pp-table thead .pp-us {
+  color: #0969da;
+}
+
+/* Cards */
+.pp-cards3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+}
+.pp-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 28px;
+  border: 1px solid #d9dee8;
+  border-radius: 14px;
+  background: #fbfcfe;
+}
+.pp-tint .pp-card {
+  border-color: #c9d4e3;
+  background: #f5f7fb;
+}
+.pp-dark .pp-card {
+  border-color: #26364d;
+  background: #0f1d30;
+}
+.pp-slide .pp-num {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  color: #0969da;
+}
+.pp-dark .pp-num {
+  color: #58a6ff;
+}
+
+/* Scenario rows */
+.pp-step {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 24px;
+  align-items: center;
+  padding: 16px 0;
+  border-top: 1px solid #c9d4e3;
+}
+.pp-en .pp-step {
+  grid-template-columns: 170px minmax(0, 1fr);
+}
+.pp-slide .pp-lv {
+  justify-self: start;
+  padding: 3px 16px;
+  border-radius: 999px;
+  background: #0969da;
+  color: #f5f7fb;
+  font-size: 15px;
+  font-weight: 700;
+}
+.pp-slide .pp-lv-hi {
+  background: #07111f;
+}
+.pp-slide .pp-step-t {
+  color: #07111f;
+}
+
+/* Label rows */
+.pp-row {
+  display: grid;
+  grid-template-columns: 330px minmax(0, 1fr);
+  gap: 32px;
+  align-items: center;
+  padding: 18px 0;
+  border-top: 1px solid #c9d4e3;
+}
+.pp-row h3 {
+  color: #0969da;
+}
+
+/* Process */
+.pp-proc {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 20px;
+}
+.pp-proc-i {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 18px;
+  border-top: 3px solid #0969da;
+}
+.pp-slide .pp-proc-p {
+  font-size: 18px;
+}
+.pp-band {
+  margin-top: auto;
+  padding: 18px 24px;
+  border-radius: 12px;
+  background: #e6edf7;
+}
+.pp-slide .pp-band p {
+  font-size: 19px;
+  color: #263241;
+}
+
+/* Plans */
+.pp-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 28px;
+  border: 1px solid #d9dee8;
+  border-radius: 14px;
+  background: #fbfcfe;
+}
+.pp-plan-hi {
+  padding: 26px;
+  border: 3px solid #0969da;
+}
+.pp-plan-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.pp-slide .pp-pname {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 15px;
+  letter-spacing: 0.1em;
+  color: #0969da;
+}
+.pp-slide .pp-pill {
+  padding: 1px 14px;
+  border-radius: 999px;
+  background: #0969da;
+  color: #f5f7fb;
+  font-size: 15px;
+  font-weight: 700;
+}
+.pp-price {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.pp-slide .pp-amt {
+  font-family: "Inter", "Noto Sans JP", sans-serif;
+  font-size: 46px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: #07111f;
+}
+.pp-slide .pp-per {
+  font-size: 19px;
+  color: #5d6877;
+}
+.pp-slide .pp-cond {
+  font-size: 19px;
+  font-weight: 700;
+  color: #07111f;
+}
+.pp-plist {
+  margin: 0;
+  padding: 12px 0 0 22px;
+  border-top: 1px solid #e1e6ee;
+  font-size: 17px;
+  line-height: 1.6;
+  color: #3a4656;
+}
+
+/* Closing links */
+.pp-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  margin-top: auto;
+  padding-top: 20px;
+  font-size: 20px;
+}
+.pp-links a {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
+@media screen and (max-width: 900px) {
+  .pp-slide p {
+    font-size: 17px;
+  }
+  .pp-slide h3 {
+    font-size: 21px;
+  }
+  .pp-cover,
+  .pp-cols3,
+  .pp-cards3,
+  .pp-proc {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+  .pp-cover h1 {
+    margin: 4px 0 16px;
+  }
+  .pp-dark .pp-lead {
+    font-size: 19px;
+  }
+  .pp-dark .pp-byline {
+    margin-top: 16px;
+    font-size: 16px;
+  }
+  .pp-card,
+  .pp-plan {
+    padding: 20px;
+  }
+  .pp-step,
+  .pp-en .pp-step,
+  .pp-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    padding: 14px 0;
+  }
+  /* Phone: each aspect becomes a labelled block so the TenkaCloud column stays visible. */
+  .pp-table {
+    font-size: 16px;
+  }
+  .pp-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .pp-table tr {
+    display: block;
+    padding: 12px 0;
+    border-bottom: 1px solid #d9dee8;
+  }
+  .pp-table th,
+  .pp-table td {
+    border: 0;
+  }
+  .pp-table tbody th {
+    display: block;
+    padding: 0 0 6px;
+    color: #07111f;
+  }
+  .pp-table td {
+    display: grid;
+    grid-template-columns: 9.5em minmax(0, 1fr);
+    gap: 10px;
+    padding: 3px 0;
+  }
+  .pp-table td::before {
+    content: attr(data-label);
+    font-size: 14px;
+    color: #5d6877;
+  }
+  .pp-slide .pp-amt {
+    font-size: 36px;
+  }
+  .pp-links {
+    font-size: 17px;
+  }
+}
+
+@media print {
+  .pp-slide {
+    padding: 0.45in 0.6in 0.3in;
+  }
+}

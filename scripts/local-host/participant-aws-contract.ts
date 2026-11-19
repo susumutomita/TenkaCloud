@@ -19,7 +19,14 @@ export type SimulatorConsoleIssuer = (
 
 export type ParticipantAwsAccess =
   | { readonly kind: "console"; readonly loginUrl: string }
-  | { readonly kind: "cli"; readonly credentials: CliCredentialsView };
+  | { readonly kind: "cli"; readonly credentials: CliCredentialsView }
+  | {
+      readonly kind: "terminal";
+      /** One-use code the participant pastes into the Simulator terminal page. */
+      readonly code: string;
+      readonly terminalUrl: string;
+      readonly expiresAt: string;
+    };
 
 export class ParticipantAssumeRoleError extends HostError {
   constructor(readonly stage: "competitor" | "participant_viewer") {

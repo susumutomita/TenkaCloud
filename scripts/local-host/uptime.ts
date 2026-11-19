@@ -24,6 +24,8 @@ interface DisruptionHook {
 interface Hooks {
   readonly progression: HostProgression;
   readonly disruptions: DisruptionHook;
+  /** A runtime-owned probe for this job (a Simulator Battle); otherwise the public probe. */
+  readonly probeFor?: (job: Job) => ProbeFn | undefined;
 }
 
 interface Snapshot {
@@ -39,6 +41,7 @@ interface Snapshot {
   readonly unit: StackUnit;
   readonly overrides: readonly { slot: string; overrideUrl: string }[];
   readonly state: UptimeState;
+  readonly probe: ProbeFn;
 }
 
 function uptimeDefinition(job: Job): UptimeStackDefinition | undefined {
@@ -211,6 +214,7 @@ export class LocalUptime {
       unit,
       overrides,
       state,
+      probe: this.hooks().probeFor?.(job) ?? this.probe,
     };
   }
 
@@ -218,7 +222,7 @@ export class LocalUptime {
     const urls = hostHintUrls(snapshot.unit);
     if (!urls) return;
     const [frontend, api] = await Promise.all(
-      urls.map((url) => this.probe(url, { expectStatus: [200] })),
+      urls.map((url) => snapshot.probe(url, { expectStatus: [200] })),
     );
     const nowIso = new Date(this.now()).toISOString();
     const hintHealth = {
@@ -260,7 +264,7 @@ export class LocalUptime {
       nowMs: this.now(),
       nowIso,
       prevState: {},
-      probe: this.probe,
+      probe: snapshot.probe,
     });
     if (!result.endpointsHealthJson) return;
     // The event's scoring contract uses the two registered endpoints. The fixed EC2 host

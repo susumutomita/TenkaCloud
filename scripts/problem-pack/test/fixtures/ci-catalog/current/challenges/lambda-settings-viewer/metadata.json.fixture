@@ -1,0 +1,91 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "lambda-settings-viewer",
+  "name": "サポート窓口の設定ビューア",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "20〜30 分",
+  "shortDescription": "サポート窓口が使う小さな Lambda 関数を引き継ぎました。呼び出し方を変えながら関数が何を読めるかを確かめ、社内向けの値を見つけて提出します。",
+  "instructions": "## はじめに\n\n天下クラウド株式会社のサポート窓口では、お客様に伝えてよい設定（受付時間など）を調べるために、小さな Lambda 関数「設定ビューア」を使っています。あなたはこの関数を前任者から引き継いだばかりです。次のリリースで、この関数に社内の通知機能を足す予定もあるようです。\n\nセキュリティ担当からの依頼は一つだけです。「この関数をサポート窓口に渡して大丈夫か、実際に動かして確かめてほしい」。\n\n## 言葉 (この問題に出てくるものだけ)\n\n- **Lambda 関数** — クラウドに置いておき、呼び出すと動く短いプログラム。この問題の関数は Python で書かれています。\n- **パラメータストア** — 名前を付けて短い文字列をしまっておく棚。名前は `/区画/名前` のようにスラッシュで区切ります。公開してよい設定は `/<プレフィックス>/public/` の下にあります。\n- **実行ロール** — 関数が動くときに使う権限のまとめ。関数を呼び出した人の権限とは別のものです。\n- **環境変数** — 関数に渡しておく設定値。関数の設定を読むと見られます。\n- **flag (フラグ)** — 到達した証明になる合言葉。この問題では `TC{` で始まり `}` で終わる 1 行の文字列です。中身はデプロイのたびに変わります。\n\n## 最初の一手\n\n問題ページの **「デプロイ出力 (詳細)」** に、関数名 `FunctionName` と `NamePrefix` が出ています。問題ページに表示される入口から、CLI 用の認証情報を取得してください（ローカルの Simulator で開催している場合は CLI だけを使います）。下の `<関数名>` は `FunctionName` の値、`<プレフィックス>` は `NamePrefix` の値です。\n\n1. 関数を呼び出します。\n\n```\naws lambda invoke --function-name <関数名> --cli-binary-format raw-in-base64-out --payload '{\"name\": \"support-hours\"}' out.json && cat out.json\n```\n\n受付時間が返ってくれば準備完了です。返ってきた `name` が、関数が実際に読んだ棚の名前です。\n\n2. 関数の設定を読み、環境変数と実行ロールを確かめます。\n\n```\naws lambda get-function-configuration --function-name <関数名>\n```\n\n3. あなた自身の権限で読めるのは、`/<プレフィックス>/public/` の下だけです。`aws ssm get-parameter --name /<プレフィックス>/public/greeting` は読めますが、ほかの名前は拒否されます。関数を通すと何が読めるのか、呼び出し方を変えて確かめます。\n\n## ゴール\n\n社内向けの値（`TC{` で始まる 1 行）を見つけ、問題ページの **「Flag (デプロイ出力値)」** に貼り付けて提出します。一致すれば +100 pt です。誤答 1 回につき 5 pt 減点されます。\n\n## もう一歩 (採点なし)\n\n値を見つけたら、関数を直してみましょう。次の土台を `index.py` として保存し、コメントの場所に「公開してよい設定の名前だけを通す」確かめを足します。\n\n```python\nimport os\n\nimport boto3\n\nssm = boto3.client(\"ssm\")\nSETTINGS_PREFIX = os.environ[\"SETTINGS_PREFIX\"]\n\n\ndef handler(event, context):\n    name = str(event.get(\"name\", \"greeting\"))\n    # ここで、公開してよい設定の名前だけを通すように確かめる\n    full_name = SETTINGS_PREFIX + name\n    try:\n        value = ssm.get_parameter(Name=full_name)[\"Parameter\"][\"Value\"]\n    except Exception as error:\n        return {\"ok\": False, \"name\": full_name, \"error\": type(error).__name__}\n    return {\"ok\": True, \"name\": full_name, \"value\": value}\n```\n\nZIP にして関数へ再デプロイします。\n\n```\nzip fixed.zip index.py\naws lambda update-function-code --function-name <関数名> --zip-file fileb://fixed.zip\n```\n\nflag を取り出したときと同じ呼び出しが失敗し、`{\"name\": \"support-hours\"}` ではこれまでどおり受付時間が返れば成功です。手元の Simulator で開催している場合は、何度デプロイしても実際のクラウドには触れません。",
+  "description": "Lambda の実行ロールと入力の扱いを、壊してよい環境で試す初級問題。\n\nデプロイすると、サポート窓口用の Lambda 関数（名前は CloudFormation が生成し `FunctionName` Output に出す）、公開設定 2 件、社内用パラメータ `/{NamePrefix}/internal/release-token` を作る。関数の実行ロールは `/{NamePrefix}/*` 全体を読め、関数は `/` で始まる名前をそのまま読む。参加者自身のロールは公開設定しか直接読めないが、関数を通すと社内用の値を取り出せる。その値 (`TC{…}`、デプロイごとのランダム値) を提出すると `ReleaseTokenValue` Output と照合して 100 pt を加点する。\n\n参加者のロールは、この関数の呼び出し・設定の読み取り・コードの再デプロイと公開設定の読み取りだけを許す。`lambda:ListFunctions` などの一覧系は付けない（共有のローカル Simulator では他チームの名前が見えるため）。採点しない任意の手順として、コードを直して再デプロイし、同じ呼び出しが失敗することを確かめる。\n\nLambda と SSM Standard tier だけを使い、EC2、VPC、公開 endpoint は作らない。同じテンプレートが AWS とローカルの TenkaCloud Simulator の両方で動く。Simulator では Lambda のコンソール入口がないため、参加者は CLI を使う。",
+  "tags": [
+    "lambda",
+    "iam",
+    "ssm",
+    "least-privilege",
+    "challenge",
+    "flag",
+    "simulator"
+  ],
+  "exposedPorts": [
+    {
+      "port": 1,
+      "name": "(no public endpoint — Lambda invoke and SSM only, port unused)"
+    }
+  ],
+  "learningGoals": [
+    "Lambda 関数が、呼び出した人ではなく実行ロールの権限で動くことを体験する",
+    "関数の入力と実行ロールの範囲が合わさると、呼び出した人が読めない値まで届くことを確かめる",
+    "コードを直して再デプロイし、同じ呼び出しが止まることを自分で確かめる"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {
+    "FlagSeed": "__RANDOM_PASSWORD__"
+  },
+  "simulationOverlay": {
+    "schemaVersion": "1",
+    "entry": "simulation.json"
+  },
+  "i18n": {
+    "en": {
+      "name": "The support desk's settings viewer",
+      "shortDescription": "You have inherited a small Lambda function the support desk uses. Change how you call it, find out what it can read, and submit the internal value you find.",
+      "instructions": "## Getting started\n\nTenka Cloud's support desk uses a small Lambda function, the \"settings viewer\", to look up settings it may share with customers, such as support hours. You have just inherited this function. A note says the next release will add an internal notification feature to it.\n\nSecurity asks one thing: \"Run it and tell us whether it is safe to hand this function to the support desk.\"\n\n## Terms (only the ones in this problem)\n\n- **Lambda function** — a short program kept in the cloud that runs when called. This one is written in Python.\n- **Parameter Store** — a shelf of short named strings. Names are separated by slashes, like `/area/name`. Settings that may be shared live under `/<prefix>/public/`.\n- **Execution role** — the permissions a function uses while it runs. They are separate from the permissions of whoever calls it.\n- **Environment variables** — settings handed to the function in advance. They appear when you read the function's configuration.\n- **Flag** — a pass phrase that proves you got there. Here it is one line that starts with `TC{` and ends with `}`. It changes on every deploy.\n\n## First move\n\nThe problem page's **Deployment outputs (details)** show the function name `FunctionName` and `NamePrefix`. Get CLI credentials from the entry shown on the problem page (when the event runs on the local Simulator, use the CLI only). Below, `<function>` is the `FunctionName` value and `<prefix>` is the `NamePrefix` value.\n\n1. Call the function.\n\n```\naws lambda invoke --function-name <function> --cli-binary-format raw-in-base64-out --payload '{\"name\": \"support-hours\"}' out.json && cat out.json\n```\n\nYou are ready when the support hours come back. The returned `name` is the shelf entry the function actually read.\n\n2. Read the function's configuration and check its environment variables and execution role.\n\n```\naws lambda get-function-configuration --function-name <function>\n```\n\n3. With your own permissions you can read only under `/<prefix>/public/`. `aws ssm get-parameter --name /<prefix>/public/greeting` works, but other names are refused. Change how you call the function and find out what it can read for you.\n\n## Goal\n\nFind the internal value (one line starting with `TC{`), paste it into **Flag (deployment output value)** on the problem page and submit. A match earns +100 pt. Each wrong answer costs 5 pt.\n\n## One step further (not scored)\n\nAfter you find the value, try fixing the function. Save this starting point as `index.py` and add, where the comment is, a check that lets through only the names of settings that may be shared.\n\n```python\nimport os\n\nimport boto3\n\nssm = boto3.client(\"ssm\")\nSETTINGS_PREFIX = os.environ[\"SETTINGS_PREFIX\"]\n\n\ndef handler(event, context):\n    name = str(event.get(\"name\", \"greeting\"))\n    # Check here that name is one of the settings that may be shared\n    full_name = SETTINGS_PREFIX + name\n    try:\n        value = ssm.get_parameter(Name=full_name)[\"Parameter\"][\"Value\"]\n    except Exception as error:\n        return {\"ok\": False, \"name\": full_name, \"error\": type(error).__name__}\n    return {\"ok\": True, \"name\": full_name, \"value\": value}\n```\n\nZip it and redeploy it to the function.\n\n```\nzip fixed.zip index.py\naws lambda update-function-code --function-name <function> --zip-file fileb://fixed.zip\n```\n\nYou are done when the call that gave you the flag now fails while `{\"name\": \"support-hours\"}` still returns the support hours. When the event runs on the local Simulator, no redeploy ever touches a real cloud.",
+      "description": "A beginner problem about a Lambda function's execution role and input handling, in an environment you may break.\n\nThe deploy creates a support-desk Lambda function `{NamePrefix}-settings-viewer`, two public settings and an internal parameter `/{NamePrefix}/internal/release-token`. The function's execution role reads everything under `/{NamePrefix}/*`, and the function reads any name that starts with `/` as given. The participant's own role reads only the public settings directly, but through the function the internal value comes out. Submitting that value (`TC{…}`, random per deploy) is checked against the `ReleaseTokenValue` output for 100 pt.\n\nThe participant role may invoke the function, read its configuration, redeploy its code and read the execution role's policy, nothing more. As an unscored step, participants fix the code, redeploy it and confirm the same call now fails.\n\nOnly Lambda and SSM Standard tier are used: no EC2, VPC or public endpoint. The same template runs on AWS and on the local TenkaCloud Simulator.",
+      "learningGoals": [
+        "Experience that a Lambda function runs with its execution role, not with the caller's permissions",
+        "Confirm that the function's input together with its role's scope reaches values the caller cannot read",
+        "Fix the code, redeploy it and confirm yourself that the same call stops working"
+      ],
+      "hints": [
+        {
+          "id": "hint-1",
+          "content": "A Lambda function reads Parameter Store with its execution role, not with yours. A name you cannot read with `aws ssm get-parameter` may still be readable by the function. Check whether the function's configuration (environment variables) lists a name the function knows."
+        },
+        {
+          "id": "hint-2",
+          "content": "Small example: if a function turns `{\"name\": \"hours\"}` into `/team/public/hours` but reads `{\"name\": \"/team/notes\"}` as `/team/notes`, the caller chooses the shelf. Look at the `name` the function returns for each call."
+        },
+        {
+          "id": "hint-3",
+          "content": "Copy the value of the environment variable `RELEASE_TOKEN_PARAM` (it starts with `/`). Call the function with `--payload '{\"name\": \"<that value>\"}'`. The returned `value` is the flag; paste it from `TC{` to `}`."
+        }
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "ReleaseTokenValue",
+    "points": 100,
+    "wrongAnswerPenalty": 5,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "Lambda 関数は、あなたではなく実行ロールの権限で棚を読みます。あなたが `aws ssm get-parameter` で読めない名前でも、関数は読めることがあります。関数の設定（環境変数）に、関数が知っている名前が載っていないか見てみましょう。",
+        "penalty": 10
+      },
+      {
+        "id": "hint-2",
+        "content": "小さな例: 関数が `{\"name\": \"hours\"}` を `/team/public/hours` に直して読み、`{\"name\": \"/team/notes\"}` は `/team/notes` のまま読むなら、どの棚を読むかは呼び出す側が決められます。呼び出すたびに返ってくる `name` を見比べましょう。",
+        "penalty": 15
+      },
+      {
+        "id": "hint-3",
+        "content": "環境変数 `RELEASE_TOKEN_PARAM` の値（`/` で始まる）をコピーし、`--payload '{\"name\": \"<その値>\"}'` で関数を呼び出します。返ってきた `value` が flag です。`TC{` から `}` までをそのまま貼り付けます。",
+        "penalty": 25
+      }
+    ]
+  }
+}

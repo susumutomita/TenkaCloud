@@ -5,8 +5,13 @@ import { SSMClient } from "@aws-sdk/client-ssm";
 import { STSClient } from "@aws-sdk/client-sts";
 import { normalizeSimulatorEndpointUrl } from "@tenkacloud/portal-contracts";
 import { connectCloudHosting } from "./cloud-hosting";
-import { bootstrapSimulatorRole, SIMULATOR_DEPLOY_ROLE } from "./simulator-bootstrap";
-import { connectSimulatorConsole } from "./simulator-console";
+import { connectSimulatorBattle } from "./simulator-battle";
+import {
+  bootstrapSimulatorRole,
+  SIMULATOR_COMMAND_ROLE,
+  SIMULATOR_DEPLOY_ROLE,
+} from "./simulator-bootstrap";
+import { connectSimulatorCapabilities } from "./simulator-console";
 
 export type SimulatorSettings = {
   readonly endpoint: string;
@@ -170,14 +175,22 @@ export async function connectSimulatorHosting(
   const secretAccessKey =
     "tokenFile" in settings ? readSimulatorToken(settings.tokenFile) : settings.readToken();
   const { endpoint, region } = settings;
-  const simulatorConsole = await connectSimulatorConsole(
+  const capabilities = await connectSimulatorCapabilities(
+    endpoint,
+    secretAccessKey,
+    assertSimulatorProxyDisabled,
+  );
+  // Only a Simulator started with a configured Battle VM runtime reports this.
+  const battle = await connectSimulatorBattle(
     endpoint,
     secretAccessKey,
     assertSimulatorProxyDisabled,
   );
   const connection = await connectCloudHosting(root, directory, region, {
     simulatorEndpoint: endpoint,
-    simulatorConsole,
+    simulatorConsole: capabilities.console,
+    simulatorServices: capabilities.nativeSdkServices,
+    ...(battle ? { simulatorBattle: battle } : {}),
     sts: guardedSimulatorClient(
       new STSClient({
         endpoint,
@@ -208,8 +221,10 @@ export async function connectSimulatorHosting(
         }),
       ),
       connection,
+      { battle: battle !== undefined },
     );
     await connection.verify("000000000000", SIMULATOR_DEPLOY_ROLE);
+    if (battle) await connection.verify("000000000000", SIMULATOR_COMMAND_ROLE);
   }
   return {
     ...connection,

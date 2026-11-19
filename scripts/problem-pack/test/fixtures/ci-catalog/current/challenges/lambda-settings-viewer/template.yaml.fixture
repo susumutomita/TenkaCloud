@@ -1,0 +1,212 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud problem (lambda-settings-viewer). A support-desk Lambda function reads
+  settings from SSM Parameter Store with its own execution role. The participant can
+  invoke the function, read its configuration and redeploy its code, but can read only
+  the public settings directly. Lambda + SSM Standard tier only: no EC2, VPC or public
+  endpoint. Runs unchanged on AWS and on the local TenkaCloud Simulator.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 100
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value.
+    Description: Common prefix attached to all resource names.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+  FlagSeed:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    MaxLength: 64
+    AllowedPattern: "^[A-Za-z0-9]+$"
+    Description: >
+      Per-deploy random secret (cfnParameters FlagSeed = __RANDOM_PASSWORD__). Stored as
+      TC{...} in the internal parameter only; never derivable from public values.
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags:
+        - Key: TenkaCloud:Purpose
+          Value: participant-viewer
+        - Key: TenkaCloud:ProblemId
+          Value: lambda-settings-viewer
+        - Key: TenkaCloud:JobId
+          Value: !Ref ExternalId
+        - Key: TenkaCloud:OperatorAccount
+          Value: !Ref TenkaCloudAccountId
+        - Key: TenkaCloud:StackId
+          Value: !Ref AWS::StackId
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # The participant reads only the public settings directly. The internal
+              # parameter is deliberately absent here: the exercise is to notice that
+              # the function's own role reaches further than the caller.
+              - Sid: ReadPublicSettings
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/public/*"
+              # Use the one function: run it, read its configuration (environment
+              # variables, role) and redeploy its code to try fixes. No list-style
+              # grants (lambda:ListFunctions, ssm:DescribeParameters): on a shared local
+              # Simulator they would show other teams' names. Participants open the
+              # function by the FunctionName output or the FunctionConsoleUrl deep link.
+              - Sid: UseSettingsViewer
+                Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                  - lambda:GetFunctionConfiguration
+                  - lambda:GetFunction
+                  - lambda:UpdateFunctionCode
+                Resource: !GetAtt SettingsViewerFunction.Arn
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  # The function's execution role. Its read scope covers every parameter under the
+  # team prefix, not only the public settings the function is meant to serve.
+  SettingsViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: ReadSettings
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ReadSettings
+                Effect: Allow
+                Action: ssm:GetParameter
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${NamePrefix}/*"
+
+  GreetingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/public/greeting"
+      Type: String
+      Value: "Welcome to the Tenka Cloud support desk."
+      Description: Public setting shown to customers.
+      Tier: Standard
+
+  SupportHoursParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/public/support-hours"
+      Type: String
+      Value: "Weekdays 09:00-18:00 JST"
+      Description: Public setting shown to customers.
+      Tier: Standard
+
+  ReleaseTokenParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/internal/release-token"
+      Type: String
+      # The discovered flag. Only the function's role can read it.
+      Value: !Sub "TC{${FlagSeed}}"
+      Description: Internal token for the release notifier. Not for the support desk.
+      Tier: Standard
+
+  SettingsViewerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      # No FunctionName: the generated name stays within Lambda's 64 characters for
+      # every team slug, and the participant policy refers to this function's ARN.
+      Description: Support desk tool. Returns a public setting by name.
+      Runtime: python3.12
+      Handler: index.handler
+      MemorySize: 128
+      Timeout: 10
+      Role: !GetAtt SettingsViewerRole.Arn
+      Environment:
+        Variables:
+          SETTINGS_PREFIX: !Sub "/${NamePrefix}/public/"
+          RELEASE_TOKEN_PARAM: !Sub "/${NamePrefix}/internal/release-token"
+      Code:
+        ZipFile: |
+          import os
+
+          import boto3
+
+          ssm = boto3.client("ssm")
+          SETTINGS_PREFIX = os.environ["SETTINGS_PREFIX"]
+
+
+          def handler(event, context):
+              # Support desk: {"name": "support-hours"} returns that public setting.
+              # A full name such as "/team/public/greeting" is accepted as well.
+              name = str(event.get("name", "greeting"))
+              if not name.startswith("/"):
+                  name = SETTINGS_PREFIX + name
+              try:
+                  value = ssm.get_parameter(Name=name)["Parameter"]["Value"]
+              except Exception as error:
+                  code = getattr(error, "response", {}).get("Error", {}).get("Code", type(error).__name__)
+                  return {"ok": False, "name": name, "error": code}
+              return {"ok": True, "name": name, "value": value}
+
+          # TODO(release-notifier): the next release posts RELEASE_TOKEN_PARAM's value
+          # to the deploy channel from this same function.
+
+Outputs:
+  FunctionName:
+    Description: The support-desk function to investigate.
+    Value: !Ref SettingsViewerFunction
+  NamePrefix:
+    Description: Common resource prefix that this stack used.
+    Value: !Ref NamePrefix
+  # Canonical answer, scoring engine only. The participant cannot call
+  # cloudformation:DescribeStacks, so this output stays hidden from them.
+  ReleaseTokenValue:
+    Description: The flag the learner submits after obtaining the internal token.
+    Value: !GetAtt ReleaseTokenParameter.Value
+  FunctionConsoleUrl:
+    Description: AWS Console deep link to this stack's function.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/lambda/home?region=${AWS::Region}#/functions/${SettingsViewerFunction}"
+  ParticipantViewerRoleArn:
+    Description: Role ARN that competitors assume to access their own stack.
+    Value: !GetAtt ParticipantViewerRole.Arn

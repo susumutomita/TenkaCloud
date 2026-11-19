@@ -51,6 +51,7 @@ function parseHostArgs(args: string[]) {
         "simulator-token-file": { type: "string" },
         "simulator-token": { type: "string" },
         "simulator-binary": { type: "string" },
+        "battle-bundle": { type: "string" },
         "no-simulator": { type: "boolean", default: false },
         "update-simulator": { type: "boolean", default: false },
         "simulator-region": { type: "string" },
@@ -148,16 +149,33 @@ export function parseOptions(
   };
 }
 
+/** The Battle bundle is used only by a Simulator this host starts on the same machine. */
+function battleBundleOption(
+  bundle: string | undefined,
+  sameMachineManaged: boolean,
+): { battleBundle?: string } {
+  if (bundle === undefined) return {};
+  if (!bundle.trim() || !sameMachineManaged)
+    throw new Error(
+      "--battle-bundle names a bundle directory for automatic same-machine Simulator startup only.",
+    );
+  return { battleBundle: resolve(bundle) };
+}
+
 function managedSimulatorOptions(
   values: {
     "simulator-binary"?: string;
+    "battle-bundle"?: string;
     "no-simulator"?: boolean;
     "behind-proxy"?: boolean;
     "update-simulator"?: boolean;
   },
   explicitSimulator: boolean,
   loopback: boolean,
-): { binary?: string; update?: boolean } | undefined {
+): { binary?: string; update?: boolean; battleBundle?: string } | undefined {
+  const sameMachineManaged =
+    !explicitSimulator && !values["no-simulator"] && loopback && !values["behind-proxy"];
+  const battle = battleBundleOption(values["battle-bundle"], sameMachineManaged);
   if (
     values["update-simulator"] &&
     (values["no-simulator"] ||
@@ -175,13 +193,12 @@ function managedSimulatorOptions(
     );
   if (values["simulator-binary"] !== undefined && (explicitSimulator || !loopback))
     throw new Error("--simulator-binary is only for automatic same-machine simulator startup.");
-  if (explicitSimulator || values["no-simulator"] || !loopback || values["behind-proxy"])
-    return undefined;
+  if (!sameMachineManaged) return undefined;
   const binary = values["simulator-binary"];
   if (binary !== undefined && !binary.trim())
     throw new Error("--simulator-binary must name an existing executable.");
-  if (binary) return { binary: resolve(binary) };
-  return values["update-simulator"] ? { update: true } : {};
+  if (binary) return { binary: resolve(binary), ...battle };
+  return values["update-simulator"] ? { update: true, ...battle } : battle;
 }
 
 function assertSimulatorOptions(

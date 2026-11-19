@@ -147,7 +147,10 @@ export class FakeAws {
               ? []
               : [
                   {
-                    OutputKey: "ParameterValue",
+                    // Each reviewed flag problem names its own flag output.
+                    OutputKey: stack.name.includes("lambda-settings-viewer")
+                      ? "ReleaseTokenValue"
+                      : "ParameterValue",
                     OutputValue: this.flagOutput === "blank" ? " " : fakeFlag(stack.name),
                   },
                 ]),

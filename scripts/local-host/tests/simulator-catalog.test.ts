@@ -22,14 +22,20 @@ const unsupported = {
   status: 409,
   kind: "simulator_problem_unsupported",
   message:
-    "This AWS problem is unavailable in simulator mode. Only Hello World is currently supported.",
+    "This AWS problem is unavailable in simulator mode. Only problems reviewed for the Simulator can be deployed there.",
 };
 const cleanup: (() => void)[] = [];
 afterEach(() => {
   for (const close of cleanup.splice(0)) close();
 });
 
-function host(simulator = true, consoleReady = false) {
+const LAMBDA_SIMULATOR = ["sts", "iam", "cloudformation", "ssm", "lambda"] as const;
+
+function host(
+  simulator = true,
+  consoleReady = false,
+  simulatorServices: readonly string[] = LAMBDA_SIMULATOR,
+) {
   const directory = mkdtempSync(join(tmpdir(), "tenka-simulator-catalog-"));
   const store = new HostStore(new Database(":memory:"));
   cleanup.push(() => {
@@ -42,7 +48,7 @@ function host(simulator = true, consoleReady = false) {
   const cloudFormation = mock(aws.cloudFormation);
   const operatorAccountId = mock(async () => OPERATOR_ACCOUNT);
   const cloud = new CloudFormationEngine(root, {
-    ...(simulator ? { simulatorEndpoint: "http://127.0.0.1:4566" } : {}),
+    ...(simulator ? { simulatorEndpoint: "http://127.0.0.1:4566", simulatorServices } : {}),
     ...(consoleReady
       ? { simulatorConsole: async () => "http://127.0.0.1:4566/_simulator/login" }
       : {}),
@@ -153,16 +159,17 @@ function expectNoAws(fixture: Host) {
   expect(fixture.aws.deleted).toEqual([]);
 }
 
-test("simulator catalog exposes only original Hello World and leaves the AWS catalog unchanged", async () => {
+test("simulator catalog exposes only the reviewed Simulator problems and leaves the AWS catalog unchanged", async () => {
   const fixture = host();
   const ordinary = cloudFormationCatalog(root);
   expect(ordinary.map((problem) => problem.problemId)).toEqual([
     "hello-world",
     "hello-world-battle",
+    "lambda-settings-viewer",
   ]);
   expect(host(false).cloud.catalog()).toEqual(ordinary);
   expect(fixture.cloud.catalog()).toEqual(
-    ordinary.filter((problem) => problem.problemId === "hello-world"),
+    ordinary.filter((problem) => problem.problemId !== "hello-world-battle"),
   );
   const token = await bootstrapOrganizer(fixture.service, HOST_KEY);
   const catalog = await fixture.service.admin(
@@ -171,7 +178,7 @@ test("simulator catalog exposes only original Hello World and leaves the AWS cat
   const items = (catalog.body as { items: { problemId: string; runtime: string }[] }).items;
   expect(
     items.filter((entry) => entry.runtime === "cloudformation").map((entry) => entry.problemId),
-  ).toEqual(["hello-world"]);
+  ).toEqual(["hello-world", "lambda-settings-viewer"]);
   await expect(
     fixture.service.admin(
       apiRequest({
@@ -249,6 +256,65 @@ test.each([
   },
 );
 
+test.each([false, true])(
+  "the Lambda problem offers CLI credentials only, with or without Simulator Console support (%p)",
+  async (consoleReady) => {
+    const fixture = host(true, consoleReady);
+    const context = savedJob(fixture, "lambda-settings-viewer");
+    const unit = JSON.parse(context.job.unit ?? "{}");
+    unit.outputs = {
+      ...unit.outputs,
+      FunctionName: "tc-lambda-settings-viewer-alpha-0123456789ab",
+      FunctionConsoleUrl: "https://console.aws.amazon.com/lambda/home#/functions/retained",
+      ReleaseTokenValue: "TC{retained-flag}",
+    };
+    context.job.unit = JSON.stringify(unit);
+    fixture.store.putJob(context.job);
+    const view = await fixture.engine.view(context);
+    expect(view.problems).toMatchObject([
+      {
+        problemId: "lambda-settings-viewer",
+        consoleKind: "simulator",
+        accessCapabilities: ["cli-credentials"],
+      },
+    ]);
+    // Simulator mode hides console deep links, and the flag output is never shown.
+    expect(view.problems).toEqual([
+      expect.objectContaining({
+        stackOutputs: {
+          FunctionName: "tc-lambda-settings-viewer-alpha-0123456789ab",
+          ParticipantViewerRoleArn: "arn:aws:iam::000000000000:role/retained-viewer",
+          ParameterValue: "retained-flag",
+          Ec2HostHint: "retained-host",
+          InstanceId: "i-0123456789abcdef0",
+        },
+      }),
+    ]);
+    expect(fixture.aws.created).toEqual([]);
+  },
+);
+
+test("a Simulator that does not advertise Lambda sessions hides the Lambda problem and refuses its saved jobs", async () => {
+  const fixture = host(true, false, ["sts", "iam", "cloudformation", "ssm"]);
+  expect(fixture.cloud.catalog().map((problem) => problem.problemId)).toEqual(["hello-world"]);
+  const context = savedJob(fixture, "lambda-settings-viewer");
+  const view = await fixture.engine.view(context);
+  expect(view.problems).toMatchObject([
+    { problemId: "lambda-settings-viewer", accessCapabilities: [] },
+  ]);
+  await expect(fixture.engine.start(context.job, mock())).rejects.toMatchObject(unsupported);
+  await expect(
+    Promise.resolve().then(() =>
+      fixture.engine.participantAwsAccess({
+        kind: "cli",
+        job: context.job,
+        assertCurrent: () => undefined,
+      }),
+    ),
+  ).rejects.toMatchObject(unsupported);
+  expectNoAws(fixture);
+});
+
 test("saved unsupported jobs keep their state and expose no CLI capability in simulator mode", async () => {
   const fixture = host();
   const context = savedJob(fixture);
@@ -298,6 +364,7 @@ test("saved unsupported jobs keep their state and expose no CLI capability in si
 
 test.each([
   { simulator: true, problemId: "hello-world" },
+  { simulator: true, problemId: "lambda-settings-viewer" },
   { simulator: false, problemId: "hello-world-battle" },
 ])(
   "$problemId lifecycle remains available with simulator=$simulator",

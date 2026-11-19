@@ -1,7 +1,16 @@
 import { describe, expect, it } from "bun:test";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { currentVersions, STAMPED_ASSETS, stampHtml } from "./stamp-asset-versions";
+import { JSDOM } from "jsdom";
+import {
+  currentMediaVersions,
+  currentVersions,
+  MEDIA_PAGES,
+  STAMPED_ASSETS,
+  STAMPED_MEDIA,
+  stampHtml,
+  stampMedia,
+} from "./stamp-asset-versions";
 
 const root = join(import.meta.dir, "../..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
@@ -60,7 +69,7 @@ describe("landing page SEO", () => {
     expect(english).toContain(
       '<link rel="canonical" href="https://tenkacloud.com/index.en.html" />',
     );
-    expect(english).toContain("to hands-on cloud exercises.");
+    expect(english).toContain("How do they happen?");
     expect(english).toContain("Build cloud capability across the org.");
   });
 
@@ -174,72 +183,73 @@ describe("documentation home by role", () => {
 });
 
 /** The browser onboarding is primary; current startup stays accessible after the walkthrough. */
-describe("landing interactive onboarding entry", () => {
+describe("platform-first landing entry", () => {
   const index = read("landing/index.html");
   const app = read("landing/app.js");
-
   function heroSection(html: string): string {
-    const start = html.indexOf('<section class="hero">');
-    const end = html.indexOf('<section class="alt" id="modes">');
-    expect(start, "hero section not found").toBeGreaterThan(-1);
-    expect(end, "modes section not found").toBeGreaterThan(start);
-    return html.slice(start, end);
+    const hero = html.match(/<section class="hero"[^>]*>[\s\S]*?<\/section>/)?.[0];
+    if (!hero) throw new Error("hero section not found");
+    return hero;
   }
-
-  it("should show no stacked primary buttons (cta-primary / cta-row) in the hero", () => {
+  it("defines the platform and routes its primary action to the prominent introductory film", () => {
     const hero = heroSection(index);
-    expect(hero).not.toContain("cta-primary");
-    expect(hero).not.toContain("cta-row");
-  });
-
-  it("routes the primary card to the existing six-step browser walkthrough", () => {
-    const hero = heroSection(index);
-    expect([...hero.matchAll(/class="hero-quest-card"/g)]).toHaveLength(1);
-    const card = hero.slice(hero.indexOf('class="hero-quest-card"'));
-    const opening = card.slice(0, card.indexOf(">"));
-    expect(opening).toContain('href="/portal-demo/?demo=1&amp;goto=start"');
-    expect(opening).toContain('data-cta="start-drill"');
-    expect(opening).not.toContain("target=");
-    expect(hero.indexOf('href="/docs/getting-started/#local-start"')).toBeGreaterThan(
-      hero.indexOf('class="hero-secondary"'),
+    expect(hero).toContain(
+      '<span class="motion-line">クラウドと</span><span class="motion-line">セキュリティを</span>',
     );
-    expect(hero).not.toContain('href="/portal-demo/start');
-    expect(hero).toContain('data-cta="start-drill"');
-    expect(hero).toContain("回答を提出。ヒントと採点");
-    expect(hero).not.toContain("旧版");
-  });
-
-  it("should not present the Lite/Codespaces mode choice anywhere in the hero", () => {
-    const hero = heroSection(index);
-    expect(hero).not.toContain("codespaces.new");
+    expect(hero).toContain("実践で学ぶ。");
+    expect(hero).toContain("自分たちの問題で、環境を動かして学ぶ OSS 基盤");
+    expect(hero).toContain("演習の開催から回答・採点まで");
+    expect(hero).toContain('href="#film"');
+    expect(hero).toContain('data-cta="watch-60s"');
+    expect(hero).toContain("実際の画面で紹介");
+    expect(hero).toContain('href="#try"');
+    expect(hero).not.toContain("3分で体験する");
+    expect(hero).not.toContain("ニュースで聞く情報漏えい");
     expect(hero).not.toContain("Codespaces");
   });
-
-  it("routes the organizer CTA to the current hosting guide while preserving the pricing CTA", () => {
-    const hero = heroSection(index);
-    expect(hero).toContain('data-cta="deploy-aws"');
-    expect(hero).toContain('href="./docs/manual/organizer/"');
-    expect(hero).toContain('data-cta="get-quote"');
-    expect(hero).toContain('href="#pricing"');
+  it("keeps the incident question below the platform and labels the interaction as explanatory", () => {
+    const question = index.slice(
+      index.indexOf('id="practice-question"'),
+      index.indexOf('id="why"'),
+    );
+    expect(question).toContain("ニュースで聞く情報漏えい、");
+    expect(question).toContain("どうやって起こるの？");
+    const example = index.slice(index.indexOf('id="examples"'), index.indexOf('id="hosting"'));
+    expect(example).toContain('<details class="platform-case">');
+    expect(example).not.toContain('<details class="platform-case" open');
+    expect(example).toContain("仕組みを説明するためのデモ");
+    expect(example).toContain("架空のデータ");
+    expect(example).toContain("採点は行いません");
+    expect(example).not.toContain("3分");
+    expect(example).not.toContain("開発中");
   });
-
+  it("shows available paths before the example and preserves role-specific guides", () => {
+    const start = index.indexOf('id="try"');
+    expect(start).toBeLessThan(index.indexOf('id="examples"'));
+    const paths = index.slice(start, index.indexOf('id="examples"'));
+    expect(paths).toContain("実環境への攻撃・修復を行うものではありません。");
+    expect(paths).toContain('data-i18n-href="mailGame.href"');
+    expect(paths).toContain('href="/docs/getting-started/#local-start"');
+    expect(index).toContain('data-cta="deploy-aws"');
+    expect(index).toContain('href="./docs/manual/organizer/"');
+    expect(index).toContain('href="./pricing.html"');
+    expect(index).toContain('id="pricing"');
+  });
   it("keeps language switches on the matching startup guide", () => {
     expect(app).toContain('"hero.startHref": "/docs/getting-started/#local-start"');
     expect(app).toContain('"hero.startHref": "/docs/getting-started/index.en.html#local-start"');
-    expect(index).toContain('data-i18n-href="hero.startHref"');
   });
-
-  it("publishes the walkthrough and secondary startup path in static English", () => {
+  it("publishes the product definition, available actions and honest example in static English", () => {
     const english = read("landing/index.en.html");
     const hero = heroSection(english);
-    expect(hero).toContain('href="./docs/manual/organizer/index.en.html"');
-    expect(hero).not.toContain("cta-primary");
-    expect([...hero.matchAll(/class="hero-quest-card"/g)]).toHaveLength(1);
-    expect(hero).toContain('data-cta="start-drill"');
-    expect(hero).toContain('href="/docs/getting-started/index.en.html#local-start"');
-    expect(hero).toContain('data-cta="local-start"');
-    expect(hero).toContain("including hints and scoring");
-    expect(hero).not.toContain("Earlier introductory demo");
+    expect(hero).toContain("open-source platform");
+    expect(hero).toContain("Watch the one-minute introduction");
+    expect(hero).not.toContain("Three minutes");
+    expect(english).toContain("Build your service architecture and internal rules");
+    expect(english).toContain("explanatory demo using fictional data");
+    expect(english).toContain("no scoring");
+    expect(english).toContain('href="/docs/getting-started/index.en.html#local-start"');
+    expect(english).toContain('href="./docs/manual/organizer/index.en.html"');
   });
 });
 
@@ -268,6 +278,44 @@ describe("landing asset cache busting (content-hash stamped)", () => {
   it("should stamp idempotently", () => {
     const html = read("landing/index.html");
     expect(stampHtml(html, versions)).toBe(html);
+  });
+
+  // 動画は差し替えても URL が同じなので、 Cloudflare の地域キャッシュが旧版を返し続ける。
+  // 参照ごとに内容ハッシュを刻み、 差し替えてスタンプし忘れた PR を落とす。
+  it("should reference every stamped video with its current content hash", () => {
+    const media = currentMediaVersions();
+    for (const page of MEDIA_PAGES) {
+      const html = read(`landing/${page}`);
+      for (const asset of STAMPED_MEDIA) {
+        const references = [
+          ...html.matchAll(
+            new RegExp(`["'](?:\\.\\./)*/?${asset.replaceAll(".", "\\.")}[^"']*["']`, "g"),
+          ),
+        ].map((m) => m[0]);
+        // The event page uses the full film; the LP additionally uses its own short clips.
+        if (page.startsWith("ss-bootcamp") && asset.startsWith("assets/lp-motion/")) {
+          expect(references).toHaveLength(0);
+          continue;
+        }
+        expect(references.length, `${page} should reference ${asset}`).toBeGreaterThan(0);
+        for (const reference of references)
+          expect(reference).toContain(`${asset}?v=${media[asset]}`);
+      }
+      expect(stampMedia(html, media)).toBe(html);
+    }
+  });
+
+  it("should add or replace the video stamp without touching other paths", () => {
+    const versions = { "videos/lp/clip.mp4": "0123456789" };
+    expect(stampMedia('<a href="/videos/lp/clip.mp4">', versions)).toBe(
+      '<a href="/videos/lp/clip.mp4?v=0123456789">',
+    );
+    expect(stampMedia('<source src="../videos/lp/clip.mp4?v=aaaaaaaaaa" />', versions)).toBe(
+      '<source src="../videos/lp/clip.mp4?v=0123456789" />',
+    );
+    expect(stampMedia('<a href="/videos/lp/clip.mp4.bak">', versions)).toBe(
+      '<a href="/videos/lp/clip.mp4.bak">',
+    );
   });
 });
 
@@ -418,6 +466,45 @@ describe("presentations stay off the landing page body", () => {
 });
 
 /**
+ * 法人向け提案資料は日英の対で公開する。 片方だけ枚数や価格が変わる、 送付前の
+ * 未記入欄 ([担当者名] など) が公開ページに残る、 一覧から辿れなくなる、 を検出する。
+ */
+describe("enterprise proposal deck (ja / en)", () => {
+  const pages = {
+    ja: read("landing/proposal/index.html"),
+    en: read("landing/proposal/index.en.html"),
+  };
+
+  it("should publish the same slides, prices and contact route in both languages", () => {
+    for (const [lang, html] of Object.entries(pages)) {
+      const doc = new JSDOM(html).window.document;
+      expect(doc.documentElement.lang).toBe(lang);
+      expect(doc.querySelectorAll("section.slide")).toHaveLength(11);
+      expect(doc.querySelector('link[rel="alternate"][hreflang="ja"]')?.getAttribute("href")).toBe(
+        "https://tenkacloud.com/proposal/",
+      );
+      expect(doc.querySelector('link[rel="alternate"][hreflang="en"]')?.getAttribute("href")).toBe(
+        "https://tenkacloud.com/proposal/index.en.html",
+      );
+      const prices = [...doc.querySelectorAll(".pp-amt")].map((e) => e.textContent);
+      expect(prices).toEqual(
+        lang === "ja" ? ["50万円", "150万円", "600万円〜"] : ["¥500K", "¥1.5M", "¥6M+"],
+      );
+      expect(doc.querySelector('a[href="https://forms.gle/djVprYmq3hFgJA7P9"]')).not.toBeNull();
+      // Draft decks mark unfilled fields as [担当者名] / [Email]; the published copy has none.
+      expect(doc.body.textContent).not.toContain("[");
+    }
+  });
+
+  it("should be reachable from the presentations library and the sitemap", () => {
+    expect(read("landing/presentations/index.html")).toContain('href="../proposal/"');
+    const sitemap = read("landing/sitemap.xml");
+    expect(sitemap).toContain("<loc>https://tenkacloud.com/proposal/</loc>");
+    expect(sitemap).toContain("<loc>https://tenkacloud.com/proposal/index.en.html</loc>");
+  });
+});
+
+/**
  * LP 動画。 hero の secondary 行と両 README の CTA 付近から 1 分の紹介動画を参照する。
  * 以前の 30 秒版 (#2696 P1、 16:9 / 9:16) は README から引き続き辿れる。
  */
@@ -442,11 +529,13 @@ describe("product video placement (#2696 P1)", () => {
     expect(bytes).toBeLessThan(25 * 1024 * 1024);
   });
 
-  it("should link the 60s video from the hero secondary row on both pages", () => {
+  it("should link the official YouTube video from the hero and retain the self-hosted full film", () => {
     for (const page of ["landing/index.html", "landing/index.en.html"]) {
       const html = read(page);
       expect(html).toContain('data-cta="watch-60s"');
-      expect(html).toContain('href="/videos/lp/tenkacloud-60s.mp4"');
+      const version = currentMediaVersions()["videos/lp/tenkacloud-60s.mp4"];
+      expect(html).toContain('href="https://youtu.be/k3087kMJmgI"');
+      expect(html).toContain(`src="/videos/lp/tenkacloud-60s.mp4?v=${version}"`);
       expect(html).not.toContain("tenkacloud-30s.mp4");
     }
   });
@@ -532,12 +621,15 @@ describe("saved enterprise copy integrated onto the current LP", () => {
       expect(html).not.toContain('id="onboard"');
       expect(html).not.toContain('id="trust-bullets"');
       expect(html).not.toContain('class="future-learning"');
-      const contact = html.match(/<section id="contact">[\s\S]*?<\/section>/)?.[0];
+      const contact = new JSDOM(html).window.document.getElementById("contact")?.outerHTML;
       expect(contact).toContain('href="https://forms.gle/djVprYmq3hFgJA7P9"');
       expect(contact).not.toContain("/discussions");
+      // The inquiry form accepts responses without a Google sign-in, so the label must not
+      // claim one is required.
       expect(contact).toContain(
-        file.endsWith("index.en.html") ? "Google sign-in" : "Googleログイン",
+        file.endsWith("index.en.html") ? ">Contact form</a>" : ">お問い合わせフォーム</a>",
       );
+      expect(contact).not.toMatch(/Google sign-in|Googleログイン/);
       expect(html).toContain('href="/portal-demo/?demo=1&amp;goto=start"');
       expect(html).toContain('data-i18n="extend.idea"');
     }

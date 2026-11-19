@@ -12,7 +12,10 @@ regressions. Its files match v1.12.0
 (`68b9fbe0d49f5f1d01e04cf8b52f284fd3153ee1`), the first engine that follows the
 match length the platform reports. Images, guides, writeups, tests and unused browser implementation
 are omitted. The historical `ac26-crypto-battle` metadata is an override; its
-identical engine inputs are reused from `crypto-battle`.
+identical engine inputs are reused from `crypto-battle`. `lambda-settings-viewer`
+copies its metadata, template and Simulator overlay unchanged from the
+TenkaCloudChallenge change that adds it, so the reviewed Simulator deployment is
+exercised against the real template.
 
 Files ending in `.fixture` are test payloads. The explicit CI preparation command
 materializes them under `.tenkacloud/ci-catalog-inputs`, then uses the ordinary

@@ -279,6 +279,8 @@
     "endpoint_effective_label": "Effective URL",
     "endpoint_not_yet_pre": "まだ取得できていません — deploy 完了後に CFn Outputs.",
     "endpoint_not_yet_post": "から自動取得します。 今すぐ自前の URL を登録するなら 下の「新しい URL を登録」 から override してください。",
+    "endpoint_not_filled_pre": "deploy は完了しましたが、CFn Outputs.",
+    "endpoint_not_filled_post": "は空のため、この URL は自動では入りません。 問題の説明に従って、下の「新しい URL を登録」 から URL を登録してください。",
     "endpoint_override_active_label": "override 中 (default:",
     "endpoint_override_input_label": "新しい URL を登録",
     "endpoint_override_url_empty": "URL を入力してください",
@@ -305,7 +307,7 @@
   },
   "sso_credentials": {
     "open_simulator_console_button": "Simulator Console を開く",
-    "simulator_console_update": "このSimulatorは参加者用Console接続に未対応です。主催者にSimulatorの更新を依頼してください。CLIは利用できます。",
+    "simulator_console_update": "この問題は Simulator のコンソールでは開けません。CLI 用の認証情報を使ってください。コンソールで開けるはずの問題であれば、主催者に Simulator の更新を依頼してください。",
     "console_popup_blocked": "Console を開けませんでした。このサイトのポップアップを許可してから、もう一度お試しください。",
     "aws_access_unavailable": "この問題環境の AWS アクセスはまだ利用できません。現在の状態を確認するか、開催者へ問い合わせてください。",
     "title": "SSO Credentials",
@@ -357,6 +359,18 @@
       "stage_competitor": "競技者アカウントへの AssumeRole",
       "stage_participant_viewer": "問題ごとの ParticipantViewerRole",
       "security_note": "※ 資格情報は画面外には保存されません。 ページを離れる / 再読み込みで消えます。 漏洩リスクを下げるため、 共有や貼り付け先には注意してください。"
+    },
+    "terminal": {
+      "section_header": "サーバの中に入る（ゲスト端末）",
+      "body": "この問題のサーバの中でコマンドを実行できる端末です。SSH や秘密鍵は使いません。2 つの URL を登録して採点が始まると、1 回だけ使えるコードを発行できます。コードを端末ページに貼り付けて開いてください。",
+      "issue_button": "端末コードを発行する",
+      "reissue_button": "コードを発行し直す",
+      "code_label": "1 回だけ使えるコード（{expiresAt} まで有効）",
+      "copy_button": "コードをコピー",
+      "open_button": "端末ページを開く",
+      "steps": "「端末ページを開く」で表示された画面にコードを貼り付け、「Open terminal / 端末を開く」を押してください。期限が切れたらコードを発行し直してください。",
+      "error_header": "端末コードを発行できませんでした",
+      "mock_blocked": "モックモードでは端末コードを発行できません。"
     }
   },
   "problem_panel": {

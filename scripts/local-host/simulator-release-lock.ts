@@ -4,7 +4,25 @@ import { link, lstat, mkdir, open, rename, rmdir, unlink } from "node:fs/promise
 import { join, resolve } from "node:path";
 import { z } from "zod";
 import { ensureSimulatorBinary, prepareSimulatorCache } from "./simulator-release";
-import { metadata, officialSimulatorAssetResponse, parseMetadata } from "./simulator-release-http";
+import {
+  metadata,
+  officialSimulatorAssetResponse,
+  parseMetadata,
+  SimulatorReleaseCancelled,
+  SimulatorReleaseRejected,
+  SimulatorReleaseUnavailable,
+} from "./simulator-release-http";
+
+export {
+  SimulatorReleaseCancelled,
+  SimulatorReleaseRejected,
+  SimulatorReleaseUnavailable,
+} from "./simulator-release-http";
+
+/** A first start has no lock to fall back to, so it waits as long as it always did. */
+export const FIRST_RESOLVE_TIMEOUT_MS = 120_000;
+/** With a lock, an unreachable GitHub must not delay a start by minutes. */
+export const LOCKED_CHECK_TIMEOUT_MS = 15_000;
 
 const REPOSITORY = "https://github.com/susumutomita/TenkaCloudSimulator";
 const RELEASE_API = "https://api.github.com/repos/susumutomita/TenkaCloudSimulator/releases";
@@ -33,11 +51,19 @@ interface Dependencies {
   fetch?: Fetcher;
   platform?: string;
   arch?: string;
+  /** Deadline for resolving when there is no lock, or under strict `update`. */
   timeoutMs?: number;
+  /** Deadline for the best-effort check that has a lock to fall back to. */
+  checkTimeoutMs?: number;
 }
 interface Options {
   cacheDirectory: string;
+  /** Strict update: any failure to resolve a newer release stops the start. */
   update?: boolean;
+  /** Look for a newer release on every start; transient failures use the locked release. */
+  checkLatest?: boolean;
+  /** Called with the verified new release before the lock is replaced and it first runs. */
+  beforeVersionChange?: (change: { from: string; to: string }) => Promise<void> | void;
   signal?: AbortSignal;
 }
 
@@ -79,29 +105,76 @@ export async function ensureOfficialSimulatorBinary(
 async function useLockedRelease(options: Options, dependencies: Dependencies): Promise<string> {
   const path = join(options.cacheDirectory, "release-lock.json");
   const current = await readLock(path);
+  const checking = Boolean(current && (options.update || options.checkLatest));
   const selected =
-    current && !options.update ? current : await resolveRelease(options.signal, dependencies);
-  if (current && options.update) assertUpdate(current, selected);
+    !current || checking ? await selectRelease(current, options, dependencies) : current;
   options.signal?.throwIfAborted();
   const binary = await ensureSimulatorBinary(
     { cacheDirectory: options.cacheDirectory, release: selected, signal: options.signal },
     dependencies,
   );
   options.signal?.throwIfAborted();
-  if (!current || options.update) await writeLock(path, selected, Boolean(current));
-  console.log(
-    `Simulator ${selected.version}: verified local release lock${options.update ? " updated" : ""}.`,
-  );
+  if (!current) {
+    await writeLock(path, selected, false);
+    console.log(`Simulator ${selected.version}: verified local release lock.`);
+  } else if (selected.version === current.version) {
+    console.log(
+      checking
+        ? `Simulator ${current.version}: up to date.`
+        : `Simulator ${selected.version}: verified local release lock.`,
+    );
+  } else {
+    await options.beforeVersionChange?.({ from: current.version, to: selected.version });
+    await writeLock(path, selected, true);
+    console.log(`Simulator updated from ${current.version} to ${selected.version}.`);
+  }
   return binary;
+}
+
+/** Choose the release to run; a transient check failure keeps the locked one, visibly. */
+async function selectRelease(
+  current: ReleaseLock | undefined,
+  options: Options,
+  dependencies: Dependencies,
+): Promise<ReleaseLock> {
+  // Only a best-effort check with a lock to fall back to gets the short deadline.
+  const timeoutMs =
+    current && !options.update
+      ? (dependencies.checkTimeoutMs ?? LOCKED_CHECK_TIMEOUT_MS)
+      : (dependencies.timeoutMs ?? FIRST_RESOLVE_TIMEOUT_MS);
+  let latest: ReleaseLock;
+  try {
+    latest = await resolveRelease(options.signal, dependencies, timeoutMs);
+  } catch (error) {
+    if (
+      current &&
+      !options.update &&
+      error instanceof SimulatorReleaseUnavailable &&
+      error.transient
+    ) {
+      console.warn(`Simulator update check failed (${error.reason}); using ${current.version}.`);
+      return current;
+    }
+    throw error;
+  }
+  if (!current) return latest;
+  if (!options.update && compareVersions(latest.version, current.version) < 0) {
+    console.warn(
+      `Simulator update check found ${latest.version}, older than the locked ${current.version} (a release may have been withdrawn); using ${current.version}.`,
+    );
+    return current;
+  }
+  assertUpdate(current, latest);
+  return latest;
 }
 
 function assertUpdate(current: ReleaseLock, selected: ReleaseLock): void {
   if (compareVersions(selected.version, current.version) < 0)
-    throw new Error(
+    throw new SimulatorReleaseRejected(
       "Simulator update would downgrade the locked release; the existing lock was retained.",
     );
   if (current.version === selected.version && JSON.stringify(current) !== JSON.stringify(selected))
-    throw new Error(
+    throw new SimulatorReleaseRejected(
       "Simulator release contents changed for the same version; the existing lock was retained. Use a new immutable release version.",
     );
 }
@@ -166,8 +239,9 @@ async function writeLock(path: string, selected: ReleaseLock, replace: boolean):
 async function resolveRelease(
   parent: AbortSignal | undefined,
   dependencies: Dependencies,
+  timeoutMs: number,
 ): Promise<ReleaseLock> {
-  const timeout = AbortSignal.timeout(dependencies.timeoutMs ?? 120_000);
+  const timeout = AbortSignal.timeout(timeoutMs);
   const signal = parent ? AbortSignal.any([parent, timeout]) : timeout;
   try {
     const fetcher = dependencies.fetch ?? globalThis.fetch;
@@ -199,19 +273,33 @@ async function resolveRelease(
       "No compatible official Simulator release is published among the newest 100 releases. Retry after publication or use --simulator-binary / --no-simulator. No source build or AWS fallback was attempted.",
     );
   } catch (error) {
-    if (signal.aborted)
-      throw new Error(
-        "Simulator release resolution cancelled or timed out; the existing lock was retained.",
-      );
-    if (
-      (error instanceof Error && error.message.startsWith("Simulator")) ||
-      (error instanceof Error && error.message.startsWith("No compatible"))
-    )
-      throw error;
-    throw new Error(
-      "Simulator release resolution failed; check connectivity and GitHub availability. Existing locked bytes were not changed. Offline first use and explicit updates need network access.",
-    );
+    throw classifyResolveFailure(error, parent, signal);
   }
+}
+
+/** Sort a failed resolution into cancelled, unavailable (retryable) or rejected (verification). */
+function classifyResolveFailure(
+  error: unknown,
+  parent: AbortSignal | undefined,
+  signal: AbortSignal,
+): Error {
+  if (parent?.aborted)
+    return new SimulatorReleaseCancelled(
+      "Simulator release resolution cancelled; the existing lock was retained.",
+    );
+  if (signal.aborted)
+    return new SimulatorReleaseUnavailable(
+      "Simulator release resolution timed out; the existing lock was retained.",
+      "timeout",
+    );
+  if (error instanceof SimulatorReleaseUnavailable) return error;
+  if (error instanceof Error && error.message.startsWith("Simulator"))
+    return new SimulatorReleaseRejected(error.message);
+  if (error instanceof Error && error.message.startsWith("No compatible")) return error;
+  return new SimulatorReleaseUnavailable(
+    "Simulator release resolution failed; check connectivity and GitHub availability. Existing locked bytes were not changed. Offline first use and explicit updates need network access.",
+    "unreachable",
+  );
 }
 
 async function resolveCandidate(

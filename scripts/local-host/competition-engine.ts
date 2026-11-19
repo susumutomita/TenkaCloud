@@ -78,6 +78,17 @@ export class CompetitionEngine extends DockerHostingEngine {
   disruptionAdapter() {
     return this.cloud?.disruptionAdapter();
   }
+  requiresGuestReadiness(job: Job): boolean {
+    return (
+      definitionKind(job.definition) === "cloudformation" &&
+      Boolean(this.cloud?.requiresGuestReadiness(job))
+    );
+  }
+  uptimeProbe(job: Job) {
+    return definitionKind(job.definition) === "cloudformation"
+      ? this.cloud?.uptimeProbe(job)
+      : undefined;
+  }
   override catalog(): readonly Problem[] {
     return this.catalogEntries();
   }

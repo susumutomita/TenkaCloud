@@ -55,6 +55,16 @@ export function externalPortalUrl(provider: string): string | undefined {
 }
 
 /** Explicit capabilities are authoritative; an omitted list preserves the old backend contract. */
+/** Simulator Battle guest terminal: only when the host explicitly advertises it. */
+export function hasGuestTerminal(
+  problem: RuntimeProviderView & { readonly accessCapabilities?: readonly string[] },
+): boolean {
+  return (
+    problemProvider(problem) === "aws" &&
+    Boolean(problem.accessCapabilities?.includes("guest-terminal"))
+  );
+}
+
 export function hasAwsAccessCapability(
   problem: RuntimeProviderView & { readonly accessCapabilities?: readonly string[] },
   capability: "console" | "cli-credentials",

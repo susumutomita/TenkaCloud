@@ -84,6 +84,8 @@ describe("pinned public AWS API catalog and visible policy keys", () => {
     }
     expect(operations).toBe(19437);
   });
+  // 12,000 draws (two seeded streams compared draw by draw) through the real question selector.
+  // Measured 2.1 s alone and 5.6 s once in a full `test:scripts` run on a cloud dev container.
   test("all authored cases have model-backed operations, visible payloads and reproducible balanced variants", () => {
     const a = createQuestionStream(catalog, 123),
       b = createQuestionStream(catalog, 123);
@@ -126,7 +128,7 @@ describe("pinned public AWS API catalog and visible policy keys", () => {
     expect(kinds.size).toBe(availableScenarios(catalog).length);
     expect(cases.size).toBe(availableScenarios(catalog).length * 2);
     expect(dangerous).toBe(3000);
-  });
+  }, 15_000);
   test("same API has opposite decisions based on actual security parameters", () => {
     const s = createQuestionStream(catalog, 15);
     s.elapsed = 300000;

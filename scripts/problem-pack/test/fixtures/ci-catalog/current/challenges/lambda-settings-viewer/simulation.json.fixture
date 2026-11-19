@@ -1,0 +1,46 @@
+{
+  "$schema": "../../SIMULATION_SCHEMA.json",
+  "schemaVersion": "1",
+  "requirements": [
+    {
+      "targetId": "default",
+      "service": "lambda",
+      "resourceType": "function",
+      "operation": "Invoke",
+      "fidelity": "L2",
+      "plane": "participant"
+    },
+    {
+      "targetId": "default",
+      "service": "lambda",
+      "resourceType": "function",
+      "operation": "GetFunctionConfiguration",
+      "fidelity": "L2",
+      "plane": "participant"
+    },
+    {
+      "targetId": "default",
+      "service": "lambda",
+      "resourceType": "function",
+      "operation": "UpdateFunctionCode",
+      "fidelity": "L2",
+      "plane": "participant"
+    },
+    {
+      "targetId": "default",
+      "service": "ssm",
+      "resourceType": "*",
+      "operation": "GetParameter",
+      "fidelity": "L2",
+      "plane": "participant"
+    },
+    {
+      "targetId": "default",
+      "service": "ssm",
+      "resourceType": "*",
+      "operation": "GetParameter",
+      "fidelity": "L2",
+      "plane": "workload"
+    }
+  ]
+}

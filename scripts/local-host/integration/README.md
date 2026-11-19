@@ -108,3 +108,28 @@ credentials or the answer. Failure withholds private subprocess output. This is
 HTTP/CLI evidence, not GUI evidence. Logs are chronological within each native
 provider page; this does not claim globally ascending multi-page history. The
 optional rehearsal does not replace the required repository quality gate.
+
+## Hello World Battle on a Simulator Battle runtime
+
+```sh
+bun run test:simulator-battle --simulator-binary /abs/tenkacloud-simulator --battle-bundle /abs/battle-bundle
+```
+
+The bundle comes from TenkaCloudSimulator `test/battle/image/build_bundle.py`, built
+on the same machine; the binary must include the Battle runtime. Unset the HTTP
+proxy variables first, as for every simulator-mode host. The command starts the
+Simulator through the host's own managed launcher with `--battle-bundle`, then
+the host in-process with its real HTTP listeners (no web build or `make local`
+subprocess), and drives the unchanged `hello-world-battle` through the HTTP APIs:
+native bootstrap and account verification, deployment of one real guest,
+participant registration of `http://<Ec2HostHint>` and `http://<Ec2HostHint>:8080`,
+a scored healthy minute, the catalog `frontend-down` disruption through the
+separate command role, recovery through a guest terminal code issued by the
+host (redeemed and used the way the Simulator terminal page does), recovery
+points, teardown, and a clean Simulator exit that releases the guest files. It
+takes about 10 minutes under QEMU TCG because it waits for real scoring minutes.
+
+Success prints a JSON summary of timings and scores, never credentials or codes.
+It is one team on one machine clock. The 600-second automatic revert is a host
+timer and is not waited for. This is HTTP evidence, not GUI evidence, and does
+not replace the required repository quality gate.

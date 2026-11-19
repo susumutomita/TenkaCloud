@@ -34,6 +34,7 @@ import { problemAuthorFields } from "../../packages/portal-contracts/src/problem
 import { assumeRoleWithExternalId } from "../lib/assume-role";
 import { buildParameterOverrides, generateRandomAlphanumeric } from "../lib/cfn-parameters";
 import { flagMatches } from "../lib/flag-matches";
+import type { ProbeFn } from "../lib/http-probe-client";
 import { hintViews, parseEnglishOverlay, parseVerifyScoring } from "../lib/problem-presentation";
 import {
   catalogMetadata,
@@ -67,6 +68,8 @@ import {
   participantAwsAccess,
 } from "./participant-aws-access";
 import { projectedScore } from "./score";
+import type { SimulatorBattle } from "./simulator-battle";
+import { SIMULATOR_COMMAND_ROLE } from "./simulator-bootstrap";
 import { skillCatalog } from "./skill-catalog";
 
 /** Short-lived credentials for the team's competitor role; the SDK refreshes them near expiry. */
@@ -84,6 +87,10 @@ function isFlagStackDefinition(definition: StackDefinition): definition is FlagS
 export interface CloudFormationEngineOptions extends ParticipantAwsClients {
   readonly region: string;
   readonly simulatorEndpoint?: string;
+  /** Signing services the connected Simulator's native SDK sessions accept (its capability document). */
+  readonly simulatorServices?: readonly string[];
+  /** Present only when the connected Simulator reports a configured Battle VM runtime. */
+  readonly simulatorBattle?: SimulatorBattle;
   readonly ssm?: AwsDisruptionClients["ssm"];
   /** The host's ExternalId. Every competitor role requires it (`competitor-bootstrap.yaml`). */
   readonly externalId: string;
@@ -104,21 +111,69 @@ export interface CloudFormationEngineOptions extends ParticipantAwsClients {
 const EXTERNAL_ID_PATTERN = /^[A-Za-z0-9_=,.@:/-]{16,128}$/u;
 
 /** Reviewed list: extending it requires reviewing the template's cost and blast radius. */
-const REVIEWED_STACK_PROBLEMS = [
+const REVIEWED_STACK_PROBLEMS: readonly {
+  readonly problemId: string;
+  readonly folder: "challenges" | "battles";
+  readonly scoring: "flag" | "uptime-flat";
+  readonly simulator: boolean;
+  /** Native SDK services participants call directly, beyond the CloudFormation/STS/SSM baseline. */
+  readonly simulatorServices?: readonly string[];
+  /** Needs the Simulator's configured Battle VM runtime (a real guest, probes and terminal). */
+  readonly simulatorBattle?: true;
+}[] = [
   { problemId: "hello-world", folder: "challenges", scoring: "flag", simulator: true },
-  { problemId: "hello-world-battle", folder: "battles", scoring: "uptime-flat", simulator: false },
-] as const;
+  // One VPC, one t3.micro guest running nginx and Python; the unchanged rehearsal passes on the
+  // Simulator's VM runtime (TenkaCloudSimulator test/battle).
+  {
+    problemId: "hello-world-battle",
+    folder: "battles",
+    scoring: "uptime-flat",
+    simulator: true,
+    simulatorBattle: true,
+  },
+  // One Python Lambda, two IAM roles and three SSM Standard parameters; no network endpoint.
+  {
+    problemId: "lambda-settings-viewer",
+    folder: "challenges",
+    scoring: "flag",
+    simulator: true,
+    simulatorServices: ["lambda"],
+  },
+];
 
-/** Simulator support requires an unchanged-problem rehearsal, not just catalog discovery. */
-function simulatorProblemSupported(problemId: string): boolean {
-  return REVIEWED_STACK_PROBLEMS.some((entry) => entry.problemId === problemId && entry.simulator);
+/**
+ * Simulator support requires an unchanged-problem rehearsal, not just catalog discovery, and a
+ * connected Simulator whose native SDK sessions accept every service the participant must call.
+ */
+function simulatorProblemSupported(
+  problemId: string,
+  services: readonly string[],
+  battle: boolean,
+): boolean {
+  return REVIEWED_STACK_PROBLEMS.some(
+    (entry) =>
+      entry.problemId === problemId &&
+      entry.simulator &&
+      (!entry.simulatorBattle || battle) &&
+      (entry.simulatorServices ?? []).every((service) => services.includes(service)),
+  );
+}
+
+function isSimulatorBattleProblem(problemId: string): boolean {
+  return REVIEWED_STACK_PROBLEMS.some(
+    (entry) => entry.problemId === problemId && entry.simulatorBattle,
+  );
 }
 
 function simulatorAccessCapabilities(
   problemId: string,
+  services: readonly string[],
   consoleReady: boolean,
+  battle: boolean,
 ): readonly TargetAccessCapability[] {
-  if (!simulatorProblemSupported(problemId)) return [];
+  if (!simulatorProblemSupported(problemId, services, battle)) return [];
+  if (battle && isSimulatorBattleProblem(problemId))
+    return ["guest-terminal", "cli-credentials"] as const;
   if (consoleReady) return ["console", "cli-credentials"] as const;
   return ["cli-credentials"] as const;
 }
@@ -238,12 +293,21 @@ function stackProblem(
 
 export function cloudFormationCatalog(
   repositoryRoot: string,
-  options: { simulator?: boolean } = {},
+  options: {
+    simulator?: boolean;
+    simulatorServices?: readonly string[];
+    simulatorBattle?: boolean;
+  } = {},
 ): Problem[] {
   return selectedCatalogSnapshots(repositoryRoot).flatMap(({ problemRoot: catalog, revision }) =>
     REVIEWED_STACK_PROBLEMS.filter(
-      ({ folder, problemId, simulator }) =>
-        (!options.simulator || simulator) &&
+      ({ folder, problemId }) =>
+        (!options.simulator ||
+          simulatorProblemSupported(
+            problemId,
+            options.simulatorServices ?? [],
+            Boolean(options.simulatorBattle),
+          )) &&
         existsSync(join(catalog, folder, problemId, "metadata.json")),
     ).map((entry) => stackProblem(catalog, entry, revision)),
   );
@@ -277,16 +341,25 @@ export class CloudFormationEngine implements RuntimeEngine {
       throw new Error("The host ExternalId must be 16–128 characters of [A-Za-z0-9_=,.@:/-].");
     this.problems = cloudFormationCatalog(repositoryRoot, {
       simulator: Boolean(options.simulatorEndpoint),
+      simulatorServices: options.simulatorServices ?? [],
+      simulatorBattle: Boolean(options.simulatorBattle),
     });
   }
 
   private assertSimulatorSupport(job: Job): void {
     if (!this.options.simulatorEndpoint) return;
     const definition = JSON.parse(job.definition) as StackDefinition;
-    if (job.problemId !== definition.problemId || !simulatorProblemSupported(definition.problemId))
+    if (
+      job.problemId !== definition.problemId ||
+      !simulatorProblemSupported(
+        definition.problemId,
+        this.options.simulatorServices ?? [],
+        Boolean(this.options.simulatorBattle),
+      )
+    )
       throw new HostError(
         409,
-        "This AWS problem is unavailable in simulator mode. Only Hello World is currently supported.",
+        "This AWS problem is unavailable in simulator mode. Only problems reviewed for the Simulator can be deployed there.",
         "simulator_problem_unsupported",
       );
   }
@@ -294,13 +367,18 @@ export class CloudFormationEngine implements RuntimeEngine {
   disruptionAdapter(): AwsDisruptionAdapter {
     if (this.options.simulatorEndpoint && !this.options.ssm)
       throw new HostError(409, "Simulator SSM transport is unavailable.", "not_ready");
+    // A Simulator Battle runtime runs the catalog's SSM command through the bootstrap's separate
+    // command role, scoped by instance tags to Battle guests; deploy roles hold no command rights.
+    const commandRole = this.options.simulatorBattle
+      ? `arn:aws:iam::000000000000:role/${SIMULATOR_COMMAND_ROLE}`
+      : undefined;
     return new AwsDisruptionAdapter(
       { sts: this.options.sts, ssm: this.options.ssm },
       this.options.externalId,
-      // Only original Hello World is supported; it has no command-disruption runtime.
-      this.options.simulatorEndpoint
+      this.options.simulatorEndpoint && !commandRole
         ? "AWS disruptions are unavailable in simulator mode. Retained operations require recovery in their original supported hosting mode."
         : undefined,
+      commandRole,
     );
   }
 
@@ -380,11 +458,38 @@ export class CloudFormationEngine implements RuntimeEngine {
     }
   }
 
+  /** The Simulator Battle probe for an uptime job; undefined keeps the public HTTP probe. */
+  private battleRuntime(job: Job): SimulatorBattle | undefined {
+    if (!this.options.simulatorEndpoint || !this.options.simulatorBattle) return undefined;
+    const definition = JSON.parse(job.definition) as StackDefinition;
+    if (isFlagStackDefinition(definition) || !isSimulatorBattleProblem(definition.problemId))
+      return undefined;
+    return this.options.simulatorBattle;
+  }
+
+  requiresGuestReadiness(job: Job): boolean {
+    return Boolean(this.battleRuntime(job));
+  }
+
+  uptimeProbe(job: Job): ProbeFn | undefined {
+    return this.battleRuntime(job)?.probe(job);
+  }
+
   async stop(job: Job): Promise<void> {
     const unit = unitOf(job);
     const client = this.client(unit, job);
     const stack = await this.describe(client, unit, job.jobId);
     if (!stack) return;
+    const battle = this.battleRuntime(job);
+    if (battle) {
+      // Stop new probe admissions first. A failed seal is reported; deletion still releases the
+      // guest, which is the stronger cleanup.
+      await battle.seal(job).catch((error: unknown) => {
+        console.error(
+          `Simulator Battle seal for job ${job.jobId} failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
+    }
     if (!stack.StackId) throw new Error(`Stack ${unit.stackName} has no ID; refusing deletion.`);
     unit.stackId = stack.StackId;
     await client.send(new DeleteStackCommand({ StackName: stack.StackId }));
@@ -515,7 +620,9 @@ export class CloudFormationEngine implements RuntimeEngine {
             consoleKind: "simulator" as const,
             accessCapabilities: simulatorAccessCapabilities(
               definition.problemId,
+              this.options.simulatorServices ?? [],
               Boolean(this.options.simulatorConsole && unit?.outputs?.ParameterName),
+              Boolean(this.options.simulatorBattle),
             ),
           }
         : {}),
