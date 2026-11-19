@@ -487,7 +487,7 @@ test.each([
       apiRequest({ method: "GET", path: "/portal/me", token: "battle-team-key" }),
     );
     const listed = (view.body as { problems: { accessCapabilities?: string[] }[] }).problems[0];
-    expect(listed?.accessCapabilities).toEqual(capabilities);
+    expect(listed?.accessCapabilities).toEqual([...capabilities]);
     // Neither endpoint is registered and scoring has not succeeded, yet the console is issued.
     const response = fixture.service.participant(
       apiRequest({
