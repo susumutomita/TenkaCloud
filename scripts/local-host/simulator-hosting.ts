@@ -5,6 +5,7 @@ import { SSMClient } from "@aws-sdk/client-ssm";
 import { STSClient } from "@aws-sdk/client-sts";
 import { normalizeSimulatorEndpointUrl } from "@tenkacloud/portal-contracts";
 import { connectCloudHosting } from "./cloud-hosting";
+import { authorityBinding, type SimulatorAuthority } from "./simulator-authority";
 import { connectSimulatorBattle } from "./simulator-battle";
 import {
   bootstrapSimulatorRole,
@@ -15,6 +16,8 @@ import { connectSimulatorCapabilities } from "./simulator-console";
 
 export type SimulatorSettings = {
   readonly endpoint: string;
+  /** Internal explicit binding, not inferred from token, endpoint or account IDs. */
+  readonly authority?: SimulatorAuthority;
   readonly region: string;
   readonly bootstrap?: boolean;
 } & ({ readonly tokenFile: string } | { readonly readToken: () => string });
@@ -81,33 +84,40 @@ function tokenFileReadError(error: unknown): Error {
 }
 
 /** Bound the read and reject symlinks, devices, shared files and another user's credentials. */
-export function readSimulatorToken(path: string): string {
+export function readSimulatorPrivateFile(
+  path: string,
+  maximumBytes: number,
+  limitMessage = "Simulator input exceeds its size limit.",
+): string {
   let fd: number | undefined;
   try {
     fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     const stat = fstatSync(fd);
-    if (!stat.isFile())
-      throw new SimulatorTokenFileError("Simulator token file must be a regular file.");
-    if (stat.nlink !== 1 || (stat.mode & 0o077) !== 0)
+    if (
+      !stat.isFile() ||
+      stat.nlink !== 1 ||
+      (stat.mode & 0o077) !== 0 ||
+      stat.uid !== process.getuid?.()
+    )
       throw new SimulatorTokenFileError(
-        "Simulator token file must be owner-only (for example mode 0600), with no hard links. Check the existing Simulator file's metadata; do not copy or recreate its token.",
+        "Simulator input must be an owner-only regular file owned by this user, without links.",
       );
-    if (stat.uid !== process.getuid?.())
-      throw new SimulatorTokenFileError(
-        "Simulator token file must be owned by this user. Run the Simulator and host as the same user, without sudo.",
-      );
-    if (stat.size > 257) throw new SimulatorTokenFileError(TOKEN_FORMAT_ERROR);
-    const buffer = Buffer.alloc(258);
+    if (stat.size > maximumBytes) throw new SimulatorTokenFileError(limitMessage);
+    const buffer = Buffer.alloc(maximumBytes + 1);
     const size = readSync(fd, buffer, 0, buffer.length, 0);
-    const token = buffer.subarray(0, size).toString("utf8").replace(/\n$/u, "");
-    if (!/^[A-Za-z0-9_-]{32,256}$/u.test(token))
-      throw new SimulatorTokenFileError(TOKEN_FORMAT_ERROR);
-    return token;
+    if (size > maximumBytes) throw new SimulatorTokenFileError(limitMessage);
+    return buffer.subarray(0, size).toString("utf8");
   } catch (error) {
     throw tokenFileReadError(error);
   } finally {
     if (fd !== undefined) closeSync(fd);
   }
+}
+
+export function readSimulatorToken(path: string): string {
+  const token = readSimulatorPrivateFile(path, 257, TOKEN_FORMAT_ERROR).replace(/\n$/u, "");
+  if (!/^[A-Za-z0-9_-]{32,256}$/u.test(token)) throw new Error(TOKEN_FORMAT_ERROR);
+  return token;
 }
 
 /** Bun may route even literal loopback Node HTTP requests through ambient proxies. */
@@ -167,6 +177,7 @@ export async function connectSimulatorHosting(
   settings?: SimulatorSettings,
 ) {
   if (!settings) return undefined;
+  const simulatorAuthority = authorityBinding(settings.authority);
   assertSimulatorProxyDisabled();
   if ("readToken" in settings)
     console.warn(
@@ -188,6 +199,7 @@ export async function connectSimulatorHosting(
   );
   const connection = await connectCloudHosting(root, directory, region, {
     simulatorEndpoint: endpoint,
+    ...(simulatorAuthority ? { simulatorAuthority } : {}),
     simulatorConsole: capabilities.console,
     simulatorServices: capabilities.nativeSdkServices,
     simulatorInstanceConsole: capabilities.instanceConsole,

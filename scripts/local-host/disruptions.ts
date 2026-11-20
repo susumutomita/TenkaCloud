@@ -12,6 +12,7 @@ import type {
   ProblemDisruptionEntry,
   ProblemPhaseEntry,
 } from "../../packages/problem-sdk/src/metadata-parser.js";
+import { unitOf } from "./cloud-runtime-contract";
 import {
   declaredDisruptions,
   disruptionParameters,
@@ -23,6 +24,7 @@ import { DisruptionRunner } from "./disruption-runner";
 import { DisruptionStore } from "./disruption-store";
 import { assertPlaying, HostError, type HostedEvent, type Job, type Team } from "./model";
 import type { ApiRequest, ApiResponse, HostingService } from "./service";
+import { authorityBinding, sameAuthority } from "./simulator-authority";
 import type { OrganizerPrincipal } from "./store";
 import { digest } from "./store";
 import { uptimeGeneration } from "./uptime";
@@ -330,6 +332,8 @@ export class LocalDisruptions {
     const job = this.host.store.job(target.jobId);
     const team = this.host.store.team(target.teamId);
     if (
+      !sameAuthority(authorityBinding(unitOf(job).simulatorAuthority), target.simulatorAuthority) ||
+      !sameAuthority(authorityBinding(team.aws?.simulatorAuthority), target.simulatorAuthority) ||
       job.eventId !== target.eventId ||
       job.teamId !== target.teamId ||
       digest(job.unit ?? "") !== target.unitHash ||

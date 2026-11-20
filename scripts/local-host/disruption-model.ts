@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { DisruptionDispatch } from "../../packages/problem-sdk/src/disruption-dispatch.js";
 import type { DisruptionFireRequest } from "../../packages/problem-sdk/src/disruption-request.js";
+import { simulatorAuthoritySchema } from "./simulator-authority";
 
 const dispatchSchema = z.object({
   kind: z.enum(["ssm-run-command", "lambda-invoke", "cfn-stack-update"]),
@@ -9,6 +10,7 @@ const dispatchSchema = z.object({
   params: z.record(z.string(), z.unknown()),
 });
 export const disruptionTargetSchema = z.object({
+  simulatorAuthority: simulatorAuthoritySchema.optional(),
   jobId: z.string(),
   eventId: z.string(),
   teamId: z.string(),

@@ -20,7 +20,8 @@ vi.mock("../../../src/api/client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../../src/api/client")>();
   return { ...actual, useApiClient: mockUseApiClient };
 });
-vi.mock("../../../src/api/competitor-accounts-client", () => ({
+vi.mock("../../../src/api/competitor-accounts-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../src/api/competitor-accounts-client")>()),
   listCompetitorAccounts: mockList,
   verifyCompetitorAccount: mockVerify,
   deleteCompetitorAccount: mockDelete,
@@ -297,5 +298,34 @@ describe("useCompetitorAccounts verifyAll", () => {
     });
 
     expect(mockVerify).not.toHaveBeenCalled();
+  });
+});
+
+it("routes same-account verify retry and deletion by the selected authority key", async () => {
+  mockUseApiClient.mockReturnValue(FAKE_CLIENT);
+  const accounts = ["alpha", "beta"].map((authorityId) => ({
+    awsAccountId: "000000000000",
+    simulatorAuthority: { authorityId, generation: 1 },
+    verified: false,
+  }));
+  mockList.mockResolvedValue({ items: accounts });
+  mockVerify
+    .mockRejectedValueOnce(new Error("alpha unavailable"))
+    .mockResolvedValue({ ...accounts[0], verified: true });
+  const { result } = renderHook(() => useCompetitorAccounts(config));
+  await waitFor(() => expect(result.current.items).toHaveLength(2));
+  await act(() => result.current.verify("sim:alpha:1:000000000000"));
+  expect(result.current.error).not.toBeNull();
+  expect(result.current.lastVerified).toBeNull();
+  await act(() => result.current.verify("sim:alpha:1:000000000000"));
+  expect(result.current.lastVerified?.simulatorAuthority?.authorityId).toBe("alpha");
+  expect(mockVerify).toHaveBeenLastCalledWith(FAKE_CLIENT, "000000000000", {
+    authorityId: "alpha",
+    generation: 1,
+  });
+  await act(() => result.current.remove("sim:beta:1:000000000000"));
+  expect(mockDelete).toHaveBeenLastCalledWith(FAKE_CLIENT, "000000000000", {
+    authorityId: "beta",
+    generation: 1,
   });
 });

@@ -43,6 +43,8 @@ export type StackDefinition = FlagStackDefinition | UptimeStackDefinition;
 /** Recorded before CreateStack, so an interrupted create can still be cleaned up. */
 export interface StackUnit {
   kind: "cloudformation";
+  /** Pinned before CreateStack; absent only for legacy single-connection/AWS jobs. */
+  simulatorAuthority?: import("./simulator-authority").SimulatorAuthority;
   accountId: string;
   roleArn: string;
   region: string;

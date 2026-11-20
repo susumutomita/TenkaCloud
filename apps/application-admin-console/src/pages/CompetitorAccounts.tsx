@@ -11,6 +11,7 @@ import type {
   CompetitorAccountSummary,
   CreateCompetitorAccountResponse,
 } from "../api/competitor-accounts-client";
+import { competitorAccountKey } from "../api/competitor-accounts-client";
 import { FriendlyErrorAlert } from "../components/FriendlyErrorAlert";
 import { LiteDrillCheckpointAlert } from "../components/LiteDrillCheckpointAlert";
 import { type AppConfig, isLocalHost } from "../config";
@@ -33,6 +34,7 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
   const {
     items,
     simulator,
+    authorities,
     error,
     verifyInFlight,
     deleteInFlight,
@@ -74,10 +76,16 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
   const handleConfirmDelete = async () => {
     if (!canMutateTenant || !deleteTarget) return;
     const target = deleteTarget;
-    await remove(target.awsAccountId);
+    await remove(competitorAccountKey(target));
     setDeleteTarget(null);
   };
 
+  const authorityNotice = authorities ? (
+    <Alert type="info">
+      Simulator authority:{" "}
+      {authorities.map((entry) => `${entry.authorityId} / ${entry.generation}`).join(", ")}
+    </Alert>
+  ) : undefined;
   if (!items && !error) {
     return (
       <Box textAlign="center" padding="l">
@@ -125,7 +133,7 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
       <ExpandableSection defaultExpanded headerText={t("cloud_connections.aws_accounts")}>
         <SpaceBetween size="m">
           <Button
-            disabled={!canMutateTenant || !!simulator}
+            disabled={!canMutateTenant || !!simulator || !!authorities}
             onClick={() => setBulkModalVisible(true)}
           >
             {t("competitor_accounts.bulk_button")}
@@ -138,22 +146,23 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
               </Alert>
             )}
 
-          {simulator ? (
-            <SimulatorConnectionNotice simulator={simulator} />
-          ) : (
-            <Alert type="info" header={t("competitor_accounts.host_bootstrap_header")}>
-              <SpaceBetween size="xs">
-                {t("competitor_accounts.host_bootstrap_info")}
-                <a
-                  href={COMPETITOR_ACCOUNT_ONBOARDING_URL}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                >
-                  {t("competitor_accounts.bootstrap_guide_link")}
-                </a>
-              </SpaceBetween>
-            </Alert>
-          )}
+          {authorityNotice ??
+            (simulator ? (
+              <SimulatorConnectionNotice simulator={simulator} />
+            ) : (
+              <Alert type="info" header={t("competitor_accounts.host_bootstrap_header")}>
+                <SpaceBetween size="xs">
+                  {t("competitor_accounts.host_bootstrap_info")}
+                  <a
+                    href={COMPETITOR_ACCOUNT_ONBOARDING_URL}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                  >
+                    {t("competitor_accounts.bootstrap_guide_link")}
+                  </a>
+                </SpaceBetween>
+              </Alert>
+            ))}
 
           <CompetitorAccountsTable
             items={items ?? []}
@@ -172,10 +181,11 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
         <CloudConnectionModal
           config={config}
           simulator={simulator}
+          authorities={authorities}
           onDismiss={() => setAddModalVisible(false)}
           onSuccess={(res) => {
             setAddModalVisible(false);
-            setShowSecret(simulator ? { ...res, simulator } : res);
+            if (!authorities) setShowSecret(simulator ? { ...res, simulator } : res);
             void reload();
           }}
         />

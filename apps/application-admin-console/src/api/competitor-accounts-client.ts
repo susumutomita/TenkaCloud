@@ -7,6 +7,30 @@ import type { ApiClient } from "./client-contract";
  * 現行クラウドは単独開催の registry を持ち、frontend から tenant selector は送らない。
  */
 
+export interface SimulatorAuthority {
+  authorityId: string;
+  generation: number;
+}
+export interface SimulatorAuthorityInfo extends SimulatorAuthority {
+  region: string;
+  awsAccountId: string;
+  bootstrapRoleName: string;
+}
+export function competitorAccountKey(account: {
+  awsAccountId: string;
+  simulatorAuthority?: SimulatorAuthority;
+}): string {
+  const binding = account.simulatorAuthority;
+  return binding
+    ? `sim:${binding.authorityId}:${binding.generation}:${account.awsAccountId}`
+    : account.awsAccountId;
+}
+function authorityQuery(binding?: SimulatorAuthority): string {
+  return binding
+    ? `?${new URLSearchParams({ authorityId: binding.authorityId, generation: String(binding.generation) })}`
+    : "";
+}
+
 /** Explicit local Simulator setup; never use real-AWS bootstrap links for this mode. */
 export interface SimulatorConnectionInfo {
   endpoint: string;
@@ -16,6 +40,7 @@ export interface SimulatorConnectionInfo {
 }
 
 export interface CompetitorAccountSummary {
+  simulatorAuthority?: SimulatorAuthority;
   awsAccountId: string;
   region: string;
   competitorRoleName: string;
@@ -27,6 +52,7 @@ export interface CompetitorAccountSummary {
 }
 
 export interface CreateCompetitorAccountRequest {
+  simulatorAuthority?: SimulatorAuthority;
   awsAccountId: string;
   region?: string;
   competitorRoleName?: string;
@@ -43,6 +69,7 @@ export interface CreateCompetitorAccountResponse extends CompetitorAccountSummar
 
 /** 一括登録 1 行。 `region` / `competitorRoleName` は `defaults` で代表させられる。 */
 export interface BulkCompetitorAccountEntry {
+  simulatorAuthority?: SimulatorAuthority;
   awsAccountId: string;
   region?: string;
   competitorRoleName?: string;
@@ -60,6 +87,7 @@ export interface BulkCreateCompetitorAccountsRequest {
 export type BulkCompetitorAccountOutcome = "created" | "duplicate" | "invalid" | "failed";
 
 export interface BulkCompetitorAccountResult {
+  simulatorAuthority?: SimulatorAuthority;
   awsAccountId: string;
   outcome: BulkCompetitorAccountOutcome;
   /** `created` 以外のときだけ入る、 その行が通らなかった理由。 */
@@ -79,6 +107,7 @@ export interface BulkCreateCompetitorAccountsResponse {
 }
 
 export interface ListCompetitorAccountsResponse {
+  authorities?: readonly SimulatorAuthorityInfo[];
   simulator?: SimulatorConnectionInfo;
   items: readonly CompetitorAccountSummary[];
 }
@@ -110,13 +139,20 @@ export async function bulkCreateCompetitorAccounts(
 export async function verifyCompetitorAccount(
   api: ApiClient,
   awsAccountId: string,
+  binding?: SimulatorAuthority,
 ): Promise<CompetitorAccountSummary> {
   return api.post<CompetitorAccountSummary>(
-    `admin/competitor-accounts/${encodeURIComponent(awsAccountId)}/verify`,
+    `admin/competitor-accounts/${encodeURIComponent(awsAccountId)}/verify${authorityQuery(binding)}`,
     {},
   );
 }
 
-export async function deleteCompetitorAccount(api: ApiClient, awsAccountId: string): Promise<void> {
-  return api.del(`admin/competitor-accounts/${encodeURIComponent(awsAccountId)}`);
+export async function deleteCompetitorAccount(
+  api: ApiClient,
+  awsAccountId: string,
+  binding?: SimulatorAuthority,
+): Promise<void> {
+  return api.del(
+    `admin/competitor-accounts/${encodeURIComponent(awsAccountId)}${authorityQuery(binding)}`,
+  );
 }

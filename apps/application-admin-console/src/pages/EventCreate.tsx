@@ -11,6 +11,7 @@ import { ApiError, PendingOperation, toErrorMessage } from "@tenkacloud/web-kit"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { canMutateTenant, useApiClient } from "../api/client";
+import { competitorAccountKey } from "../api/competitor-accounts-client";
 import {
   bulkDeployEvent,
   type CoordinationCapacityWarning,
@@ -187,7 +188,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
     [verifiedAccounts],
   );
   const accountById = useMemo(
-    () => new Map(verifiedAccounts.map((a) => [a.awsAccountId, a])),
+    () => new Map(verifiedAccounts.map((a) => [competitorAccountKey(a), a])),
     [verifiedAccounts],
   );
 
@@ -345,7 +346,10 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
         internalSlug: tr.internalSlug,
         ...(providerMode.kind === "aws" ||
         (providerMode.kind === "composite" && providerMode.providers.includes("aws"))
-          ? { awsAccountId: tr.awsAccountId }
+          ? {
+              awsAccountId: tr.awsAccountId,
+              simulatorAuthority: tr.simulatorAuthority,
+            }
           : {}),
         ...(providerMode.kind === "nonAws" ||
         (providerMode.kind === "composite" && providerMode.providers.some((p) => p !== "aws"))

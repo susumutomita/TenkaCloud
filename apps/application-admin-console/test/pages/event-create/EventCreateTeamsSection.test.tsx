@@ -3,12 +3,14 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ApiClient } from "../../../src/api/client";
 import type { CompetitorAccountSummary } from "../../../src/api/competitor-accounts-client";
+import { competitorAccountKey } from "../../../src/api/competitor-accounts-client";
 import { getTeamCredentialStatus } from "../../../src/api/team-credentials-client";
 import {
   EventCreateTeamsSection,
   type EventCreateTeamsSectionProps,
 } from "../../../src/pages/event-create/EventCreateTeamsSection";
 import type { TeamTableItem } from "../../../src/pages/event-create/helpers";
+import { buildVerifiedAccountOption } from "../../../src/pages/event-create/helpers";
 
 /**
  * Teams section: 各 team の slug Input + verified AWS account Select。 teamCount 0 の empty、
@@ -240,5 +242,31 @@ describe("EventCreateTeamsSection non-AWS credential column (#2563)", () => {
       3,
     );
     expect(createWrapper(container).findSelect()).not.toBeNull();
+  });
+});
+
+it("keeps two same-account authorities distinct and emits the explicit selection", () => {
+  const accounts = ["alpha", "beta"].map((authorityId) => ({
+    ...account,
+    awsAccountId: "000000000000",
+    simulatorAuthority: { authorityId, generation: 1 },
+  }));
+  const p = props({
+    accountOptions: accounts.map(buildVerifiedAccountOption),
+    accountById: new Map(accounts.map((entry) => [competitorAccountKey(entry), entry])),
+  });
+  const { container } = render(<EventCreateTeamsSection {...p} />);
+  const select = createWrapper(container).findSelect();
+  select?.openDropdown();
+  select?.selectOptionByValue("sim:beta:1:000000000000", { expandToViewport: true });
+  expect(p.onUpdateTeamRow).toHaveBeenCalledWith(0, {
+    awsAccountId: "000000000000",
+    simulatorAuthority: { authorityId: "beta", generation: 1 },
+  });
+  select?.openDropdown();
+  select?.selectOptionByValue("sim:alpha:1:000000000000", { expandToViewport: true });
+  expect(p.onUpdateTeamRow).toHaveBeenLastCalledWith(0, {
+    awsAccountId: "000000000000",
+    simulatorAuthority: { authorityId: "alpha", generation: 1 },
   });
 });

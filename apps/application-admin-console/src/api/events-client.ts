@@ -53,6 +53,7 @@ export interface EventListResponse {
 }
 
 export interface TeamSummary {
+  simulatorAuthority?: import("./competitor-accounts-client").SimulatorAuthority;
   teamId: string;
   internalSlug: string;
   displayName?: string;
@@ -183,6 +184,7 @@ export interface EventDetail extends EventSummary {
 }
 
 export interface CreateEventTeamInput {
+  simulatorAuthority?: import("./competitor-accounts-client").SimulatorAuthority;
   internalSlug: string;
   /** #528: AWS event deploy target (12 digits); required only for AWS-only events. */
   awsAccountId?: string;

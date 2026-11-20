@@ -3,12 +3,14 @@ import Button from "@cloudscape-design/components/button";
 import FormField from "@cloudscape-design/components/form-field";
 import Input from "@cloudscape-design/components/input";
 import Modal from "@cloudscape-design/components/modal";
+import Select from "@cloudscape-design/components/select";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { useState } from "react";
 import { canManageConnections, useApiClient } from "../../api/client";
 import {
   type CreateCompetitorAccountResponse,
   createCompetitorAccount,
+  type SimulatorAuthorityInfo,
   type SimulatorConnectionInfo,
 } from "../../api/competitor-accounts-client";
 import { FriendlyErrorAlert } from "../../components/FriendlyErrorAlert";
@@ -24,6 +26,7 @@ const ALIAS_MAX = 120;
 interface AddAccountModalProps {
   config: AppConfig;
   simulator?: SimulatorConnectionInfo;
+  authorities?: readonly SimulatorAuthorityInfo[];
   visible: boolean;
   onDismiss: () => void;
   onBack?: () => void;
@@ -33,11 +36,13 @@ interface AddAccountModalProps {
 export function AddAccountModal({
   config,
   simulator,
+  authorities,
   visible,
   onDismiss,
   onSuccess,
   onBack,
 }: AddAccountModalProps) {
+  const fixedSimulator = simulatorMode(simulator, authorities);
   const apiClient = useApiClient(config);
   const canMutate = canManageConnections(config, apiClient);
   const t = useT();
@@ -53,6 +58,9 @@ export function AddAccountModal({
     simulator?.region ?? config.hostAwsRegion ?? "ap-northeast-1",
   );
   const [competitorRoleName, setCompetitorRoleName] = useState(suggestedRoleName);
+  const [authorityId, setAuthorityId] = useState<string>();
+  const authority = authorities?.find((entry) => authorityOptionKey(entry) === authorityId);
+  const connectionRole = selectedRole(config, simulator, authority);
   const [inFlight, setInFlight] = useState(false);
   const [error, setError] = useState<FriendlyError | null>(null);
 
@@ -80,7 +88,8 @@ export function AddAccountModal({
     inFlight ||
     awsAccountId.length === 0 ||
     awsAccountIdInvalid ||
-    aliasInvalid;
+    aliasInvalid ||
+    Boolean(authorities && !authority);
 
   const handleSubmit = async () => {
     // submit button は disabled={submitDisabled} なので呼ばれるのは送信可能時のみ (= 防御的不到達)。
@@ -90,10 +99,17 @@ export function AddAccountModal({
     setError(null);
     try {
       const res = await createCompetitorAccount(apiClient, {
-        awsAccountId,
-        region,
-        competitorRoleName:
-          simulator?.bootstrapRoleName ?? config.competitorRoleName ?? competitorRoleName,
+        awsAccountId: authority?.awsAccountId ?? awsAccountId,
+        region: authority?.region ?? region,
+        ...(authority
+          ? {
+              simulatorAuthority: {
+                authorityId: authority.authorityId,
+                generation: authority.generation,
+              },
+            }
+          : {}),
+        competitorRoleName: connectionRole ?? competitorRoleName,
         ...(alias.length > 0 ? { alias } : {}),
       });
       reset();
@@ -141,6 +157,17 @@ export function AddAccountModal({
     >
       <SpaceBetween size="m">
         {error && <FriendlyErrorAlert error={error} />}
+        <AuthoritySelect
+          authorities={authorities}
+          selected={authority}
+          disabled={inFlight}
+          onSelect={(entry) => {
+            setAuthorityId(authorityOptionKey(entry));
+            setAwsAccountId(entry.awsAccountId);
+            setRegion(entry.region);
+            setCompetitorRoleName(entry.bootstrapRoleName);
+          }}
+        />
         {simulator && <SimulatorConnectionNotice simulator={simulator} />}
         <FormField
           label={t("competitor_accounts.add_modal_account_id_label")}
@@ -154,7 +181,7 @@ export function AddAccountModal({
             onChange={(e) => setAwsAccountId(e.detail.value)}
             invalid={awsAccountIdInvalid}
             placeholder="123456789012"
-            disabled={inFlight || !!simulator}
+            disabled={inFlight || fixedSimulator}
           />
         </FormField>
         <FormField
@@ -176,7 +203,7 @@ export function AddAccountModal({
           <Input
             value={region}
             onChange={(e) => setRegion(e.detail.value)}
-            disabled={inFlight || !!simulator || !!config.hostAwsRegion}
+            disabled={inFlight || fixedSimulator || !!config.hostAwsRegion}
           />
         </FormField>
         <FormField
@@ -188,12 +215,63 @@ export function AddAccountModal({
           )}
         >
           <Input
-            value={simulator?.bootstrapRoleName ?? config.competitorRoleName ?? competitorRoleName}
+            value={connectionRole ?? competitorRoleName}
             onChange={(e) => setCompetitorRoleName(e.detail.value)}
-            disabled={inFlight || !!simulator || !!config.competitorRoleName}
+            disabled={inFlight || fixedSimulator || !!config.competitorRoleName}
           />
         </FormField>
       </SpaceBetween>
     </Modal>
   );
+}
+
+function AuthoritySelect({
+  authorities,
+  selected,
+  disabled,
+  onSelect,
+}: {
+  authorities?: readonly SimulatorAuthorityInfo[];
+  selected?: SimulatorAuthorityInfo;
+  disabled: boolean;
+  onSelect: (entry: SimulatorAuthorityInfo) => void;
+}) {
+  if (!authorities) return null;
+  const option = (entry: SimulatorAuthorityInfo) => ({
+    value: authorityOptionKey(entry),
+    label: `${entry.authorityId} / ${entry.generation}`,
+  });
+  return (
+    <FormField label="Simulator authority">
+      <Select
+        disabled={disabled}
+        selectedOption={selected ? option(selected) : null}
+        options={authorities.map(option)}
+        onChange={({ detail }) => {
+          const entry = authorities.find(
+            (candidate) => authorityOptionKey(candidate) === detail.selectedOption.value,
+          );
+          if (entry) onSelect(entry);
+        }}
+      />
+    </FormField>
+  );
+}
+
+function simulatorMode(
+  simulator?: SimulatorConnectionInfo,
+  authorities?: readonly SimulatorAuthorityInfo[],
+): boolean {
+  return Boolean(simulator ?? authorities);
+}
+function selectedRole(
+  config: AppConfig,
+  simulator?: SimulatorConnectionInfo,
+  authority?: SimulatorAuthorityInfo,
+): string | undefined {
+  return authority?.bootstrapRoleName ?? simulator?.bootstrapRoleName ?? config.competitorRoleName;
+}
+
+function authorityOptionKey(entry: SimulatorAuthorityInfo): string {
+  return `${entry.authorityId}:${entry.generation}`;
 }

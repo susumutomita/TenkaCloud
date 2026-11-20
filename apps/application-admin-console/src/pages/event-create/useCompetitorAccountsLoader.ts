@@ -37,7 +37,17 @@ export function useCompetitorAccountsLoader(config: AppConfig): CompetitorAccoun
     setAccountsLoadError(null);
     try {
       const res = await listCompetitorAccounts(apiClient as ApiClient);
-      setCompetitorAccounts(res.items);
+      setCompetitorAccounts(
+        res.items.filter((account) =>
+          res.authorities
+            ? res.authorities.some(
+                (entry) =>
+                  entry.authorityId === account.simulatorAuthority?.authorityId &&
+                  entry.generation === account.simulatorAuthority.generation,
+              )
+            : !account.simulatorAuthority,
+        ),
+      );
     } catch (err) {
       // Issue #815: 401 は friendly な「再ログインしてください」 に flip。 silent 空配列で
       // operator が次の一手を見失う UX を防ぐ (= 旧 unknown-tenant fallback の置き換え)。

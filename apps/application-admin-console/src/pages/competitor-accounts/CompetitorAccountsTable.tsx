@@ -7,6 +7,7 @@ import Table, { type TableProps } from "@cloudscape-design/components/table";
 import { EmptyState } from "@tenkacloud/web-kit";
 import { useMemo } from "react";
 import type { CompetitorAccountSummary } from "../../api/competitor-accounts-client";
+import { competitorAccountKey } from "../../api/competitor-accounts-client";
 import { useT } from "../../i18n";
 
 interface CompetitorAccountsTableProps {
@@ -42,7 +43,14 @@ export function CompetitorAccountsTable({
       {
         id: "awsAccountId",
         header: "AWS Account ID",
-        cell: (item) => <code>{item.awsAccountId}</code>,
+        cell: (item) => (
+          <code>
+            {item.awsAccountId}
+            {item.simulatorAuthority
+              ? ` — ${item.simulatorAuthority.authorityId} / ${item.simulatorAuthority.generation}`
+              : ""}
+          </code>
+        ),
       },
       {
         id: "alias",
@@ -82,9 +90,9 @@ export function CompetitorAccountsTable({
           <SpaceBetween direction="horizontal" size="xs">
             <Button
               variant="normal"
-              loading={verifyInFlight === item.awsAccountId}
+              loading={verifyInFlight === competitorAccountKey(item)}
               disabled={!canMutateTenant || verifyInFlight !== null || verifyingAll}
-              onClick={() => onVerify(item.awsAccountId)}
+              onClick={() => onVerify(competitorAccountKey(item))}
             >
               {item.verified
                 ? t("competitor_accounts.verify_again")

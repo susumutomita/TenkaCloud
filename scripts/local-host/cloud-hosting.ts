@@ -16,7 +16,10 @@ export interface CloudHosting {
   readonly externalId: string;
   readonly externalIdPath: string;
   verify(accountId: string, roleName: string): Promise<void>;
-  engine(team: (job: Job) => Team): CloudFormationEngine;
+  engine(
+    team: (job: Job) => Team,
+    simulatorAuthorityEngine?: CloudFormationEngineOptions["simulatorAuthorityEngine"],
+  ): CloudFormationEngine;
 }
 
 type AwsClients = Pick<
@@ -25,6 +28,7 @@ type AwsClients = Pick<
   | "cloudFormation"
   | "ssm"
   | "federationFetch"
+  | "simulatorAuthority"
   | "simulatorEndpoint"
   | "simulatorConsole"
   | "simulatorServices"
@@ -112,13 +116,14 @@ export async function connectCloudHosting(
         },
       );
     },
-    engine: (team) =>
+    engine: (team, simulatorAuthorityEngine) =>
       new CloudFormationEngine(repositoryRoot, {
         ...clients,
         region,
         externalId,
         operatorAccountId: async () => operatorAccountId,
         team,
+        ...(simulatorAuthorityEngine ? { simulatorAuthorityEngine } : {}),
         sleep: (milliseconds) => sleep(milliseconds),
         pollIntervalMs: 5_000,
         timeoutMs: 60 * 60_000,
