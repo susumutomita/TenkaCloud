@@ -80,6 +80,9 @@ jobs:
       - name: Dead-code gate (knip)
         run: make dead-code
 
+      - name: Test pinned verification adapter
+        run: make verify-contract-test
+
       - name: Run textlint
         run: make lint-text
 
