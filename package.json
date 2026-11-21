@@ -112,7 +112,7 @@
     "textlint-rule-preset-ja-technical-writing": "^12.0.2",
     "textlint-rule-spellcheck-tech-word": "^5.0.0",
     "typescript": "~6.0.3",
-    "typescript-eslint": "^8.72.1",
+    "typescript-eslint": "^8.72.2",
     "xml-crypto": "6.4.0"
   },
   "overrides": {
