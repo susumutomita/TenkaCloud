@@ -138,18 +138,7 @@
   color: #8a9bb3;
 }
 
-/* What it is: one paragraph beside the two formats */
-.pp-split {
-  display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-  gap: 64px;
-  align-items: start;
-}
-.pp-slide .pp-body {
-  font-size: 24px;
-  line-height: 1.75;
-  color: #263241;
-}
+/* GameDay / CTF formats */
 .pp-formats {
   margin: 0;
 }
@@ -171,6 +160,97 @@
   font-size: 20px;
   line-height: 1.65;
   color: #3a4656;
+}
+
+.pp-formats-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 32px;
+  margin-top: 28px;
+}
+.pp-formats-row div + div {
+  margin-top: 0;
+}
+
+/* What is different: three numbered claims, read top to bottom */
+.pp-diffs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pp-diffs li {
+  display: grid;
+  grid-template-columns: 96px 420px minmax(0, 1fr);
+  gap: 24px;
+  align-items: baseline;
+  padding: 26px 0;
+  border-top: 1px solid #c9d4e3;
+}
+.pp-en .pp-diffs li {
+  grid-template-columns: 96px 440px minmax(0, 1fr);
+}
+.pp-slide .pp-diff-n {
+  font-family: "Inter", sans-serif;
+  font-size: 44px;
+  font-weight: 800;
+  line-height: 1;
+  color: #0969da;
+}
+.pp-diffs h3 {
+  font-size: 30px;
+}
+
+/* Where it fits: existing training -> TenkaCloud */
+.pp-flow {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 0.8fr) minmax(0, 1.4fr);
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pp-flow li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  min-height: 150px;
+  padding: 22px 28px 22px 44px;
+  background: #e6edf7;
+  clip-path: polygon(0 0, calc(100% - 24px) 0, 100% 50%, calc(100% - 24px) 100%, 0 100%, 24px 50%);
+}
+.pp-flow li:first-child {
+  padding-left: 28px;
+  clip-path: polygon(0 0, calc(100% - 24px) 0, 100% 50%, calc(100% - 24px) 100%, 0 100%);
+}
+.pp-flow li + li {
+  margin-left: -12px;
+}
+.pp-flow h3 {
+  font-size: 26px;
+  color: #3a4656;
+}
+.pp-slide .pp-flow-k {
+  font-family: "JetBrains Mono", "Noto Sans JP", monospace;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  color: #5d6877;
+}
+.pp-flow .pp-flow-us {
+  background: #07111f;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 24px 50%);
+}
+.pp-flow .pp-flow-us h3 {
+  font-size: 30px;
+  color: #f5f7fb;
+}
+.pp-slide .pp-flow-us .pp-flow-k {
+  color: #58a6ff;
+}
+.pp-slide .pp-flow-us p:last-child {
+  font-size: 18px;
+  color: #c9d4e3;
 }
 
 /* Where it runs: platform box -> exercise box */
@@ -469,7 +549,10 @@
     font-size: 21px;
   }
   .pp-cover,
-  .pp-split,
+  .pp-formats-row,
+  .pp-diffs li,
+  .pp-en .pp-diffs li,
+  .pp-flow,
   .pp-where,
   .pp-ledger,
   .pp-steps,
@@ -487,8 +570,24 @@
     margin-top: 16px;
     font-size: 16px;
   }
-  .pp-slide .pp-body {
-    font-size: 18px;
+  .pp-diffs li {
+    gap: 6px;
+    padding: 16px 0;
+  }
+  .pp-slide .pp-diff-n {
+    font-size: 28px;
+  }
+  .pp-diffs h3,
+  .pp-flow .pp-flow-us h3 {
+    font-size: 21px;
+  }
+  .pp-flow li,
+  .pp-flow li:first-child,
+  .pp-flow .pp-flow-us {
+    min-height: 0;
+    margin-left: 0;
+    padding: 16px 20px;
+    clip-path: none;
   }
   .pp-formats dt {
     font-size: 21px;

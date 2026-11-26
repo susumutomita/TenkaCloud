@@ -481,7 +481,7 @@ describe("enterprise proposal deck (ja / en)", () => {
       const doc = new JSDOM(html).window.document;
       expect(doc.documentElement.lang).toBe(lang);
       const slides = doc.querySelectorAll("section.slide");
-      expect(slides).toHaveLength(10);
+      expect(slides).toHaveLength(11);
       // Pricing lives only in the appendix, the last slide.
       const appendix = slides[slides.length - 1];
       expect(appendix.classList.contains("pp-appendix")).toBe(true);
