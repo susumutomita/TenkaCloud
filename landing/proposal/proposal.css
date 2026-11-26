@@ -3,8 +3,8 @@
  * (../jaws-yokohama-2026/talk.css + ../tenkacloud-ug-1/talk.js), which owns the
  * 1440x810 stage, keyboard controls, phone layout and print. This file only adds
  * the proposal's look: the LP palette (ink #07111f, blue #0969da) and its layouts.
- * Layouts vary slide to slide on purpose: a screenshot cover, a split, a flow
- * diagram, rows, a question list, a two-column ledger and a step line.
+ * The opening uses a real participant screenshot, then a three-step incident
+ * example and a short list of practice topics.
  */
 .pp-slide {
   padding: 56px 80px 36px;
@@ -138,40 +138,6 @@
   color: #8a9bb3;
 }
 
-/* GameDay / CTF formats */
-.pp-formats {
-  margin: 0;
-}
-.pp-formats div {
-  padding: 20px 0 22px 24px;
-  border-left: 4px solid #0969da;
-}
-.pp-formats div + div {
-  margin-top: 18px;
-  border-left-color: #07111f;
-}
-.pp-formats dt {
-  font-size: 26px;
-  font-weight: 700;
-  color: #07111f;
-}
-.pp-formats dd {
-  margin: 8px 0 0;
-  font-size: 20px;
-  line-height: 1.65;
-  color: #3a4656;
-}
-
-.pp-formats-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 32px;
-  margin-top: 28px;
-}
-.pp-formats-row div + div {
-  margin-top: 0;
-}
-
 /* What is different: three numbered claims, read top to bottom */
 .pp-diffs {
   margin: 0;
@@ -198,59 +164,6 @@
 }
 .pp-diffs h3 {
   font-size: 30px;
-}
-
-/* Where it fits: existing training -> TenkaCloud */
-.pp-flow {
-  display: grid;
-  grid-template-columns: minmax(0, 0.8fr) minmax(0, 0.8fr) minmax(0, 1.4fr);
-  gap: 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.pp-flow li {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 6px;
-  min-height: 150px;
-  padding: 22px 28px 22px 44px;
-  background: #e6edf7;
-  clip-path: polygon(0 0, calc(100% - 24px) 0, 100% 50%, calc(100% - 24px) 100%, 0 100%, 24px 50%);
-}
-.pp-flow li:first-child {
-  padding-left: 28px;
-  clip-path: polygon(0 0, calc(100% - 24px) 0, 100% 50%, calc(100% - 24px) 100%, 0 100%);
-}
-.pp-flow li + li {
-  margin-left: -12px;
-}
-.pp-flow h3 {
-  font-size: 26px;
-  color: #3a4656;
-}
-.pp-slide .pp-flow-k {
-  font-family: "JetBrains Mono", "Noto Sans JP", monospace;
-  font-size: 14px;
-  letter-spacing: 0.08em;
-  color: #5d6877;
-}
-.pp-flow .pp-flow-us {
-  background: #07111f;
-  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 24px 50%);
-}
-.pp-flow .pp-flow-us h3 {
-  font-size: 30px;
-  color: #f5f7fb;
-}
-.pp-slide .pp-flow-us .pp-flow-k {
-  color: #58a6ff;
-}
-.pp-slide .pp-flow-us p:last-child {
-  font-size: 18px;
-  color: #c9d4e3;
 }
 
 /* Where it runs: platform box -> exercise box */
@@ -305,73 +218,11 @@
   font-weight: 700;
 }
 
-/* Scenario rows */
-.pp-step {
-  display: grid;
-  grid-template-columns: 120px minmax(0, 1fr);
-  gap: 24px;
-  align-items: center;
-  padding: 16px 0;
-  border-top: 1px solid #c9d4e3;
-}
-.pp-en .pp-step {
-  grid-template-columns: 170px minmax(0, 1fr);
-}
-.pp-slide .pp-lv {
-  justify-self: start;
-  padding: 3px 16px;
-  border-radius: 999px;
-  background: #0969da;
-  color: #f5f7fb;
-  font-size: 15px;
-  font-weight: 700;
-}
-.pp-slide .pp-lv-hi {
-  background: #07111f;
-}
-.pp-slide .pp-step-t {
-  color: #07111f;
-}
-
-/* The question: four things left to on-the-job training */
-.pp-ojt {
-  margin: 8px 0 0;
-  padding: 0;
-  list-style: none;
-}
-.pp-ojt li {
-  display: grid;
-  grid-template-columns: 470px minmax(0, 1fr);
-  gap: 32px;
-  align-items: baseline;
-  padding: 18px 0;
-  border-top: 1px solid #c9d4e3;
-}
-.pp-ojt li:last-child {
-  border-bottom: 1px solid #c9d4e3;
-}
-.pp-slide .pp-ojt h3 {
-  margin: 0;
-  font-size: 32px;
-  line-height: 1.3;
-  color: #07111f;
-}
-.pp-slide .pp-ojt p {
-  margin: 0;
-  font-size: 21px;
-  line-height: 1.6;
-  color: #3a4657;
-}
 .pp-slide .pp-statement {
   font-size: 24px;
   font-weight: 700;
   color: #07111f;
 }
-.pp-map .pp-step,
-.pp-en .pp-map .pp-step {
-  grid-template-columns: 170px minmax(0, 1fr);
-}
-
 /* Why we ask: the open questions, large */
 .pp-qs {
   margin: 0;
@@ -588,10 +439,8 @@
     font-size: 21px;
   }
   .pp-cover,
-  .pp-formats-row,
   .pp-diffs li,
   .pp-en .pp-diffs li,
-  .pp-flow,
   .pp-where,
   .pp-ledger,
   .pp-steps,
@@ -616,23 +465,8 @@
   .pp-slide .pp-diff-n {
     font-size: 28px;
   }
-  .pp-diffs h3,
-  .pp-flow .pp-flow-us h3 {
+  .pp-diffs h3 {
     font-size: 21px;
-  }
-  .pp-flow li,
-  .pp-flow li:first-child,
-  .pp-flow .pp-flow-us {
-    min-height: 0;
-    margin-left: 0;
-    padding: 16px 20px;
-    clip-path: none;
-  }
-  .pp-formats dt {
-    font-size: 21px;
-  }
-  .pp-formats dd {
-    font-size: 17px;
   }
   .pp-slide .pp-arrow {
     transform: rotate(90deg);
@@ -649,18 +483,6 @@
   .pp-clouds li {
     font-size: 16px;
   }
-  .pp-ojt li,
-  .pp-map .pp-step,
-  .pp-en .pp-map .pp-step {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 6px;
-  }
-  .pp-slide .pp-ojt h3 {
-    font-size: 22px;
-  }
-  .pp-slide .pp-ojt p {
-    font-size: 16px;
-  }
   .pp-qs li {
     grid-template-columns: 44px minmax(0, 1fr);
     font-size: 20px;
@@ -674,8 +496,6 @@
   .pp-steps li {
     padding: 16px 0 0;
   }
-  .pp-step,
-  .pp-en .pp-step,
   .pp-row {
     grid-template-columns: minmax(0, 1fr);
     gap: 8px;
@@ -692,5 +512,85 @@
 @media print {
   .pp-slide {
     padding: 0.45in 0.6in 0.3in;
+  }
+}
+
+/* Make the first three slides work as a short introduction on their own. */
+.pp-cover h1 {
+  font-size: 76px;
+  line-height: 1.15;
+  letter-spacing: -0.04em;
+  text-wrap: balance;
+}
+.pp-cover .pp-lead {
+  max-width: 26em;
+}
+.pp-cover .pp-byline {
+  margin-top: 24px;
+}
+.pp-shot {
+  padding: 14px;
+  border: 1px solid #334c66;
+  border-radius: 18px;
+  background: #101f31;
+}
+.pp-dark .pp-shot figcaption {
+  color: #b8c9db;
+}
+.pp-example,
+.pp-topics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  list-style: none;
+  padding: 0;
+  margin: 4px 0 0;
+}
+.pp-topics {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.pp-example li,
+.pp-topics li {
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid #c9d4e3;
+  border-radius: 14px;
+  background: #fff;
+}
+.pp-example li {
+  border-top: 4px solid #0969da;
+}
+.pp-example h3,
+.pp-topics h3 {
+  margin-bottom: 8px;
+}
+.pp-slide .pp-card-label {
+  margin-bottom: 14px;
+  color: #075bbd;
+  font-size: 16px;
+  font-weight: 700;
+}
+.pp-dark .pp-links a:focus-visible {
+  outline: 2px solid #a5d4ff;
+  outline-offset: 5px;
+}
+@media screen and (max-width: 900px) {
+  .pp-cover h1 {
+    font-size: clamp(2.2rem, 7vw, 4rem);
+  }
+  .pp-example,
+  .pp-topics {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .pp-example li,
+  .pp-topics li {
+    padding: 16px;
+  }
+}
+@media print {
+  .pp-example li,
+  .pp-topics li {
+    break-inside: avoid;
   }
 }

@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Is anything still left to on-the-job training? | TenkaCloud feedback partners</title>
-<meta name="description" content="Security, building systems on the cloud, incident fire drills, and a reason for engineers to work together. TenkaCloud is open source that turns these four things, usually learned only on the job, into something teams can practice. We are looking for teams who will run one with us and tell us what they think. Pricing is in the appendix." />
+<title>Practice before production | TenkaCloud cloud exercises</title>
+<meta name="description" content="Practice building and running cloud systems as a team, away from production. See an example exercise and how to start with a small pilot." />
 <link rel="canonical" href="https://tenkacloud.com/proposal/index.en.html" />
 <link rel="alternate" hreflang="ja" href="https://tenkacloud.com/proposal/" />
 <link rel="alternate" hreflang="en" href="https://tenkacloud.com/proposal/index.en.html" />
-<meta property="og:title" content="Is anything still left to on-the-job training? | TenkaCloud feedback partners" />
+<meta property="og:title" content="Practice before production | TenkaCloud cloud exercises" />
 <meta property="og:type" content="article" />
 <meta property="og:url" content="https://tenkacloud.com/proposal/index.en.html" />
 <link rel="icon" href="../assets/favicon.svg" />
@@ -20,80 +20,76 @@
 <script defer src="../tenkacloud-ug-1/talk.js"></script>
 </head>
 <body class="pp-en">
-<header class="topbar"><a href="../presentations/">← Presentations</a><span>Feedback partners wanted</span><a href="./" hreflang="ja" lang="ja">日本語</a></header>
+<header class="topbar"><a href="../presentations/">← Presentations</a><span>Cloud exercise proposal</span><a href="./" hreflang="ja" lang="ja">日本語</a></header>
 <nav class="controls" aria-label="Slide controls"><button id="previous" type="button" aria-label="Previous slide">← Previous</button><output id="position" aria-live="polite">1 / 11</output><button id="next" type="button" aria-label="Next slide">Next →</button></nav>
 <noscript><p class="noscript">All slides are shown in order.</p></noscript>
 <main id="deck">
 <section class="slide pp-slide pp-dark" id="slide-1" aria-labelledby="title-1">
-<p class="kicker">TENKACLOUD / FEEDBACK PARTNERS WANTED</p>
+<p class="kicker">TENKACLOUD / HANDS-ON CLOUD EXERCISES</p>
 <div class="pp-cover">
-<div><h1 id="title-1">Is anything still<br>left to on-the-job<br>training?</h1><p class="pp-lead">Security, building systems on the cloud, incident fire drills, and engineers getting to know each other. TenkaCloud turns what people could only learn on the job into something teams practice together. We are looking for teams who will run one with us and tell us what they think.</p></div>
-<figure class="pp-shot"><img src="../assets/lp-motion/participant.jpg" width="1060" height="600" alt="TenkaCloud participant screen in Japanese: opening the first hint costs 20 points, and the flag submit button is worth 100 points." /><figcaption>The real participant screen (Japanese UI). Hints cost points; a submitted flag is scored at once.</figcaption></figure>
+  <div><h1 id="title-1">Practice before<br>production.</h1><p class="pp-lead">Build cloud systems and respond to incidents without touching production. TenkaCloud gives teams a place to solve realistic problems and see how they did.</p><p class="pp-byline">BULL LLC / Developer of TenkaCloud</p></div>
+  <figure class="pp-shot"><img src="../assets/lp-motion/participant.jpg" width="1060" height="600" alt="The actual TenkaCloud participant screen in Japanese, with hints and an answer submission control" /><figcaption>The actual participant screen: hints, answers, and scoring in one place.</figcaption></figure>
 </div>
-<p class="pp-byline">BULL LLC / Developer of TenkaCloud</p>
-<div class="slide-foot"><span>TenkaCloud / Feedback partners wanted</span><span>1 / 11</span></div>
+<div class="slide-foot"><span>TenkaCloud / Cloud exercises</span><span>1 / 11</span></div>
 </section>
 
 <section class="slide pp-slide pp-tint" id="slide-2" aria-labelledby="title-2">
-<p class="kicker">LEFT TO ON-THE-JOB TRAINING?</p>
-<h2 id="title-2">Is any of these four<br>a problem for you?</h2>
-<ol class="pp-ojt">
-<li><h3>Security</h3><p>People learn to spot a risky setting only after an incident or a review points it out.</p></li>
-<li><h3>Building systems on the cloud</h3><p>Building something end to end, from design to release, only happens to whoever is assigned to it.</p></li>
-<li><h3>Incident fire drills</h3><p>Production outages do not wait, yet there is nowhere to practice staying calm and acting.</p></li>
-<li><h3>A reason for engineers to meet</h3><p>Engineers rarely get to work hands-on with people from other teams.</p></li>
+<p class="kicker">EXAMPLE EXERCISE / INCIDENT RESPONSE</p>
+<h2 id="title-2">The morning after a deploy,<br>the service won’t open.</h2>
+<ol class="pp-example">
+  <li><p class="pp-card-label">01 / TRIAGE</p><h3>Narrow down the cause</h3><p>Assess the situation as a team and decide where to look first.</p></li>
+  <li><p class="pp-card-label">02 / RECOVER</p><h3>Restore the service</h3><p>Make a fix in the exercise environment and check that the service is back.</p></li>
+  <li><p class="pp-card-label">03 / REVIEW</p><h3>Compare notes</h3><p>Use the scoring results to discuss what the team noticed and where it got stuck.</p></li>
 </ol>
-<p class="pp-push pp-statement">Each one is learned only by whoever happened to be there.</p>
-<div class="slide-foot"><span>Left to on-the-job training</span><span>2 / 11</span></div>
+<p class="pp-push pp-statement">Practice from first response to recovery without taking production down.</p>
+<div class="slide-foot"><span>Example exercise</span><span>2 / 11</span></div>
 </section>
 
 <section class="slide pp-slide" id="slide-3" aria-labelledby="title-3">
-<p class="kicker">WHAT TENKACLOUD DOES</p>
-<h2 id="title-3">TenkaCloud turns those four<br>into team practice.</h2>
-<div class="pp-map">
-<div class="pp-step"><p class="pp-lv">Security</p><p class="pp-step-t"><b>Look with an attacker's eyes.</b>Search for things that should not be visible, or a staff-only login page, and submit the answer (the flag) you find.</p></div>
-<div class="pp-step"><p class="pp-lv">Cloud build</p><p class="pp-step-t"><b>Build on a real cloud.</b>Finish each team's own environment until it is safe to publish. Scheduled checks score the fixed state.</p></div>
-<div class="pp-step"><p class="pp-lv pp-lv-hi">Fire drill</p><p class="pp-step-t"><b>Start from something broken.</b>The morning after a late-night deploy, the service will not open. Find the cause and bring it back in time.</p></div>
-<div class="pp-step"><p class="pp-lv pp-lv-hi">Team</p><p class="pp-step-t"><b>Compete in teams across departments.</b>The scoreboard shows everyone's progress, and afterwards you look back over the scoring record together.</p></div>
-</div>
-<p class="fine pp-push">Choose problems from the public catalog, or write them from your own systems and past incidents. Organizers manage events, teams, problems, hints and scoring from one console.</p>
-<div class="slide-foot"><span>What TenkaCloud does</span><span>3 / 11</span></div>
+<p class="kicker">WHAT TEAMS CAN PRACTICE</p>
+<h2 id="title-3">Start with one problem<br>your team actually has.</h2>
+<ul class="pp-topics">
+  <li><h3>Security</h3><p>Can the team spot unintended exposure before release?</p></li>
+  <li><h3>Cloud builds</h3><p>Can engineers go hands-on from design through deployment?</p></li>
+  <li><h3>Incident response</h3><p>Can the team diagnose and recover from an outage together?</p></li>
+  <li><h3>Working across teams</h3><p>Can engineers from different groups solve the same problem together?</p></li>
+</ul>
+<div class="slide-foot"><span>What to practice</span><span>3 / 11</span></div>
 </section>
 
 <section class="slide pp-slide" id="slide-4" aria-labelledby="title-4">
 <p class="kicker">WHAT IS DIFFERENT</p>
 <h2 id="title-4">You can shape it<br>to your own workplace.</h2>
 <ol class="pp-diffs">
-<li><p class="pp-diff-n">01</p><h3>Exercises on four clouds</h3><p>Each team gets its own environment on AWS, Google Cloud, Azure or Sakura Cloud. A single problem can also span several clouds.</p></li>
+<li><p class="pp-diff-n">01</p><h3>Choose an environment for the exercise</h3><p>Choose a local exercise or a supported cloud environment. Available actions and scoring vary by exercise.</p></li>
 <li><p class="pp-diff-n">02</p><h3>Write your own problems</h3><p>Write the statement, hints and answer from your own system design or a past incident. Mix them with problems from the public catalog.</p></li>
-<li><p class="pp-diff-n">03</p><h3>Open source you run yourself</h3><p>Apache-2.0. Host it on one PC or in your own AWS account, so participant data stays out of third-party services.</p></li>
+<li><p class="pp-diff-n">03</p><h3>Open source you run yourself</h3><p>Apache-2.0. Host it on one PC or in your own AWS account, depending on your own operating requirements.</p></li>
 </ol>
 <div class="slide-foot"><span>What is different</span><span>4 / 11</span></div>
 </section>
 
 <section class="slide pp-slide pp-tint" id="slide-5" aria-labelledby="title-5">
 <p class="kicker">WHERE IT RUNS</p>
-<h2 id="title-5">The platform runs on one PC or on AWS.<br>Exercises deploy to four clouds.</h2>
+<h2 id="title-5">Choose where the platform runs<br>and where teams practice.</h2>
 <div class="pp-where">
 <div class="pp-box"><p class="pp-box-h">TenkaCloud platform</p><p class="pp-box-i"><b>One PC</b>Data stays in SQLite. No AWS account needed.</p><p class="pp-box-i"><b>AWS</b>Lambda and Cognito, with Turso or DynamoDB.</p></div>
 <p class="pp-arrow" aria-hidden="true">→</p>
-<div class="pp-box"><p class="pp-box-h">Exercise environments (per-team credentials)</p><ul class="pp-clouds"><li>AWS</li><li>Google Cloud</li><li>Azure</li><li>Sakura Cloud</li></ul><p class="pp-box-i">A single problem can deploy across several clouds at once. Docker exercises on the host PC work too.</p></div>
+<div class="pp-box"><p class="pp-box-h">Exercise environments (per-team credentials)</p><ul class="pp-clouds"><li>AWS</li><li>Google Cloud</li><li>Azure</li><li>Sakura Cloud</li></ul><p class="pp-box-i">Supported clouds and actions vary by exercise. Docker exercises can also run on the host PC.</p></div>
 </div>
 <p class="fine pp-push">Participants join from their own devices over the office LAN or Tailscale. Joining Docker exercises from other devices needs a Linux host PC with isolation enabled; we check this with you in advance.</p>
 <div class="slide-foot"><span>Where it runs</span><span>5 / 11</span></div>
 </section>
 
 <section class="slide pp-slide pp-accent" id="slide-6" aria-labelledby="title-6">
-<p class="kicker">WHY WE ARE ASKING</p>
-<h2 id="title-6">Some things the builder<br>can’t find out alone.</h2>
+<p class="kicker">WHO WE’D LIKE TO MEET</p>
+<h2 id="title-6">They want to run a drill.<br>They haven’t found a way yet.</h2>
 <ol class="pp-qs">
-<li>Which of the four is worth practicing first.</li>
-<li>Whether the problems suit the participants.</li>
-<li>Where organizers get stuck while preparing.</li>
-<li>Whether participants can connect on your network.</li>
+  <li>Training ends before participants can try it hands-on.</li>
+  <li>New engineers need a safe way to revisit a real incident.</li>
+  <li>Preparing problems and environments makes repeat sessions hard.</li>
 </ol>
-<p class="pp-push pp-statement">Only a run with a real team gives these answers.</p>
-<div class="slide-foot"><span>Why we ask</span><span>6 / 11</span></div>
+<p class="pp-push pp-statement">We’d like to meet the person responsible for cloud training, SRE, or security.</p>
+<div class="slide-foot"><span>Who to introduce</span><span>6 / 11</span></div>
 </section>
 
 <section class="slide pp-slide" id="slide-7" aria-labelledby="title-7">
@@ -106,7 +102,7 @@
 <li><b>Help you build problems.</b> Start from material close to your own systems.</li>
 </ul></div>
 <div class="pp-ledger-col pp-ledger-ask"><p class="pp-ledger-h">What we ask</p><ul>
-<li><b>Run it once with a real team, on one of the four.</b> A small session of about two teams is enough.</li>
+<li><b>Choose one topic and try it with a real team.</b> A small session of about two teams is enough.</li>
 <li><b>Join a 30-minute debrief afterwards.</b> We go through the scoring history together.</li>
 <li><b>Tell us what you noticed, good and bad.</b> A GitHub issue or an email both work.</li>
 </ul></div>
@@ -119,7 +115,7 @@
 <p class="kicker">HOW TO START</p>
 <h2 id="title-8">Three steps from first call to event.</h2>
 <ol class="pp-steps">
-<li><p class="pp-num">01 / ONLINE, 30 MIN</p><h3>Call</h3><p>We learn which of the four is a problem for you, who would take part and how many, and your network constraints.</p></li>
+<li><p class="pp-num">01 / ONLINE, 30 MIN</p><h3>Call</h3><p>We start with one real situation. If we decide to try it, we check expected participation and network constraints.</p></li>
 <li><p class="pp-num">02 / ON THE HOST PC</p><h3>Rehearsal</h3><p>We solve problems together to check access and scoring.</p></li>
 <li><p class="pp-num">03 / EVENT DAY AND AFTER</p><h3>Event and debrief</h3><p>We run the day with you, then talk for 30 minutes.</p></li>
 </ol>
@@ -129,7 +125,7 @@
 
 <section class="slide pp-slide" id="slide-9" aria-labelledby="title-9">
 <p class="kicker">WHAT IS PUBLIC</p>
-<h2 id="title-9">Everything is out in the open.</h2>
+<h2 id="title-9">See how it works before you try it.</h2>
 <div>
 <div class="pp-row"><h3>Source</h3><p>The platform and problem catalog are Apache-2.0 and the Simulator is MIT, all on <a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer">GitHub</a>. Inspect it before you try it.</p></div>
 <div class="pp-row"><h3>Book</h3><p><a href="https://leanpub.com/build-your-own-cloud-competition" target="_blank" rel="noopener noreferrer">“Build Your Own Cloud Competition”</a> on Leanpub explains the design, with a Japanese edition on Zenn.</p></div>
@@ -139,11 +135,11 @@
 </section>
 
 <section class="slide pp-slide pp-dark" id="slide-10" aria-labelledby="title-10">
-<p class="kicker">NEXT STEP</p>
-<h2 id="title-10">Tell us one thing you still<br>leave to on-the-job training.</h2>
-<p class="pp-lead">Name the one that bothers you and a rough headcount in the form, and we will set up a 30-minute call.</p>
-<div class="pp-links"><a href="https://forms.gle/djVprYmq3hFgJA7P9" target="_blank" rel="noopener noreferrer">Contact form ↗</a><a href="../index.en.html">TenkaCloud →</a><a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer">GitHub ↗</a></div>
-<p class="fine">TenkaCloud is an independent open-source project and is not provided, sponsored or endorsed by Amazon Web Services, Inc. AWS is a trademark of Amazon.com, Inc. or its affiliates.</p>
+<p class="kicker">WHAT WE’RE ASKING FOR</p>
+<h2 id="title-10">Know a team like this?<br>We’d welcome an introduction.</h2>
+<p class="pp-lead">We’d like to hear about one real situation they don’t get to practice today and see whether TenkaCloud is worth trying for it.</p>
+<div class="pp-links"><a href="https://forms.gle/djVprYmq3hFgJA7P9" target="_blank" rel="noopener noreferrer">Contact form ↗</a><a href="../">TenkaCloud →</a><a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer">GitHub ↗</a></div>
+<p class="fine">An introduction does not commit anyone to buying or running an event.<br>TenkaCloud is independent and is not provided, sponsored, or endorsed by Amazon Web Services, Inc. AWS is a trademark of Amazon.com, Inc. or its affiliates.</p>
 <div class="slide-foot"><span>BULL LLC</span><span>10 / 11</span></div>
 </section>
 

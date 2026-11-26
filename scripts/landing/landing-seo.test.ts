@@ -504,6 +504,23 @@ describe("enterprise proposal deck (ja / en)", () => {
     }
   });
 
+  it("should show the exercise before the partnership ask in both locales", () => {
+    for (const [lang, html] of Object.entries(pages)) {
+      const doc = new JSDOM(html).window.document;
+      expect(doc.querySelector("#slide-1 .pp-shot img")?.getAttribute("src")).toBe(
+        "../assets/lp-motion/participant.jpg",
+      );
+      expect(doc.querySelectorAll("#slide-2 .pp-example li")).toHaveLength(3);
+      expect(doc.querySelectorAll("#slide-3 .pp-topics li")).toHaveLength(4);
+      expect(doc.querySelector("#slide-10 h2")?.textContent).toContain(
+        lang === "ja" ? "ご紹介ください" : "welcome an introduction",
+      );
+      expect(doc.querySelector("#slide-10 .fine")?.textContent).toContain(
+        lang === "ja" ? "購入や開催をお願いするものではありません" : "does not commit anyone",
+      );
+    }
+  });
+
   it("should be reachable from the presentations library and the sitemap", () => {
     expect(read("landing/presentations/index.html")).toContain('href="../proposal/"');
     const sitemap = read("landing/sitemap.xml");
