@@ -1,8 +1,18 @@
 # TenkaCloud
 
-> Open-source cloud competitions and practice. Local hosting uses SQLite and optional Docker; cloud hosting uses Lambda and either Turso or DynamoDB. Problem content is maintained in a separate catalog.
+> TenkaCloud is self-hostable, Apache-2.0 software for hosting hands-on cloud training events and competitions, such as GameDay-style team battles and CTF-style flag challenges. It is for organizers of in-house cloud training, study groups and community events. Host it locally on one machine with no AWS account, or deploy it to AWS.
 
-> 日本語: ローカルで問題を試す、または AWS にデプロイしてイベントを開く。ローカルは SQLite、クラウドは Lambda と Turso または DynamoDB です。AWS 全体が無料になるという意味ではありません。
+日本語: GameDay 型のチーム戦や CTF 型のフラグ問題のような、ハンズオン形式のクラウド研修・競技会を開くためのセルフホスト型 OSS（Apache-2.0）です。ローカルは SQLite と必要に応じて Docker、クラウドは AWS 上の Lambda と Turso または DynamoDB です。AWS 全体が無料になるという意味ではありません。
+
+## At a glance
+
+- Audience: organizers of in-house cloud training, study groups and community events. Participants join with the portal URL and team key from their organizer.
+- Hosting: local (single process, SQLite, Docker for container exercises, no AWS account) or AWS (Lambda, Cognito, Turso or DynamoDB). AWS is the cloud for hosting and cloud exercises.
+- Problems and scoring: flag, multi-flag and scheduled scoring; CloudFormation-deployed AWS exercises; Docker exercises (local hosting); real-time Battles such as the built-in Cryptography Battle.
+- Content: the [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge) catalog or private Problem Packs.
+- Integrations: [MCP server](https://github.com/susumutomita/TenkaCloud/blob/main/docs/mcp.md) for AI agents; [CTFd plugin](https://github.com/susumutomita/TenkaCloud/blob/main/integrations/ctfd/README.md) that starts TenkaCloud Docker exercises from CTFd challenges.
+- Try it: [demo portal](https://tenkacloud.com/portal-demo/?demo=1) in the browser, or `make install` and `make local` from the [quickstart](https://github.com/susumutomita/TenkaCloud#quickstart).
+- Keywords: hands-on cloud training, GameDay-style exercises, CTF, hands-on labs, cloud competition platform, self-hosted, open source.
 
 [公式サイト](https://tenkacloud.com/?lang=ja) · [English site](https://tenkacloud.com/index.en.html)
 

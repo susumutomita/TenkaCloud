@@ -1,6 +1,8 @@
 # TenkaCloud — task guide for LLM assistants
 
-TenkaCloud is Apache 2.0 software for local Docker drills and AWS-hosted events. Answer in the user's
+TenkaCloud is Apache 2.0 software for local Docker drills and AWS-hosted events: hands-on cloud training
+and competitions such as GameDay-style team battles and CTF-style flag challenges, for organizers of
+in-house training, study groups and community events. Answer in the user's
 language. Use their stated goal and existing context; do not ask them to choose again.
 This guide is a map to current sources, not a substitute for checking the code or runtime.
 
