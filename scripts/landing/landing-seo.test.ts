@@ -194,19 +194,22 @@ describe("platform-first landing entry", () => {
   it("defines the platform and routes its primary action to the prominent introductory film", () => {
     const hero = heroSection(index);
     expect(hero).toContain(
-      '<span class="motion-line">研修の仕上げに、</span><span class="motion-line">チーム対抗の</span>',
+      '<span class="motion-line">OJT任せに</span><span class="motion-line">なっているものは、</span>',
     );
-    expect(hero).toContain("クラウド演習を。");
-    // 既存の講義・個人ラボの代わりではなく、その後に乗せる演習として位置づける。
-    expect(hero).toContain("講義やハンズオンの代わりではなく、その後に乗せる演習です。");
-    // 「演習・採点・ランキング」だけでなく、他の演習サービスとの違いを冒頭で示す。
-    for (const difference of [
-      "4つのクラウドで演習",
-      "問題を自分たちで書ける",
-      "自分たちの環境で動く OSS",
+    expect(hero).toContain("ありませんか。");
+    // OJT任せになりがちな4つに課題がないかを、冒頭で問いかける。
+    for (const area of [
+      "セキュリティ",
+      "クラウドのシステム構築",
+      "インシデントの避難訓練",
+      "エンジニア同士の交流",
     ]) {
-      expect(hero).toContain(difference);
+      expect(hero).toContain(area);
     }
+    // 他の演習サービスとの違い（マルチクラウド・自作問題・セルフホスト）も定義文に残す。
+    expect(hero).toContain(
+      "4つのクラウドに対応し、問題を自分たちで書ける、自分たちの環境で動く OSS です。",
+    );
     expect(hero).toContain('href="./proposal/"');
     expect(hero).toContain('href="#film"');
     expect(hero).toContain('data-cta="watch-60s"');
@@ -251,13 +254,18 @@ describe("platform-first landing entry", () => {
   it("publishes the product definition, available actions and honest example in static English", () => {
     const english = read("landing/index.en.html");
     const hero = heroSection(english);
-    for (const difference of [
-      "Exercises on four clouds",
-      "Write your own problems",
-      "Open source you run yourself",
+    expect(hero).toContain("Is anything still");
+    for (const area of [
+      "Security",
+      "Building on the cloud",
+      "Incident fire drills",
+      "Getting engineers together",
     ]) {
-      expect(hero).toContain(difference);
+      expect(hero).toContain(area);
     }
+    expect(hero).toContain(
+      "It supports four clouds, lets you write your own problems, and is open source you run yourself.",
+    );
     expect(hero).toContain('href="./proposal/index.en.html"');
     expect(hero).toContain("Watch the one-minute introduction");
     expect(hero).not.toContain("Three minutes");
