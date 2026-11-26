@@ -124,7 +124,7 @@ describe("visual entries and separate pricing", () => {
     expect(generateEnglishLanding()).toBe(generateEnglishLanding());
     const doc = new JSDOM(read("index.html")).window.document;
     expect(doc.querySelectorAll("h1 .motion-line")).toHaveLength(2);
-    expect(doc.querySelector("h1")?.textContent?.match(/セキュリティ/g)).toHaveLength(1);
+    expect(doc.querySelector("h1")?.textContent?.match(/チーム対抗/g)).toHaveLength(1);
   });
   for (const locale of ["ja", "en"] as const) {
     const suffix = locale === "en" ? ".en" : "";

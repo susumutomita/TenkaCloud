@@ -188,12 +188,22 @@
       "platform.customFirstLabel": "企業ポリシーに沿った演習",
       "platform.customFirst": "社内ルールに沿った設定や判断を問題を解きながら確認。",
       "platform.customGuide": "問題の作り方を見る →",
-      "platform.eyebrow": "TenkaCloud / OSS の演習・競技プラットフォーム",
+      "platform.eyebrow": "TenkaCloud / チーム対抗のクラウド演習を開く OSS",
       "platform.h1a":
-        '<span class="motion-line">クラウドと</span><span class="motion-line">セキュリティを</span>',
-      "platform.h1b": "実践で学ぶ。",
+        '<span class="motion-line">研修の仕上げに、</span><span class="motion-line">チーム対抗の</span>',
+      "platform.h1b": "クラウド演習を。",
       "platform.definition":
-        "自分たちの問題で、環境を動かして学ぶ OSS 基盤。演習の開催から回答・採点まで、ひとつにつながります。",
+        "講義やハンズオンの代わりではなく、その後に乗せる演習です。チームで壊れた環境を直し、結果はその場で点数になります。",
+      "platform.diffCloudsTitle": "4つのクラウドで演習",
+      "platform.diffClouds":
+        "AWS・Google Cloud・Azure・さくらのクラウド。1問で複数のクラウドにまたがる問題も。",
+      "platform.diffAuthorTitle": "問題を自分たちで書ける",
+      "platform.diffAuthor": "自社のシステムや社内ルールを題材に、問題文・ヒント・正解を用意。",
+      "platform.diffHostTitle": "自分たちの環境で動く OSS",
+      "platform.diffHost": "Apache-2.0。PC 1台か自社の AWS に置けます。",
+      "platform.partnerLead": "演習を開いて、感想を聞かせてくれるチームを募集しています。",
+      "platform.partnerLink": "募集の資料を見る →",
+      "platform.partnerHref": "./proposal/",
       "platform.primary": "1分の紹介動画を見る ↓",
       "platform.primaryNote": "参加・開催・Simulatorを実際の画面で紹介",
       "platform.choose": "ゲームで基礎を学ぶ・演習を始める ↓",
@@ -682,11 +692,24 @@
       "platform.customFirst":
         "Check configurations and decisions against internal rules as you solve problems.",
       "platform.customGuide": "See how to write a problem →",
-      "platform.eyebrow": "TenkaCloud / Open-source practice and competition platform",
-      "platform.h1a": '<span class="motion-line">Cloud and security,</span>',
-      "platform.h1b": "learned by doing.",
+      "platform.eyebrow": "TenkaCloud / Open source for team cloud exercises",
+      "platform.h1a":
+        '<span class="motion-line">Finish your training</span><span class="motion-line">with a team</span>',
+      "platform.h1b": "cloud exercise.",
+      "platform.diffCloudsTitle": "Exercises on four clouds",
+      "platform.diffClouds":
+        "AWS, Google Cloud, Azure and Sakura Cloud. One problem can span several clouds.",
+      "platform.diffAuthorTitle": "Write your own problems",
+      "platform.diffAuthor":
+        "Base the problem text, hints and answers on your own systems and policies.",
+      "platform.diffHostTitle": "Open source you run yourself",
+      "platform.diffHost": "Apache-2.0. Host it on one PC or in your own AWS account.",
+      "platform.partnerLead":
+        "We are looking for teams who will run an exercise and tell us what they think.",
+      "platform.partnerLink": "Read the partner proposal →",
+      "platform.partnerHref": "./proposal/index.en.html",
       "platform.definition":
-        "An open-source platform for hands-on cloud and security learning. Bring your own problems, run an exercise, and see participants’ answers and scores.",
+        "Not a replacement for lectures or hands-on labs, but a round you add after them. Teams fix broken environments, and results turn into points on the spot. Open source.",
       "platform.primary": "Watch the one-minute introduction ↓",
       "platform.primaryNote": "See participation, hosting and Simulator in the actual interface",
       "platform.choose": "Learn the basics or run an exercise ↓",

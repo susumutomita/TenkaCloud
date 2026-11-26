@@ -194,11 +194,20 @@ describe("platform-first landing entry", () => {
   it("defines the platform and routes its primary action to the prominent introductory film", () => {
     const hero = heroSection(index);
     expect(hero).toContain(
-      '<span class="motion-line">クラウドと</span><span class="motion-line">セキュリティを</span>',
+      '<span class="motion-line">研修の仕上げに、</span><span class="motion-line">チーム対抗の</span>',
     );
-    expect(hero).toContain("実践で学ぶ。");
-    expect(hero).toContain("自分たちの問題で、環境を動かして学ぶ OSS 基盤");
-    expect(hero).toContain("演習の開催から回答・採点まで");
+    expect(hero).toContain("クラウド演習を。");
+    // 既存の講義・個人ラボの代わりではなく、その後に乗せる演習として位置づける。
+    expect(hero).toContain("講義やハンズオンの代わりではなく、その後に乗せる演習です。");
+    // 「演習・採点・ランキング」だけでなく、他の演習サービスとの違いを冒頭で示す。
+    for (const difference of [
+      "4つのクラウドで演習",
+      "問題を自分たちで書ける",
+      "自分たちの環境で動く OSS",
+    ]) {
+      expect(hero).toContain(difference);
+    }
+    expect(hero).toContain('href="./proposal/"');
     expect(hero).toContain('href="#film"');
     expect(hero).toContain('data-cta="watch-60s"');
     expect(hero).toContain("実際の画面で紹介");
@@ -242,7 +251,14 @@ describe("platform-first landing entry", () => {
   it("publishes the product definition, available actions and honest example in static English", () => {
     const english = read("landing/index.en.html");
     const hero = heroSection(english);
-    expect(hero).toContain("open-source platform");
+    for (const difference of [
+      "Exercises on four clouds",
+      "Write your own problems",
+      "Open source you run yourself",
+    ]) {
+      expect(hero).toContain(difference);
+    }
+    expect(hero).toContain('href="./proposal/index.en.html"');
     expect(hero).toContain("Watch the one-minute introduction");
     expect(hero).not.toContain("Three minutes");
     expect(english).toContain("Build your service architecture and internal rules");
