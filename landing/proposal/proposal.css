@@ -1,11 +1,13 @@
 /*
- * Enterprise proposal deck (ja / en). Layered on the shared talk deck base
+ * Feedback-partner proposal deck (ja / en). Layered on the shared talk deck base
  * (../jaws-yokohama-2026/talk.css + ../tenkacloud-ug-1/talk.js), which owns the
  * 1440x810 stage, keyboard controls, phone layout and print. This file only adds
  * the proposal's look: the LP palette (ink #07111f, blue #0969da) and its layouts.
+ * The opening uses a real participant screenshot, then a three-step incident
+ * example and a short list of practice topics.
  */
 .pp-slide {
-  padding: 52px 72px 36px;
+  padding: 56px 80px 36px;
   gap: 0;
   background: #f5f7fb;
   color: #07111f;
@@ -21,7 +23,7 @@
   color: #3a4656;
 }
 .pp-slide h2 {
-  margin-bottom: 28px;
+  margin-bottom: 32px;
 }
 .pp-slide h3 {
   margin: 0;
@@ -29,11 +31,20 @@
   line-height: 1.4;
 }
 .pp-slide .kicker {
-  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
   font-family: "JetBrains Mono", "Noto Sans JP", monospace;
   font-size: 16px;
   letter-spacing: 0.12em;
   color: #0969da;
+}
+.pp-slide .kicker::before {
+  content: "";
+  width: 32px;
+  height: 3px;
+  background: currentColor;
 }
 .pp-slide .fine {
   font-size: 17px;
@@ -88,129 +99,231 @@
   color: #dce8f7;
 }
 
-/* Cover */
+/* Cover: the ask on the left, a real participant screen on the right */
 .pp-cover {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 420px;
-  gap: 48px;
+  grid-template-columns: minmax(0, 1fr) 560px;
+  gap: 56px;
   align-items: center;
 }
 .pp-cover h1 {
-  margin: 8px 0 28px;
+  margin: 4px 0 28px;
 }
 .pp-dark .pp-lead {
-  font-size: 26px;
-  line-height: 1.6;
+  max-width: 34em;
+  font-size: 25px;
+  line-height: 1.65;
   color: #d3deec;
 }
 .pp-dark .pp-byline {
-  margin-top: 36px;
+  margin-top: 32px;
   font-size: 20px;
   color: #f5f7fb;
 }
-.pp-score {
-  padding: 24px 28px;
-  border: 1px solid #26364d;
-  border-radius: 14px;
-  background: #0f1d30;
+.pp-shot {
+  margin: 0;
 }
-.pp-dark .pp-score-h {
-  font-family: "JetBrains Mono", monospace;
-  font-size: 15px;
-  letter-spacing: 0.1em;
+.pp-shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid #26364d;
+  border-radius: 12px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
+.pp-dark .pp-shot figcaption {
+  margin-top: 14px;
+  font-size: 16px;
+  line-height: 1.55;
   color: #8a9bb3;
 }
-.pp-score-row {
+
+/* What is different: three numbered claims, read top to bottom */
+.pp-diffs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pp-diffs li {
   display: grid;
-  grid-template-columns: 96px 1fr;
-  gap: 16px;
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid #26364d;
+  grid-template-columns: 96px 420px minmax(0, 1fr);
+  gap: 24px;
+  align-items: baseline;
+  padding: 26px 0;
+  border-top: 1px solid #c9d4e3;
 }
-.pp-dark .pp-pts {
-  font-family: "JetBrains Mono", monospace;
-  font-size: 20px;
-  color: #58a6ff;
+.pp-en .pp-diffs li {
+  grid-template-columns: 96px 440px minmax(0, 1fr);
 }
-.pp-dark .pp-pts-down {
-  color: #f0a35e;
+.pp-slide .pp-diff-n {
+  font-family: "Inter", sans-serif;
+  font-size: 44px;
+  font-weight: 800;
+  line-height: 1;
+  color: #0969da;
 }
-.pp-dark .pp-evt {
-  font-size: 20px;
-  color: #f5f7fb;
+.pp-diffs h3 {
+  font-size: 30px;
 }
 
-/* Statement columns */
-.pp-cols3 {
+/* Where it runs: platform box -> exercise box */
+.pp-where {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 36px;
-  margin-top: auto;
+  grid-template-columns: minmax(0, 0.85fr) 56px minmax(0, 1.15fr);
+  align-items: stretch;
 }
-.pp-col {
-  padding-top: 20px;
-  border-top: 3px solid #f5f7fb;
+.pp-box {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 28px 30px;
+  border: 1px solid #c9d4e3;
+  border-radius: 14px;
+  background: #f5f7fb;
 }
-.pp-accent .pp-k {
-  margin-bottom: 8px;
-  font-size: 28px;
+.pp-slide .pp-box-h {
+  font-family: "JetBrains Mono", "Noto Sans JP", monospace;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  color: #0969da;
+}
+.pp-slide .pp-box-i {
+  font-size: 19px;
+}
+.pp-box-i b {
+  display: block;
+  font-size: 24px;
+  color: #07111f;
+}
+.pp-slide .pp-arrow {
+  align-self: center;
+  text-align: center;
+  font-size: 36px;
+  color: #0969da;
+}
+.pp-clouds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pp-clouds li {
+  padding: 8px 18px;
+  border-radius: 8px;
+  background: #07111f;
+  color: #f5f7fb;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.pp-slide .pp-statement {
+  font-size: 24px;
+  font-weight: 700;
+  color: #07111f;
+}
+/* Why we ask: the open questions, large */
+.pp-qs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: q;
+}
+.pp-qs li {
+  counter-increment: q;
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: baseline;
+  padding: 12px 0;
+  border-top: 1px solid rgba(245, 247, 251, 0.3);
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.45;
+  color: #f5f7fb;
+}
+.pp-qs li::before {
+  content: "Q" counter(q);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 17px;
+  font-weight: 500;
+  color: #cfe0f6;
+}
+.pp-accent .pp-statement {
+  font-size: 24px;
   font-weight: 700;
   color: #f5f7fb;
 }
 
-/* Comparison table */
-.pp-table-wrap {
-  overflow-x: auto;
+/* Partner terms: what we do / what we ask */
+.pp-ledger {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 1px solid #d9dee8;
+  border-radius: 14px;
+  overflow: hidden;
 }
-.pp-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 19px;
-  line-height: 1.55;
-  color: #3a4656;
+.pp-ledger-col {
+  padding: 24px 32px 22px;
+  background: #fbfcfe;
 }
-.pp-table th,
-.pp-table td {
-  padding: 12px 16px;
-  border-bottom: 1px solid #d9dee8;
-  text-align: left;
-  vertical-align: top;
+.pp-ledger-ask {
+  background: #07111f;
 }
-.pp-table thead th {
-  background: #e6edf7;
-  color: #07111f;
-}
-.pp-table .pp-us {
-  color: #07111f;
-  font-weight: 600;
-}
-.pp-table thead .pp-us {
+.pp-slide .pp-ledger-h {
+  margin-bottom: 8px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   color: #0969da;
 }
+.pp-slide .pp-ledger-ask .pp-ledger-h {
+  color: #58a6ff;
+}
+.pp-ledger ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pp-ledger li {
+  padding: 12px 0;
+  border-top: 1px solid #e1e6ee;
+  font-size: 17px;
+  line-height: 1.6;
+  color: #3a4656;
+}
+.pp-ledger li b {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 21px;
+  color: #07111f;
+}
+.pp-ledger-ask li {
+  border-top-color: #26364d;
+  color: #c9d4e3;
+}
+.pp-ledger-ask li b {
+  color: #f5f7fb;
+}
 
-/* Cards */
-.pp-cards3 {
+/* How to start: a step line */
+.pp-steps {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 24px;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
-.pp-card {
+.pp-steps li {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 28px;
-  border: 1px solid #d9dee8;
-  border-radius: 14px;
-  background: #fbfcfe;
+  padding: 26px 36px 0 0;
+  border-top: 4px solid #0969da;
 }
-.pp-tint .pp-card {
-  border-color: #c9d4e3;
-  background: #f5f7fb;
-}
-.pp-dark .pp-card {
-  border-color: #26364d;
-  background: #0f1d30;
+.pp-steps li:last-child {
+  border-top-color: #07111f;
 }
 .pp-slide .pp-num {
   font-family: "JetBrains Mono", monospace;
@@ -218,79 +331,36 @@
   letter-spacing: 0.08em;
   color: #0969da;
 }
-.pp-dark .pp-num {
-  color: #58a6ff;
-}
-
-/* Scenario rows */
-.pp-step {
-  display: grid;
-  grid-template-columns: 120px minmax(0, 1fr);
-  gap: 24px;
-  align-items: center;
-  padding: 16px 0;
-  border-top: 1px solid #c9d4e3;
-}
-.pp-en .pp-step {
-  grid-template-columns: 170px minmax(0, 1fr);
-}
-.pp-slide .pp-lv {
-  justify-self: start;
-  padding: 3px 16px;
-  border-radius: 999px;
-  background: #0969da;
-  color: #f5f7fb;
-  font-size: 15px;
-  font-weight: 700;
-}
-.pp-slide .pp-lv-hi {
-  background: #07111f;
-}
-.pp-slide .pp-step-t {
-  color: #07111f;
+.pp-steps h3 {
+  font-size: 30px;
 }
 
 /* Label rows */
 .pp-row {
   display: grid;
-  grid-template-columns: 330px minmax(0, 1fr);
+  grid-template-columns: 200px minmax(0, 1fr);
   gap: 32px;
-  align-items: center;
-  padding: 18px 0;
+  align-items: baseline;
+  padding: 22px 0;
   border-top: 1px solid #c9d4e3;
 }
 .pp-row h3 {
   color: #0969da;
 }
 
-/* Process */
-.pp-proc {
+/* Appendix: pricing, set apart from the main flow */
+.pp-appendix {
+  background: #fff;
+  border-top: 10px solid #c9d4e3;
+}
+.pp-appendix .kicker {
+  color: #5d6877;
+}
+.pp-cards3 {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
 }
-.pp-proc-i {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-top: 18px;
-  border-top: 3px solid #0969da;
-}
-.pp-slide .pp-proc-p {
-  font-size: 18px;
-}
-.pp-band {
-  margin-top: auto;
-  padding: 18px 24px;
-  border-radius: 12px;
-  background: #e6edf7;
-}
-.pp-slide .pp-band p {
-  font-size: 19px;
-  color: #263241;
-}
-
-/* Plans */
 .pp-plan {
   display: flex;
   flex-direction: column;
@@ -299,10 +369,6 @@
   border: 1px solid #d9dee8;
   border-radius: 14px;
   background: #fbfcfe;
-}
-.pp-plan-hi {
-  padding: 26px;
-  border: 3px solid #0969da;
 }
 .pp-plan-top {
   display: flex;
@@ -314,14 +380,6 @@
   font-size: 15px;
   letter-spacing: 0.1em;
   color: #0969da;
-}
-.pp-slide .pp-pill {
-  padding: 1px 14px;
-  border-radius: 999px;
-  background: #0969da;
-  color: #f5f7fb;
-  font-size: 15px;
-  font-weight: 700;
 }
 .pp-price {
   display: flex;
@@ -362,10 +420,15 @@
   padding-top: 20px;
   font-size: 20px;
 }
+.pp-dark .pp-links {
+  margin-top: 36px;
+  margin-bottom: 28px;
+}
 .pp-links a {
   min-height: 44px;
   display: inline-flex;
   align-items: center;
+  font-weight: 700;
 }
 
 @media screen and (max-width: 900px) {
@@ -376,9 +439,12 @@
     font-size: 21px;
   }
   .pp-cover,
-  .pp-cols3,
-  .pp-cards3,
-  .pp-proc {
+  .pp-diffs li,
+  .pp-en .pp-diffs li,
+  .pp-where,
+  .pp-ledger,
+  .pp-steps,
+  .pp-cards3 {
     grid-template-columns: minmax(0, 1fr);
     gap: 16px;
   }
@@ -392,53 +458,48 @@
     margin-top: 16px;
     font-size: 16px;
   }
-  .pp-card,
-  .pp-plan {
+  .pp-diffs li {
+    gap: 6px;
+    padding: 16px 0;
+  }
+  .pp-slide .pp-diff-n {
+    font-size: 28px;
+  }
+  .pp-diffs h3 {
+    font-size: 21px;
+  }
+  .pp-slide .pp-arrow {
+    transform: rotate(90deg);
+    font-size: 28px;
+  }
+  .pp-box,
+  .pp-plan,
+  .pp-ledger-col {
     padding: 20px;
   }
-  .pp-step,
-  .pp-en .pp-step,
+  .pp-box-i b {
+    font-size: 20px;
+  }
+  .pp-clouds li {
+    font-size: 16px;
+  }
+  .pp-qs li {
+    grid-template-columns: 44px minmax(0, 1fr);
+    font-size: 20px;
+  }
+  .pp-ledger li b {
+    font-size: 18px;
+  }
+  .pp-ledger li {
+    font-size: 16px;
+  }
+  .pp-steps li {
+    padding: 16px 0 0;
+  }
   .pp-row {
     grid-template-columns: minmax(0, 1fr);
     gap: 8px;
     padding: 14px 0;
-  }
-  /* Phone: each aspect becomes a labelled block so the TenkaCloud column stays visible. */
-  .pp-table {
-    font-size: 16px;
-  }
-  .pp-table thead {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-  }
-  .pp-table tr {
-    display: block;
-    padding: 12px 0;
-    border-bottom: 1px solid #d9dee8;
-  }
-  .pp-table th,
-  .pp-table td {
-    border: 0;
-  }
-  .pp-table tbody th {
-    display: block;
-    padding: 0 0 6px;
-    color: #07111f;
-  }
-  .pp-table td {
-    display: grid;
-    grid-template-columns: 9.5em minmax(0, 1fr);
-    gap: 10px;
-    padding: 3px 0;
-  }
-  .pp-table td::before {
-    content: attr(data-label);
-    font-size: 14px;
-    color: #5d6877;
   }
   .pp-slide .pp-amt {
     font-size: 36px;
@@ -451,5 +512,85 @@
 @media print {
   .pp-slide {
     padding: 0.45in 0.6in 0.3in;
+  }
+}
+
+/* Make the first three slides work as a short introduction on their own. */
+.pp-cover h1 {
+  font-size: 76px;
+  line-height: 1.15;
+  letter-spacing: -0.04em;
+  text-wrap: balance;
+}
+.pp-cover .pp-lead {
+  max-width: 26em;
+}
+.pp-cover .pp-byline {
+  margin-top: 24px;
+}
+.pp-shot {
+  padding: 14px;
+  border: 1px solid #334c66;
+  border-radius: 18px;
+  background: #101f31;
+}
+.pp-dark .pp-shot figcaption {
+  color: #b8c9db;
+}
+.pp-example,
+.pp-topics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  list-style: none;
+  padding: 0;
+  margin: 4px 0 0;
+}
+.pp-topics {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.pp-example li,
+.pp-topics li {
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid #c9d4e3;
+  border-radius: 14px;
+  background: #fff;
+}
+.pp-example li {
+  border-top: 4px solid #0969da;
+}
+.pp-example h3,
+.pp-topics h3 {
+  margin-bottom: 8px;
+}
+.pp-slide .pp-card-label {
+  margin-bottom: 14px;
+  color: #075bbd;
+  font-size: 16px;
+  font-weight: 700;
+}
+.pp-dark .pp-links a:focus-visible {
+  outline: 2px solid #a5d4ff;
+  outline-offset: 5px;
+}
+@media screen and (max-width: 900px) {
+  .pp-cover h1 {
+    font-size: clamp(2.2rem, 7vw, 4rem);
+  }
+  .pp-example,
+  .pp-topics {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .pp-example li,
+  .pp-topics li {
+    padding: 16px;
+  }
+}
+@media print {
+  .pp-example li,
+  .pp-topics li {
+    break-inside: avoid;
   }
 }
