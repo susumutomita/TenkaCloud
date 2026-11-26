@@ -55,7 +55,8 @@ Participants can also use a local AI agent through [stdio or cloud Streamable HT
 
 - **What it is:** open-source software for hosting your own hands-on cloud training events and competitions, from a one-PC study group to an AWS-hosted event.
 - **Who it is for:** organizers of in-house cloud training, study groups and community events. Participants only need the portal URL and team key from their organizer.
-- **Where it runs:** locally on one machine (SQLite, Docker for container exercises, no AWS account), or on AWS (Lambda, Cognito, and Turso or DynamoDB). AWS is the cloud for hosting and cloud exercises.
+- **Where it runs:** locally on one machine (SQLite, Docker for container exercises, no AWS account), or on AWS (Lambda, Cognito, and Turso or DynamoDB). The platform itself is hosted only locally or on AWS.
+- **Which clouds exercises use:** AWS (CloudFormation), Google Cloud (Infrastructure Manager), Azure (Bicep) and Sakura Cloud (AppRun), each with per-team credentials. A single multi-cloud problem can also deploy across several of them at once.
 - **How problems are scored:** flags, multiple flags and scheduled checks, plus real-time Battles such as the built-in Cryptography Battle.
 - **Where problems come from:** the [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge) catalog, or your own private Problem Packs.
 - **Integrations:** an [MCP server](./docs/mcp.md) for AI agents, and a [CTFd plugin](./integrations/ctfd/README.md) that starts TenkaCloud Docker exercises from CTFd challenges.
@@ -232,7 +233,7 @@ Cloud reads activated AWS/CloudFormation packs on the next deployment. Local rea
 
 **Do I need an AWS account?** No for local hosting and the built-in Cryptography Battle. Yes for AWS hosting and AWS resource exercises, which also need a separate competitor account for events with third-party participants.
 
-**Which clouds are supported?** Cloud hosting and cloud exercises run on AWS.
+**Which clouds are supported?** The platform is hosted locally or on AWS. Exercises deploy to AWS, Google Cloud, Azure and Sakura Cloud, and multi-cloud problems can span several of them.
 
 **Is it free?** The software is Apache-2.0. Cloud usage charges are yours; see [Running costs](#running-costs).
 
