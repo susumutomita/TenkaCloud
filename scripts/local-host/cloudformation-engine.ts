@@ -759,29 +759,8 @@ export class CloudFormationEngine implements RuntimeEngine {
       ...(definition.english ? { i18n: { en: definition.english } } : {}),
       region: unit?.region ?? this.options.region,
       awsAccountId: awsTargetOf(context.team).accountId,
-      ...(this.options.simulatorEndpoint
-        ? {
-            consoleKind: "simulator" as const,
-            accessCapabilities: simulatorAccessCapabilities(
-              definition.problemId,
-              this.options.simulatorServices ?? [],
-              Boolean(this.options.simulatorConsole && unit?.outputs?.ParameterName),
-              Boolean(this.options.simulatorBattle),
-              Boolean(
-                this.options.simulatorConsole &&
-                  this.options.simulatorInstanceConsole &&
-                  unit?.outputs?.InstanceId,
-              ),
-            ),
-          }
-        : {}),
-      stackOutputs: Object.fromEntries(
-        Object.entries(unit?.outputs ?? {}).filter(
-          ([key]) =>
-            (!isFlagStackDefinition(definition) || key !== definition.flagOutputKey) &&
-            (!this.options.simulatorEndpoint || !key.endsWith("ConsoleUrl")),
-        ),
-      ),
+      ...this.simulatorConsoleFields(definition.problemId, unit?.outputs),
+      stackOutputs: this.visibleStackOutputs(definition, unit?.outputs),
       score:
         projectScore(
           [
@@ -807,6 +786,38 @@ export class CloudFormationEngine implements RuntimeEngine {
           : { kind: "uptime-flat", pointsPerSuccess: definition.scoring.pointsPerSuccess },
       deployLog: { cursor: "", entries: [] },
     };
+  }
+
+  /** The Simulator console kind and capabilities, or nothing when no Simulator is configured. */
+  private simulatorConsoleFields(problemId: string, outputs: StackUnit["outputs"]) {
+    if (!this.options.simulatorEndpoint) return {};
+    const hasConsole = Boolean(this.options.simulatorConsole);
+    return {
+      consoleKind: "simulator" as const,
+      accessCapabilities: simulatorAccessCapabilities(
+        problemId,
+        this.options.simulatorServices ?? [],
+        hasConsole && Boolean(outputs?.ParameterName),
+        Boolean(this.options.simulatorBattle),
+        hasConsole &&
+          Boolean(this.options.simulatorInstanceConsole) &&
+          Boolean(outputs?.InstanceId),
+      ),
+    };
+  }
+
+  /** Participant-visible outputs: never the flag output, nor console URLs on the Simulator. */
+  private visibleStackOutputs(
+    definition: StackDefinition,
+    outputs: StackUnit["outputs"],
+  ): Record<string, string> {
+    const flagKey = isFlagStackDefinition(definition) ? definition.flagOutputKey : undefined;
+    const hideConsoleUrls = Boolean(this.options.simulatorEndpoint);
+    return Object.fromEntries(
+      Object.entries(outputs ?? {}).filter(
+        ([key]) => key !== flagKey && !(hideConsoleUrls && key.endsWith("ConsoleUrl")),
+      ),
+    );
   }
 
   /** Scored against the flag output retained at deploy time; nothing is read from AWS. */
