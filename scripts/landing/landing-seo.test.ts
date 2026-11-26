@@ -466,8 +466,9 @@ describe("presentations stay off the landing page body", () => {
 });
 
 /**
- * 法人向け提案資料は日英の対で公開する。 片方だけ枚数や価格が変わる、 送付前の
- * 未記入欄 ([担当者名] など) が公開ページに残る、 一覧から辿れなくなる、 を検出する。
+ * フィードバックパートナー募集の提案資料は日英の対で公開する。 片方だけ枚数や価格が
+ * 変わる、 料金が本編に戻る (付録の最終スライドだけに置く)、 送付前の未記入欄
+ * ([担当者名] など) が公開ページに残る、 一覧から辿れなくなる、 を検出する。
  */
 describe("enterprise proposal deck (ja / en)", () => {
   const pages = {
@@ -479,7 +480,14 @@ describe("enterprise proposal deck (ja / en)", () => {
     for (const [lang, html] of Object.entries(pages)) {
       const doc = new JSDOM(html).window.document;
       expect(doc.documentElement.lang).toBe(lang);
-      expect(doc.querySelectorAll("section.slide")).toHaveLength(11);
+      const slides = doc.querySelectorAll("section.slide");
+      expect(slides).toHaveLength(10);
+      // Pricing lives only in the appendix, the last slide.
+      const appendix = slides[slides.length - 1];
+      expect(appendix.classList.contains("pp-appendix")).toBe(true);
+      expect(doc.querySelectorAll(".pp-amt")).toHaveLength(
+        appendix.querySelectorAll(".pp-amt").length,
+      );
       expect(doc.querySelector('link[rel="alternate"][hreflang="ja"]')?.getAttribute("href")).toBe(
         "https://tenkacloud.com/proposal/",
       );
