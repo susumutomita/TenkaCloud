@@ -8,7 +8,7 @@
 **Make your team's cloud training hands-on.**<br>
 People learn by doing, and the results show up as scores.
 
-TenkaCloud is a self-hostable, Apache-2.0 platform for hands-on cloud competitions, for in-house training and study groups. Organizers manage events, teams, problem environments, scoring and hints from one console. Participants solve local exercises or AWS scenarios with their own team keys.
+TenkaCloud is a self-hostable, Apache-2.0 platform for hosting hands-on cloud competitions, such as GameDay-style team battles and CTF-style flag challenges, for in-house training, study groups and community events. Organizers manage events, teams, problem environments, scoring and hints from one console. Participants solve local exercises or AWS scenarios with their own team keys.
 
 Participants can also use a local AI agent through [stdio or cloud Streamable HTTP MCP](./docs/mcp.md): discover problems, start prepared Docker exercises, submit answers, and check scores.
 
@@ -50,6 +50,15 @@ Participants can also use a local AI agent through [stdio or cloud Streamable HT
 > TenkaCloud is an independent open-source project and is not affiliated with, endorsed by, or sponsored by Amazon Web Services, Inc. AWS and related marks are trademarks of Amazon.com, Inc. or its affiliates.
 
 ---
+
+## At a glance
+
+- **What it is:** open-source software for hosting your own hands-on cloud training events and competitions, from a one-PC study group to an AWS-hosted event.
+- **Who it is for:** organizers of in-house cloud training, study groups and community events. Participants only need the portal URL and team key from their organizer.
+- **Where it runs:** locally on one machine (SQLite, Docker for container exercises, no AWS account), or on AWS (Lambda, Cognito, and Turso or DynamoDB). AWS is the cloud for hosting and cloud exercises.
+- **How problems are scored:** flags, multiple flags and scheduled checks, plus real-time Battles such as the built-in Cryptography Battle.
+- **Where problems come from:** the [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge) catalog, or your own private Problem Packs.
+- **Integrations:** an [MCP server](./docs/mcp.md) for AI agents, and a [CTFd plugin](./integrations/ctfd/README.md) that starts TenkaCloud Docker exercises from CTFd challenges.
 
 ## Quickstart
 
@@ -214,6 +223,18 @@ bun run pack list
 ```
 
 Cloud reads activated AWS/CloudFormation packs on the next deployment. Local reads its `problems/` tree and does not consume the Pack store. [Pack tutorial](./apps/developer-portal/src/app/developers/docs/tutorials/first-pack/page.mdx) · [External Git pack workflow](./scripts/problem-pack/README-external-git-pack.md)
+
+## FAQ
+
+**Is TenkaCloud a CTF platform?** It hosts CTF-style flag challenges and also cloud exercises that deploy real AWS resources, Docker exercises and real-time Battles. If you already run CTFd, the [CTFd plugin](./integrations/ctfd/README.md) can launch TenkaCloud Docker exercises from it.
+
+**Can I run my own GameDay-style event?** Yes. Organizers pick problems, create teams and run the event on their own schedule, locally or on AWS.
+
+**Do I need an AWS account?** No for local hosting and the built-in Cryptography Battle. Yes for AWS hosting and AWS resource exercises, which also need a separate competitor account for events with third-party participants.
+
+**Which clouds are supported?** Cloud hosting and cloud exercises run on AWS.
+
+**Is it free?** The software is Apache-2.0. Cloud usage charges are yours; see [Running costs](#running-costs).
 
 ## Documentation
 

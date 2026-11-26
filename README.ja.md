@@ -8,7 +8,7 @@
 **社員のクラウド研修を、実践型に。**<br>
 手を動かして、成果は点数で見える。
 
-TenkaCloud は、社内研修や勉強会で使える、ハンズオン形式のクラウド競技会を開くための、セルフホスト可能な Apache-2.0 ライセンスのプラットフォームです。開催者は 1 つのコンソールで大会・チーム・問題環境・採点・ヒントを管理し、参加者はチームキーを使ってローカルの演習や AWS の問題に挑戦します。
+TenkaCloud は、GameDay 型のチーム戦や CTF 型のフラグ問題のような、ハンズオン形式のクラウド競技会を開くための、セルフホスト可能な Apache-2.0 ライセンスのプラットフォームです。社内研修、勉強会、コミュニティイベントで使えます。開催者は 1 つのコンソールで大会・チーム・問題環境・採点・ヒントを管理し、参加者はチームキーを使ってローカルの演習や AWS の問題に挑戦します。
 
 参加者は[ローカル stdio／クラウド HTTP の MCP](./docs/mcp.md)を通じて、手元の AI エージェントから問題の探索、準備済み Docker 演習の開始、提出・採点、進捗確認も行えます。
 
@@ -52,6 +52,15 @@ TenkaCloud は、社内研修や勉強会で使える、ハンズオン形式の
 英語版が正本であり、この日本語版は追従して更新されます。内容に差異がある場合は [README.md](./README.md) を優先してください。
 
 ---
+
+## 概要
+
+- **何か:** 自分たちのハンズオン型クラウド研修や競技会を開くための OSS です。PC 1 台の勉強会から、AWS 上で開く大会まで対応します。
+- **誰向けか:** 社内のクラウド研修、勉強会、コミュニティイベントの開催者です。参加者は開催者から受け取るポータル URL とチームキーだけで参加できます。
+- **どこで動くか:** PC 1 台のローカル（SQLite、コンテナ演習には Docker、AWS アカウント不要）、または AWS（Lambda、Cognito、Turso または DynamoDB）です。クラウドでの開催とクラウド演習は AWS を使います。
+- **採点方法:** フラグ、複数フラグ、定期チェックに加え、組み込みの Cryptography Battleのようなリアルタイムのバトルがあります。
+- **問題の入手先:** [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge) のカタログ、または自分の非公開 Problem Pack です。
+- **連携:** AI エージェント向けの [MCP サーバー](./docs/mcp.md)と、CTFd の問題から TenkaCloud の Docker 演習を起動する [CTFd プラグイン](./integrations/ctfd/README.md)があります。
 
 ## クイックスタート
 
@@ -188,6 +197,18 @@ bun run pack list
 ```
 
 Cloud は有効化済みの AWS/CloudFormation Pack を次の配置で読み込みます。Local は手元の `problems/` を読み、Pack store には未接続です。[pack チュートリアル](./apps/developer-portal/src/app/developers/docs/tutorials/first-pack/page.ja.mdx) · [外部 Git pack の手順](./scripts/problem-pack/README-external-git-pack.md)
+
+## よくある質問
+
+**CTF の基盤ですか?** CTF 型のフラグ問題に加え、実際の AWS リソースをデプロイする演習、Docker 演習、リアルタイムのバトルも開けます。CTFd を使っている場合は、[CTFd プラグイン](./integrations/ctfd/README.md)から TenkaCloud の Docker 演習を起動できます。
+
+**GameDay のような大会を自分で開けますか?** はい。開催者が問題を選び、チームを作り、ローカルまたは AWS で好きな日程に開催できます。
+
+**AWS アカウントは必要ですか?** ローカル開催と組み込みの Cryptography Battleには不要です。AWS での開催と AWS リソースを使う演習には必要で、外部の参加者がいる大会では別の競技者アカウントも必要です。
+
+**対応しているクラウドは?** クラウドでの開催とクラウド演習は AWS で動きます。
+
+**無料ですか?** ソフトウェアは Apache-2.0 です。クラウドの利用料は開催者の負担です。[運用費用](#運用費用)を参照してください。
 
 ## ドキュメント
 
