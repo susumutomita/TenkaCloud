@@ -194,11 +194,23 @@ describe("platform-first landing entry", () => {
   it("defines the platform and routes its primary action to the prominent introductory film", () => {
     const hero = heroSection(index);
     expect(hero).toContain(
-      '<span class="motion-line">クラウドと</span><span class="motion-line">セキュリティを</span>',
+      '<span class="motion-line">OJT任せに</span><span class="motion-line">なっているものは、</span>',
     );
-    expect(hero).toContain("実践で学ぶ。");
-    expect(hero).toContain("自分たちの問題で、環境を動かして学ぶ OSS 基盤");
-    expect(hero).toContain("演習の開催から回答・採点まで");
+    expect(hero).toContain("ありませんか。");
+    // OJT任せになりがちな4つに課題がないかを、冒頭で問いかける。
+    for (const area of [
+      "セキュリティ",
+      "クラウドのシステム構築",
+      "インシデントの避難訓練",
+      "エンジニア同士の交流",
+    ]) {
+      expect(hero).toContain(area);
+    }
+    // 他の演習サービスとの違い（マルチクラウド・自作問題・セルフホスト）も定義文に残す。
+    expect(hero).toContain(
+      "4つのクラウドに対応し、問題を自分たちで書ける、自分たちの環境で動く OSS です。",
+    );
+    expect(hero).toContain('href="./proposal/"');
     expect(hero).toContain('href="#film"');
     expect(hero).toContain('data-cta="watch-60s"');
     expect(hero).toContain("実際の画面で紹介");
@@ -242,7 +254,19 @@ describe("platform-first landing entry", () => {
   it("publishes the product definition, available actions and honest example in static English", () => {
     const english = read("landing/index.en.html");
     const hero = heroSection(english);
-    expect(hero).toContain("open-source platform");
+    expect(hero).toContain("Is anything still");
+    for (const area of [
+      "Security",
+      "Building on the cloud",
+      "Incident fire drills",
+      "Getting engineers together",
+    ]) {
+      expect(hero).toContain(area);
+    }
+    expect(hero).toContain(
+      "It supports four clouds, lets you write your own problems, and is open source you run yourself.",
+    );
+    expect(hero).toContain('href="./proposal/index.en.html"');
     expect(hero).toContain("Watch the one-minute introduction");
     expect(hero).not.toContain("Three minutes");
     expect(english).toContain("Build your service architecture and internal rules");

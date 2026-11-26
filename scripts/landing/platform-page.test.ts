@@ -11,7 +11,7 @@ describe("platform message and retained detail", () => {
     it(`${file} distinguishes the product, available actions and one explanatory example`, () => {
       const { document } = new JSDOM(read(file)).window;
       const hero = document.querySelector(".hero");
-      expect(hero?.textContent).toMatch(/OSS 基盤|open-source platform/);
+      expect(hero?.textContent).toMatch(/自分たちの環境で動く OSS|open source you run yourself/);
       expect(hero?.textContent).not.toMatch(/3分|Three minutes|BROKEN ACCESS CONTROL/);
       const main = document.querySelector("main");
       const order = [...(main?.children ?? [])].map((node) => node.id);
