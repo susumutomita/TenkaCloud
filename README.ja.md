@@ -57,7 +57,8 @@ TenkaCloud は、GameDay 型のチーム戦や CTF 型のフラグ問題のよ�
 
 - **何か:** 自分たちのハンズオン型クラウド研修や競技会を開くための OSS。PC 1 台の勉強会から AWS 上で開く大会まで対応する。
 - **誰向けか:** 社内のクラウド研修、勉強会、コミュニティイベントの開催者。参加者は開催者から受け取るポータル URL とチームキーだけで参加できる。
-- **どこで動くか:** PC 1 台のローカル（SQLite、コンテナ演習には Docker、AWS アカウント不要）、または AWS（Lambda、Cognito、Turso または DynamoDB）。クラウドでの開催とクラウド演習は AWS を使う。
+- **どこで動くか:** PC 1 台のローカル（SQLite、コンテナ演習には Docker、AWS アカウント不要）、または AWS（Lambda、Cognito、Turso または DynamoDB）。基盤そのものを置ける場所はローカルと AWS だけである。
+- **演習が使うクラウド:** いまイベントで使えるのは AWS（CloudFormation）である。Google Cloud（Infrastructure Manager）・Azure（Bicep）・さくらのクラウド（AppRun）への展開は、チームごとの認証情報で動くよう実装済みである。1 つの問題で複数クラウドにまたがる展開も実装済みである。ただし本番アカウントでの動作確認は済んでおらず、サンプル問題もまだ draft である。
 - **採点方法:** フラグ、複数フラグ、定期チェック。組み込みの Cryptography Battle のようなリアルタイムのバトルもある。
 - **問題の入手先:** [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge) のカタログ、または自分の非公開 Problem Pack。
 - **連携:** AI エージェント向けの [MCP サーバー](./docs/mcp.md)と、CTFd の問題から TenkaCloud の Docker 演習を起動する [CTFd プラグイン](./integrations/ctfd/README.md)。
@@ -206,7 +207,7 @@ Cloud は有効化済みの AWS/CloudFormation Pack を次の配置で読み込�
 
 **AWS アカウントは必要ですか?** ローカル開催と組み込みの Cryptography Battle には不要です。AWS での開催と AWS リソースを使う演習には必要で、外部の参加者がいる大会では別の競技者アカウントも必要です。
 
-**対応しているクラウドは?** クラウドでの開催とクラウド演習は AWS で動きます。
+**対応しているクラウドは?** 基盤はローカルか AWS に置けます。演習はいま AWS に展開されます。Google Cloud・Azure・さくらのクラウドへの展開と、それらにまたがるマルチクラウド問題は実装済みです。ただし本番アカウントでの動作確認はまだです。
 
 **無料ですか?** ソフトウェアは Apache-2.0 です。クラウドの利用料は開催者の負担です。[運用費用](#運用費用)を参照してください。
 

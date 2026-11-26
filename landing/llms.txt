@@ -7,12 +7,13 @@
 ## At a glance
 
 - Audience: organizers of in-house cloud training, study groups and community events. Participants join with the portal URL and team key from their organizer.
-- Hosting: local (single process, SQLite, Docker for container exercises, no AWS account) or AWS (Lambda, Cognito, Turso or DynamoDB). AWS is the cloud for hosting and cloud exercises.
+- Hosting: local (single process, SQLite, Docker for container exercises, no AWS account) or AWS (Lambda, Cognito, Turso or DynamoDB). The platform itself is hosted only locally or on AWS.
+- Exercise clouds: AWS (CloudFormation) is in use today. Google Cloud (Infrastructure Manager), Azure (Bicep) and Sakura Cloud (AppRun) deployment, including multi-cloud problems spanning several providers, is implemented with per-team credentials but not yet verified on live accounts.
 - Problems and scoring: flag, multi-flag and scheduled scoring; CloudFormation-deployed AWS exercises; Docker exercises (local hosting); real-time Battles such as the built-in Cryptography Battle.
 - Content: the [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge) catalog or private Problem Packs.
 - Integrations: [MCP server](https://github.com/susumutomita/TenkaCloud/blob/main/docs/mcp.md) for AI agents; [CTFd plugin](https://github.com/susumutomita/TenkaCloud/blob/main/integrations/ctfd/README.md) that starts TenkaCloud Docker exercises from CTFd challenges.
 - Try it: [demo portal](https://tenkacloud.com/portal-demo/?demo=1) in the browser, or `make install` and `make local` from the [quickstart](https://github.com/susumutomita/TenkaCloud#quickstart).
-- Keywords: hands-on cloud training, GameDay-style exercises, CTF, hands-on labs, cloud competition platform, self-hosted, open source.
+- Keywords: hands-on cloud training, GameDay-style exercises, CTF, hands-on labs, cloud competition platform, multi-cloud, self-hosted, open source.
 
 [公式サイト](https://tenkacloud.com/?lang=ja) · [English site](https://tenkacloud.com/index.en.html)
 
